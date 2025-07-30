@@ -38,7 +38,7 @@ public class KafkaConfig {
     @Value("${broadcast.kafka.topic.partitions:10}")
     private int topicPartitions;
 
-    @Value("${broadcast.kafka.topic.replication-factor:3}")
+    @Value("${broadcast.kafka.topic.replication-factor:1}")
     private short topicReplicationFactor;
 
     /**

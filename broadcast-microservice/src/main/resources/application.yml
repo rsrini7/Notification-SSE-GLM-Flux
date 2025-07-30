@@ -117,7 +117,7 @@ broadcast:
     topic:
       name: broadcast-events
       partitions: 10
-      replication-factor: 3
+      replication-factor: 1
     retry:
       max-attempts: 3
       backoff-delay: 1000
