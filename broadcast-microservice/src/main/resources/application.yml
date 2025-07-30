@@ -46,7 +46,7 @@ spring:
         max.poll.records: 500
         fetch.max.wait.ms: 1000
     listener:
-      ack-mode: manual_immediate
+      ack-mode: manual
       concurrency: 3
   
   # Jackson Configuration
@@ -67,9 +67,6 @@ management:
     prometheus:
       enabled: true
   metrics:
-    export:
-      prometheus:
-        enabled: true
     tags:
       application: broadcast-microservice
     distribution:
