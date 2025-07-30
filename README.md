@@ -1,141 +1,150 @@
-# 🚀 Welcome to Z.ai Code Scaffold
+# React Broadcast Messaging System - Frontend
 
-A modern, production-ready web application scaffold powered by cutting-edge technologies, designed to accelerate your development with [Z.ai](https://chat.z.ai)'s AI-powered coding assistance.
+A modern React frontend for the Broadcast Messaging System, built with Vite, TypeScript, and Tailwind CSS.
 
-## ✨ Technology Stack
+## Features
 
-This scaffold provides a robust foundation built with:
+- **Real-time Messaging**: Connects to Java backend via HTTP polling for real-time message delivery
+- **Admin Panel**: Create, manage, and monitor broadcast messages
+- **User Panel**: Receive and manage broadcast messages with read/unread status
+- **Modern UI**: Built with shadcn/ui components and Tailwind CSS
+- **Responsive Design**: Works seamlessly on desktop and mobile devices
+- **TypeScript**: Full type safety throughout the application
 
-### 🎯 Core Framework
-- **⚡ Next.js 15** - The React framework for production with App Router
-- **📘 TypeScript 5** - Type-safe JavaScript for better developer experience
-- **🎨 Tailwind CSS 4** - Utility-first CSS framework for rapid UI development
+## Tech Stack
 
-### 🧩 UI Components & Styling
-- **🧩 shadcn/ui** - High-quality, accessible components built on Radix UI
-- **🎯 Lucide React** - Beautiful & consistent icon library
-- **🌈 Framer Motion** - Production-ready motion library for React
-- **🎨 Next Themes** - Perfect dark mode in 2 lines of code
+- **React 19**: Latest React with hooks and modern features
+- **Vite**: Fast build tool and development server
+- **TypeScript**: Type-safe JavaScript
+- **Tailwind CSS**: Utility-first CSS framework
+- **shadcn/ui**: High-quality React components
+- **Axios**: HTTP client for API communication
+- **Lucide React**: Beautiful icons
 
-### 📋 Forms & Validation
-- **🎣 React Hook Form** - Performant forms with easy validation
-- **✅ Zod** - TypeScript-first schema validation
+## Prerequisites
 
-### 🔄 State Management & Data Fetching
-- **🐻 Zustand** - Simple, scalable state management
-- **🔄 TanStack Query** - Powerful data synchronization for React
-- **🌐 Axios** - Promise-based HTTP client
+- Node.js 18+ 
+- Java backend running on port 8080
 
-### 🗄️ Database & Backend
-- **🗄️ Prisma** - Next-generation Node.js and TypeScript ORM
-- **🔐 NextAuth.js** - Complete open-source authentication solution
+## Getting Started
 
-### 🎨 Advanced UI Features
-- **📊 TanStack Table** - Headless UI for building tables and datagrids
-- **🖱️ DND Kit** - Modern drag and drop toolkit for React
-- **📊 Recharts** - Redefined chart library built with React and D3
-- **🖼️ Sharp** - High performance image processing
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-### 🌍 Internationalization & Utilities
-- **🌍 Next Intl** - Internationalization library for Next.js
-- **📅 Date-fns** - Modern JavaScript date utility library
-- **🪝 ReactUse** - Collection of essential React hooks for modern development
+2. **Start the development server**:
+   ```bash
+   npm run dev
+   ```
 
-## 🎯 Why This Scaffold?
+3. **Open your browser**:
+   Navigate to `http://localhost:3000`
 
-- **🏎️ Fast Development** - Pre-configured tooling and best practices
-- **🎨 Beautiful UI** - Complete shadcn/ui component library with advanced interactions
-- **🔒 Type Safety** - Full TypeScript configuration with Zod validation
-- **📱 Responsive** - Mobile-first design principles with smooth animations
-- **🗄️ Database Ready** - Prisma ORM configured for rapid backend development
-- **🔐 Auth Included** - NextAuth.js for secure authentication flows
-- **📊 Data Visualization** - Charts, tables, and drag-and-drop functionality
-- **🌍 i18n Ready** - Multi-language support with Next Intl
-- **🚀 Production Ready** - Optimized build and deployment settings
-- **🤖 AI-Friendly** - Structured codebase perfect for AI assistance
+## Available Scripts
 
-## 🚀 Quick Start
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
 
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-```
-
-Open [http://localhost:3000](http://localhost:3000) to see your application running.
-
-## 🤖 Powered by Z.ai
-
-This scaffold is optimized for use with [Z.ai](https://chat.z.ai) - your AI assistant for:
-
-- **💻 Code Generation** - Generate components, pages, and features instantly
-- **🎨 UI Development** - Create beautiful interfaces with AI assistance  
-- **🔧 Bug Fixing** - Identify and resolve issues with intelligent suggestions
-- **📝 Documentation** - Auto-generate comprehensive documentation
-- **🚀 Optimization** - Performance improvements and best practices
-
-Ready to build something amazing? Start chatting with Z.ai at [chat.z.ai](https://chat.z.ai) and experience the future of AI-powered development!
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 src/
-├── app/                 # Next.js App Router pages
-├── components/          # Reusable React components
-│   └── ui/             # shadcn/ui components
-├── hooks/              # Custom React hooks
-└── lib/                # Utility functions and configurations
+├── components/
+│   ├── ui/           # shadcn/ui components
+│   └── broadcast/    # Broadcast-specific components
+├── hooks/            # Custom React hooks
+├── services/         # API service layer
+├── App.tsx           # Main application component
+├── main.tsx          # Application entry point
+└── index.css         # Global styles
 ```
 
-## 🎨 Available Features & Components
+## API Configuration
 
-This scaffold includes a comprehensive set of modern web development tools:
+The frontend is configured to connect to a Java backend:
 
-### 🧩 UI Components (shadcn/ui)
-- **Layout**: Card, Separator, Aspect Ratio, Resizable Panels
-- **Forms**: Input, Textarea, Select, Checkbox, Radio Group, Switch
-- **Feedback**: Alert, Toast (Sonner), Progress, Skeleton
-- **Navigation**: Breadcrumb, Menubar, Navigation Menu, Pagination
-- **Overlay**: Dialog, Sheet, Popover, Tooltip, Hover Card
-- **Data Display**: Badge, Avatar, Calendar
+- **Development**: `http://localhost:8080`
+- **Production**: `https://your-java-backend.com`
 
-### 📊 Advanced Data Features
-- **Tables**: Powerful data tables with sorting, filtering, pagination (TanStack Table)
-- **Charts**: Beautiful visualizations with Recharts
-- **Forms**: Type-safe forms with React Hook Form + Zod validation
+### API Endpoints Used
 
-### 🎨 Interactive Features
-- **Animations**: Smooth micro-interactions with Framer Motion
-- **Drag & Drop**: Modern drag-and-drop functionality with DND Kit
-- **Theme Switching**: Built-in dark/light mode support
+- `GET /api/broadcasts` - Get all broadcasts
+- `POST /api/broadcasts` - Create new broadcast
+- `DELETE /api/broadcasts/{id}` - Cancel broadcast
+- `GET /api/broadcasts/{id}/stats` - Get broadcast statistics
+- `GET /api/user/messages` - Get user messages
+- `GET /api/sse/poll` - Poll for new messages
+- `POST /api/sse/read` - Mark message as read
 
-### 🔐 Backend Integration
-- **Authentication**: Ready-to-use auth flows with NextAuth.js
-- **Database**: Type-safe database operations with Prisma
-- **API Client**: HTTP requests with Axios + TanStack Query
-- **State Management**: Simple and scalable with Zustand
+## Components
 
-### 🌍 Production Features
-- **Internationalization**: Multi-language support with Next Intl
-- **Image Optimization**: Automatic image processing with Sharp
-- **Type Safety**: End-to-end TypeScript with Zod validation
-- **Essential Hooks**: 100+ useful React hooks with ReactUse for common patterns
+### BroadcastAdminPanel
+- Create new broadcast messages
+- Manage existing broadcasts
+- View broadcast statistics and delivery details
+- Support for scheduled and immediate broadcasts
 
-## 🤝 Get Started with Z.ai
+### BroadcastUserPanel
+- Real-time message polling
+- Message read/unread status
+- Connection management
+- Message statistics and filtering
 
-1. **Clone this scaffold** to jumpstart your project
-2. **Visit [chat.z.ai](https://chat.z.ai)** to access your AI coding assistant
-3. **Start building** with intelligent code generation and assistance
-4. **Deploy with confidence** using the production-ready setup
+## Environment Variables
 
----
+Create a `.env` file in the root directory:
 
-Built with ❤️ for the developer community. Supercharged by [Z.ai](https://chat.z.ai) 🚀
+```env
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+## Building for Production
+
+1. **Build the application**:
+   ```bash
+   npm run build
+   ```
+
+2. **Preview the build**:
+   ```bash
+   npm run preview
+   ```
+
+3. **Deploy the `dist` folder** to your web server
+
+## Development
+
+### Adding New Components
+
+1. Create new components in `src/components/`
+2. Use existing shadcn/ui components as base
+3. Follow the established TypeScript patterns
+4. Add proper error handling and loading states
+
+### API Integration
+
+1. Add new API methods in `src/services/api.ts`
+2. Use proper TypeScript interfaces
+3. Handle errors gracefully
+4. Add loading states in components
+
+## Troubleshooting
+
+### Common Issues
+
+1. **CORS Issues**: Ensure your Java backend has proper CORS configuration
+2. **Connection Issues**: Verify the Java backend is running on port 8080
+3. **Build Errors**: Run `npm install` to ensure all dependencies are installed
+
+### Development Tips
+
+- Use the browser's Network tab to debug API calls
+- Check the console for detailed error messages
+- Use React DevTools for component debugging
+
+## License
+
+This project is part of the Broadcast Messaging System.

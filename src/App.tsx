@@ -1,12 +1,10 @@
-'use client';
-
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import BroadcastAdminPanel from '@/components/broadcast/BroadcastAdminPanel';
-import BroadcastUserPanel from '@/components/broadcast/BroadcastUserPanel';
+import { useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+import { Badge } from './components/ui/badge';
+import { Toaster } from './components/ui/toaster';
+import BroadcastAdminPanel from './components/broadcast/BroadcastAdminPanel';
+import BroadcastUserPanel from './components/broadcast/BroadcastUserPanel';
 import { 
   MessageSquare, 
   Users, 
@@ -20,7 +18,7 @@ import {
   Send
 } from 'lucide-react';
 
-export default function Home() {
+export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
 
   return (
@@ -350,6 +348,7 @@ export default function Home() {
           </TabsContent>
         </Tabs>
       </div>
+      <Toaster />
     </div>
   );
 }

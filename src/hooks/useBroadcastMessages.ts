@@ -96,7 +96,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         variant: 'destructive',
       });
     },
-    onError: (error) => {
+    onError: () => {
       toast({
         title: 'Connection Error',
         description: 'Failed to connect to real-time updates',
@@ -170,7 +170,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   }, [userId, toast]);
 
   // Mark message as read
-  const markAsRead = useCallback(async (messageId: number, broadcastId: number) => {
+  const markAsRead = useCallback(async (messageId: number) => {
     try {
       // Update local state
       setMessages(prev => prev.map(msg => 
@@ -200,7 +200,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     const unreadMessages = messages.filter(msg => msg.readStatus === 'UNREAD');
     
     for (const message of unreadMessages) {
-      await markAsRead(message.id, message.broadcastId);
+      await markAsRead(message.id);
     }
   }, [messages, markAsRead]);
 

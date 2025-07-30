@@ -1,161 +1,135 @@
-'use client';
-
-import React, { useState, useEffect, useRef } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useToast } from '@/hooks/use-toast';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { ScrollArea } from '../ui/scroll-area';
+import { useToast } from '../../hooks/use-toast';
 import { Bell, CheckCircle, Clock, AlertCircle, Wifi, WifiOff, Settings } from 'lucide-react';
-
-interface UserBroadcastMessage {
-  id: string;
-  broadcastId: string;
-  userId: string;
-  deliveryStatus: string;
-  readStatus: string;
-  deliveredAt?: string;
-  readAt?: string;
-  createdAt: string;
-  senderName: string;
-  content: string;
-  priority: string;
-  category: string;
-  broadcastCreatedAt: string;
-}
-
-interface PollResponse {
-  messages: any[];
-  timestamp: string;
-}
+import { 
+  userService, 
+  type UserBroadcastMessage, 
+  type PollResponse 
+} from '../../services/api';
 
 const BroadcastUserPanel: React.FC = () => {
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('disconnected');
   const [userId] = useState('user-001'); // In a real app, this would come from auth
   const [sessionId, setSessionId] = useState<string>('');
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastTimestampRef = useRef<string>('0');
   const { toast } = useToast();
 
   // Fetch existing messages
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
-      const response = await fetch(`/api/user/messages?userId=${userId}`);
-      if (response.ok) {
-        const data = await response.json();
-        // Sort messages by timestamp (newest first)
-        const sortedMessages = data.sort((a: UserBroadcastMessage, b: UserBroadcastMessage) => 
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      const data = await userService.getUserMessages(userId);
+      // Sort messages by timestamp (newest first)
+      const sortedMessages = data.sort((a: UserBroadcastMessage, b: UserBroadcastMessage) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setMessages(sortedMessages);
+      
+      // Update the last timestamp to the newest message timestamp
+      if (data.length > 0) {
+        const newestMessage = data.reduce((newest: UserBroadcastMessage, current: UserBroadcastMessage) => 
+          new Date(current.createdAt).getTime() > new Date(newest.createdAt).getTime() ? current : newest
         );
-        setMessages(sortedMessages);
-        
-        // Update the last timestamp to the newest message timestamp
-        if (data.length > 0) {
-          const newestMessage = data.reduce((newest: UserBroadcastMessage, current: UserBroadcastMessage) => 
-            new Date(current.createdAt).getTime() > new Date(newest.createdAt).getTime() ? current : newest
-          );
-          lastTimestampRef.current = new Date(newestMessage.createdAt).getTime().toString();
-        }
-      } else {
-        // Only show fallback if there's a network error, not if API returns empty
-        console.error('Failed to fetch messages:', response.status);
-        setMessages([]); // Start with empty messages instead of mock data
+        lastTimestampRef.current = new Date(newestMessage.createdAt).getTime().toString();
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
       setMessages([]); // Start with empty messages instead of mock data
     }
-  };
-
-  // Clean up expired messages from local state
-  const cleanupExpiredMessages = () => {
-    const now = new Date();
-    setMessages(prev => {
-      const filteredMessages = prev.filter(msg => {
-        // For now, keep all messages since the API should handle expiration
-        // This is a fallback cleanup
-        return true;
-      });
-      return filteredMessages;
-    });
-  };
+  }, [userId]);
 
   // Poll for new messages
-  const pollForMessages = async () => {
+  const pollForMessages = useCallback(async () => {
     try {
-      const response = await fetch(`/api/sse/poll?userId=${userId}&lastTimestamp=${lastTimestampRef.current}`);
+      const data: PollResponse = await userService.pollForMessages(userId, lastTimestampRef.current);
       
-      if (response.ok) {
-        const data: PollResponse = await response.json();
-        
-        if (data.messages.length > 0) {
-          // Process new messages
-          data.messages.forEach(msg => {
-            // The new SSE system delivers messages directly, not wrapped in type/data
-            setMessages(prev => {
-              // Check if message already exists using broadcast ID as the primary key
-              const exists = prev.some(existing => 
-                existing.broadcastId === msg.broadcastId || existing.id === msg.id
-              );
+      if (data.messages.length > 0) {
+        // Process new messages
+        data.messages.forEach((msg) => {
+          // The new SSE system delivers messages directly, not wrapped in type/data
+          setMessages(prev => {
+            // Check if message already exists using broadcast ID as the primary key
+            const exists = prev.some((existing) => 
+              existing.broadcastId === msg.broadcastId || existing.id === msg.id
+            );
+            
+            if (!exists) {
+              // Show toast for new message, but avoid spamming
+              const now = Date.now();
+              const lastToastTime = localStorage.getItem('lastToastTime');
+              const lastToastBroadcastId = localStorage.getItem('lastToastBroadcastId');
               
-              if (!exists) {
-                // Show toast for new message, but avoid spamming
-                const now = Date.now();
-                const lastToastTime = localStorage.getItem('lastToastTime');
-                const lastToastBroadcastId = localStorage.getItem('lastToastBroadcastId');
-                
-                // Only show toast if it's not the same broadcast as the last toast within 30 seconds
-                if (!lastToastBroadcastId || lastToastBroadcastId !== msg.broadcastId || !lastToastTime || now - parseInt(lastToastTime) > 30000) {
-                  toast({
-                    title: 'New Message',
-                    description: msg.content.substring(0, 50) + '...',
-                  });
-                  localStorage.setItem('lastToastBroadcastId', msg.broadcastId);
-                  localStorage.setItem('lastToastTime', now.toString());
-                }
-                
-                // Transform the message to match the expected format
-                const transformedMessage: UserBroadcastMessage = {
-                  id: msg.id,
-                  broadcastId: msg.broadcastId,
-                  userId: userId,
-                  deliveryStatus: 'DELIVERED',
-                  readStatus: 'UNREAD',
-                  deliveredAt: new Date(msg.timestamp).toISOString(),
-                  createdAt: new Date(msg.timestamp).toISOString(),
-                  senderName: msg.senderName,
-                  content: msg.content,
-                  priority: msg.priority,
-                  category: msg.category,
-                  broadcastCreatedAt: msg.createdAt
-                };
-                
-                // Add new message and sort all messages by timestamp (newest first)
-                const updatedMessages = [...prev, transformedMessage];
-                return updatedMessages.sort((a, b) => 
-                  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                );
+              // Only show toast if it's not the same broadcast as the last toast within 30 seconds
+              if (!lastToastBroadcastId || lastToastBroadcastId !== msg.broadcastId || !lastToastTime || now - parseInt(lastToastTime) > 30000) {
+                toast({
+                  title: 'New Message',
+                  description: msg.content.substring(0, 50) + '...',
+                });
+                localStorage.setItem('lastToastBroadcastId', msg.broadcastId);
+                localStorage.setItem('lastToastTime', now.toString());
               }
-              return prev;
-            });
+              
+              // Transform the message to match the expected format
+              const transformedMessage: UserBroadcastMessage = {
+                id: msg.id,
+                broadcastId: msg.broadcastId,
+                userId: userId,
+                deliveryStatus: 'DELIVERED',
+                readStatus: 'UNREAD',
+                deliveredAt: new Date(msg.timestamp).toISOString(),
+                createdAt: new Date(msg.timestamp).toISOString(),
+                senderName: msg.senderName,
+                content: msg.content,
+                priority: msg.priority,
+                category: msg.category,
+                broadcastCreatedAt: msg.createdAt
+              };
+              
+              // Add new message and sort all messages by timestamp (newest first)
+              const updatedMessages = [...prev, transformedMessage];
+              return updatedMessages.sort((a, b) => 
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              );
+            }
+            return prev;
           });
-          
-          // Update last timestamp
-          lastTimestampRef.current = data.timestamp;
-        }
-      } else {
-        console.error('Poll request failed:', response.status);
+        });
+        
+        // Update last timestamp
+        lastTimestampRef.current = data.timestamp;
       }
     } catch (error) {
       console.error('Error polling for messages:', error);
     }
-  };
+  }, [userId, toast]);
+
+  // Stop polling
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
+    }
+
+    setConnectionStatus('disconnected');
+    
+    // Notify backend about disconnection
+    if (sessionId) {
+      userService.disconnectSSE(userId, sessionId).catch(console.error);
+    }
+  }, [sessionId, userId]);
 
   // Start polling
-  const startPolling = () => {
+  const startPolling = useCallback(() => {
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
     }
@@ -193,28 +167,7 @@ const BroadcastUserPanel: React.FC = () => {
     
     // Start refreshing messages every 30 seconds to clean up expired ones
     refreshIntervalRef.current = setInterval(fetchMessages, 30000);
-  };
-
-  // Stop polling
-  const stopPolling = () => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-    if (refreshIntervalRef.current) {
-      clearInterval(refreshIntervalRef.current);
-      refreshIntervalRef.current = null;
-    }
-
-    setConnectionStatus('disconnected');
-    
-    // Notify backend about disconnection
-    if (sessionId) {
-      fetch(`/api/sse/disconnect?userId=${userId}&sessionId=${sessionId}`, {
-        method: 'POST',
-      }).catch(console.error);
-    }
-  };
+  }, [pollForMessages, fetchMessages, toast]);
 
   // Toggle connection
   const toggleConnection = () => {
@@ -226,7 +179,7 @@ const BroadcastUserPanel: React.FC = () => {
   };
 
   // Mark message as read
-  const markAsRead = async (messageId: string, broadcastId: string) => {
+  const markAsRead = async (messageId: string, _broadcastId: string) => {
     try {
       // Update local state
       setMessages(prev => prev.map(msg => 
@@ -236,15 +189,13 @@ const BroadcastUserPanel: React.FC = () => {
       ));
 
       // Notify backend
-      await fetch(`/api/sse/read?userId=${userId}&messageId=${messageId}`, {
-        method: 'POST',
-      });
+      await userService.markMessageAsRead(userId, messageId);
 
       toast({
         title: 'Message Read',
         description: 'Message marked as read',
       });
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to mark message as read',
@@ -259,7 +210,7 @@ const BroadcastUserPanel: React.FC = () => {
     return () => {
       stopPolling();
     };
-  }, [userId]);
+  }, [userId, fetchMessages, stopPolling]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -420,22 +371,40 @@ const BroadcastUserPanel: React.FC = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Statistics</CardTitle>
+              <CardTitle>Message Statistics</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">{messages.length}</div>
-                <div className="text-sm text-gray-600">Total Messages</div>
+              <div className="text-sm">
+                <div className="font-medium">Total Messages</div>
+                <div className="text-gray-600">{messages.length}</div>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">{unreadCount}</div>
-                <div className="text-sm text-gray-600">Unread Messages</div>
+              <div className="text-sm">
+                <div className="font-medium">Unread Messages</div>
+                <div className="text-gray-600">{unreadCount}</div>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {messages.filter(m => m.readStatus === 'READ').length}
-                </div>
-                <div className="text-sm text-gray-600">Read Messages</div>
+              <div className="text-sm">
+                <div className="font-medium">Read Messages</div>
+                <div className="text-gray-600">{messages.filter(msg => msg.readStatus === 'READ').length}</div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>System Status</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="text-sm">
+                <div className="font-medium">Backend API</div>
+                <div className="text-gray-600">Java Spring Boot</div>
+              </div>
+              <div className="text-sm">
+                <div className="font-medium">Database</div>
+                <div className="text-gray-600">h2</div>
+              </div>
+              <div className="text-sm">
+                <div className="font-medium">Message Queue</div>
+                <div className="text-gray-600">Kafka</div>
               </div>
             </CardContent>
           </Card>

@@ -1,44 +1,21 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useToast } from '@/hooks/use-toast';
-import { Send, Users, Clock, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
-
-interface BroadcastMessage {
-  id: string;
-  senderId: string;
-  senderName: string;
-  content: string;
-  targetType: string;
-  targetIds: string[];
-  priority: string;
-  category: string;
-  createdAt: string;
-  status: string;
-  totalTargeted: number;
-  totalDelivered: number;
-  totalRead: number;
-  startTime: string;
-  endTime?: string;
-  isImmediate: boolean;
-}
-
-interface BroadcastStats {
-  totalTargeted: number;
-  totalDelivered: number;
-  totalRead: number;
-  deliveryRate: number;
-  readRate: number;
-}
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Badge } from '../ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Alert, AlertDescription } from '../ui/alert';
+import { useToast } from '../../hooks/use-toast';
+import { Send, CheckCircle, AlertCircle } from 'lucide-react';
+import { 
+  broadcastService, 
+  type BroadcastMessage, 
+  type BroadcastStats, 
+  type BroadcastRequest 
+} from '../../services/api';
 
 const BroadcastAdminPanel: React.FC = () => {
   const [broadcasts, setBroadcasts] = useState<BroadcastMessage[]>([]);
@@ -65,59 +42,43 @@ const BroadcastAdminPanel: React.FC = () => {
   });
 
   // Fetch broadcasts
-  const fetchBroadcasts = async (filter = 'all') => {
+  const fetchBroadcasts = useCallback(async (filter = 'all') => {
     try {
-      const response = await fetch(`/api/broadcasts?filter=${filter}`);
-      if (response.ok) {
-        const data = await response.json();
-        setBroadcasts(data);
-      }
-    } catch (error) {
+      const data = await broadcastService.getBroadcasts(filter);
+      setBroadcasts(data);
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to fetch broadcasts',
         variant: 'destructive',
       });
     }
-  };
+  }, [toast]);
 
   // Fetch broadcast stats
-  const fetchBroadcastStats = async (broadcastId: string) => {
+  const fetchBroadcastStats = useCallback(async (broadcastId: string) => {
     try {
-      const response = await fetch(`/api/broadcasts/${broadcastId}/stats`);
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
-      } else {
-        toast({
-          title: 'Error',
-          description: `Failed to fetch broadcast statistics: ${response.status} ${response.statusText}`,
-          variant: 'destructive',
-        });
-      }
-    } catch (error) {
+      const data = await broadcastService.getBroadcastStats(broadcastId);
+      setStats(data);
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to fetch broadcast statistics',
         variant: 'destructive',
       });
     }
-  };
+  }, [toast]);
 
   // Fetch delivery details
-  const fetchDeliveryDetails = async (broadcastId: string) => {
+  const fetchDeliveryDetails = useCallback(async (broadcastId: string) => {
     try {
-      const response = await fetch(`/api/broadcasts/${broadcastId}/deliveries`);
-      if (response.ok) {
-        const data = await response.json();
-        return data;
-      }
-      return [];
+      const data = await broadcastService.getBroadcastDeliveries(broadcastId);
+      setDeliveryDetails(data);
     } catch (error) {
       console.error('Error fetching delivery details:', error);
-      return [];
+      setDeliveryDetails([]);
     }
-  };
+  }, []);
 
   // Create broadcast
   const createBroadcast = async (e: React.FormEvent) => {
@@ -125,50 +86,38 @@ const BroadcastAdminPanel: React.FC = () => {
     setLoading(true);
 
     try {
-      const payload = {
+      const payload: BroadcastRequest = {
         ...formData,
         targetIds: formData.targetType === 'ALL' ? [] : formData.targetIds.split(',').map(id => id.trim()),
         startTime: formData.isImmediate ? new Date().toISOString() : new Date(formData.startTime).toISOString(),
-        endTime: formData.endTime ? new Date(formData.endTime).toISOString() : null
+        endTime: formData.endTime ? new Date(formData.endTime).toISOString() : undefined
       };
 
-      const response = await fetch('/api/broadcasts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+      const newBroadcast = await broadcastService.createBroadcast(payload);
+      setBroadcasts(prev => [newBroadcast, ...prev]);
+      
+      // Refresh the broadcast list to ensure we have the latest data
+      await fetchBroadcasts(manageFilter);
+      
+      // Reset form
+      setFormData({
+        senderId: 'admin-001',
+        senderName: 'System Administrator',
+        content: '',
+        targetType: 'ALL',
+        targetIds: '',
+        priority: 'NORMAL',
+        category: 'GENERAL',
+        isImmediate: true,
+        startTime: '',
+        endTime: ''
       });
 
-      if (response.ok) {
-        const newBroadcast = await response.json();
-        setBroadcasts(prev => [newBroadcast, ...prev]);
-        
-        // Refresh the broadcast list to ensure we have the latest data
-        await fetchBroadcasts(manageFilter);
-        
-        // Reset form
-        setFormData({
-          senderId: 'admin-001',
-          senderName: 'System Administrator',
-          content: '',
-          targetType: 'ALL',
-          targetIds: '',
-          priority: 'NORMAL',
-          category: 'GENERAL',
-          isImmediate: true,
-          startTime: '',
-          endTime: ''
-        });
-
-        toast({
-          title: 'Success',
-          description: 'Broadcast created successfully',
-        });
-      } else {
-        throw new Error('Failed to create broadcast');
-      }
-    } catch (error) {
+      toast({
+        title: 'Success',
+        description: 'Broadcast created successfully',
+      });
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to create broadcast',
@@ -182,24 +131,19 @@ const BroadcastAdminPanel: React.FC = () => {
   // Cancel broadcast
   const cancelBroadcast = async (broadcastId: string) => {
     try {
-      const response = await fetch(`/api/broadcasts/${broadcastId}`, {
-        method: 'DELETE',
+      await broadcastService.cancelBroadcast(broadcastId);
+      setBroadcasts(prev => prev.map(b => 
+        b.id === broadcastId ? { ...b, status: 'CANCELLED' } : b
+      ));
+      
+      // Refresh the broadcast list to ensure we have the latest data
+      await fetchBroadcasts(manageFilter);
+      
+      toast({
+        title: 'Success',
+        description: 'Broadcast cancelled successfully',
       });
-
-      if (response.ok) {
-        setBroadcasts(prev => prev.map(b => 
-          b.id === broadcastId ? { ...b, status: 'CANCELLED' } : b
-        ));
-        
-        // Refresh the broadcast list to ensure we have the latest data
-        await fetchBroadcasts(manageFilter);
-        
-        toast({
-          title: 'Success',
-          description: 'Broadcast cancelled successfully',
-        });
-      }
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to cancel broadcast',
@@ -210,14 +154,14 @@ const BroadcastAdminPanel: React.FC = () => {
 
   useEffect(() => {
     fetchBroadcasts(manageFilter);
-  }, [manageFilter]);
+  }, [manageFilter, fetchBroadcasts]);
 
   useEffect(() => {
     if (selectedBroadcast) {
       fetchBroadcastStats(selectedBroadcast.id);
-      fetchDeliveryDetails(selectedBroadcast.id).then(setDeliveryDetails);
+      fetchDeliveryDetails(selectedBroadcast.id);
     }
-  }, [selectedBroadcast]);
+  }, [selectedBroadcast, fetchBroadcastStats, fetchDeliveryDetails]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -438,63 +382,38 @@ const BroadcastAdminPanel: React.FC = () => {
                           <Badge className={getPriorityColor(broadcast.priority)}>
                             {broadcast.priority}
                           </Badge>
+                          <Badge variant="outline">{broadcast.category}</Badge>
                           <Badge className={getStatusColor(getBroadcastStatus(broadcast))}>
                             {getBroadcastStatus(broadcast)}
                           </Badge>
-                          <Badge variant="outline">{broadcast.category}</Badge>
                         </div>
-                        <p className="text-sm text-gray-600">{broadcast.content}</p>
+                        <p className="text-sm text-gray-800">{broadcast.content}</p>
                         <p className="text-xs text-gray-500">
                           From {broadcast.senderName} • {new Date(broadcast.createdAt).toLocaleString()}
-                          {broadcast.isImmediate ? ' • Immediate' : ` • Scheduled`}
-                          {broadcast.isImmediate ? '' : ` • Starts: ${new Date(broadcast.startTime).toLocaleString()}`}
-                          {broadcast.endTime && ` • Ends: ${new Date(broadcast.endTime).toLocaleString()}`}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      {getBroadcastStatus(broadcast) === 'ACTIVE' && (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            setSelectedBroadcast(broadcast);
-                            setActiveTab('stats');
-                          }}
+                          onClick={() => cancelBroadcast(broadcast.id)}
                         >
-                          View Stats
+                          Cancel
                         </Button>
-                        {(getBroadcastStatus(broadcast) === 'ACTIVE' || getBroadcastStatus(broadcast) === 'SCHEDULED') && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => cancelBroadcast(broadcast.id)}
-                          >
-                            Cancel
-                          </Button>
-                        )}
-                      </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
-                      <div className="flex items-center gap-1">
-                        <Users className="h-4 w-4" />
-                        <span>{broadcast.totalTargeted} targeted</span>
+                    <div className="grid grid-cols-3 gap-4 text-xs">
+                      <div>
+                        <span className="text-gray-500">Targeted:</span>
+                        <span className="ml-1 font-medium">{broadcast.totalTargeted}</span>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span>{broadcast.totalDelivered} delivered</span>
-                        {broadcast.totalTargeted > 0 && (
-                          <span className="text-xs text-gray-500">
-                            ({Math.round((broadcast.totalDelivered / broadcast.totalTargeted) * 100)}%)
-                          </span>
-                        )}
+                      <div>
+                        <span className="text-gray-500">Delivered:</span>
+                        <span className="ml-1 font-medium">{broadcast.totalDelivered}</span>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-4 w-4 text-blue-600" />
-                        <span>{broadcast.totalRead} read</span>
-                        {broadcast.totalDelivered > 0 && (
-                          <span className="text-xs text-gray-500">
-                            ({Math.round((broadcast.totalRead / broadcast.totalDelivered) * 100)}%)
-                          </span>
-                        )}
+                      <div>
+                        <span className="text-gray-500">Read:</span>
+                        <span className="ml-1 font-medium">{broadcast.totalRead}</span>
                       </div>
                     </div>
                   </div>
@@ -505,90 +424,107 @@ const BroadcastAdminPanel: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="stats">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Broadcast Statistics</CardTitle>
-                <CardDescription>
-                  {selectedBroadcast ? `Stats for broadcast #${selectedBroadcast.id}` : 'Select a broadcast to view statistics'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {stats ? (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center p-4 bg-blue-50 rounded-lg">
-                        <div className="text-2xl font-bold text-blue-600">{stats.totalTargeted}</div>
-                        <div className="text-sm text-gray-600">Total Targeted</div>
-                      </div>
-                      <div className="text-center p-4 bg-green-50 rounded-lg">
-                        <div className="text-2xl font-bold text-green-600">{stats.totalDelivered}</div>
-                        <div className="text-sm text-gray-600">Total Delivered</div>
-                      </div>
-                      <div className="text-center p-4 bg-purple-50 rounded-lg">
-                        <div className="text-2xl font-bold text-purple-600">{stats.totalRead}</div>
-                        <div className="text-sm text-gray-600">Total Read</div>
-                      </div>
-                      <div className="text-center p-4 bg-orange-50 rounded-lg">
-                        <div className="text-2xl font-bold text-orange-600">
-                          {((stats.totalDelivered / stats.totalTargeted) * 100).toFixed(1)}%
-                        </div>
-                        <div className="text-sm text-gray-600">Delivery Rate</div>
-                      </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Broadcast Statistics</CardTitle>
+              <CardDescription>
+                View detailed statistics and delivery information
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                <div>
+                  <Label htmlFor="broadcastSelect">Select Broadcast</Label>
+                  <Select value={selectedBroadcast?.id || ''} onValueChange={(value) => {
+                    const broadcast = broadcasts.find(b => b.id === value);
+                    setSelectedBroadcast(broadcast || null);
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a broadcast to view statistics" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {broadcasts.map((broadcast) => (
+                        <SelectItem key={broadcast.id} value={broadcast.id}>
+                          {broadcast.content.substring(0, 50)}... ({new Date(broadcast.createdAt).toLocaleDateString()})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedBroadcast && stats && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Total Targeted</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{stats.totalTargeted}</div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Total Delivered</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{stats.totalDelivered}</div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Total Read</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{stats.totalRead}</div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Delivery Rate</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{(stats.deliveryRate * 100).toFixed(1)}%</div>
+                        </CardContent>
+                      </Card>
                     </div>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Delivery Details</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {deliveryDetails.map((detail, index) => (
+                            <div key={index} className="flex justify-between items-center p-2 border-b">
+                              <span className="text-sm">{detail.userId}</span>
+                              <div className="flex items-center gap-2">
+                                <Badge variant={detail.deliveryStatus === 'DELIVERED' ? 'default' : 'secondary'}>
+                                  {detail.deliveryStatus}
+                                </Badge>
+                                {detail.readStatus === 'READ' && (
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                ) : (
+                )}
+
+                {!selectedBroadcast && (
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Select a broadcast from the Manage tab to view detailed statistics.
+                      Select a broadcast to view its statistics and delivery details.
                     </AlertDescription>
                   </Alert>
                 )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Delivery Activity</CardTitle>
-                <CardDescription>
-                  Real-time delivery and read activity for this broadcast
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {deliveryDetails.length === 0 ? (
-                    <div className="text-center py-4">
-                      <p className="text-gray-500">No delivery activity yet</p>
-                    </div>
-                  ) : (
-                    deliveryDetails.slice(0, 10).map((delivery) => (
-                      <div key={delivery.id} className="flex items-center gap-3 text-sm">
-                        {delivery.status === 'READ' ? (
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <Clock className="h-4 w-4 text-blue-600" />
-                        )}
-                        <span>
-                          {delivery.status === 'READ' 
-                            ? `User ${delivery.userId} read message` 
-                            : `Delivered to user ${delivery.userId}`}
-                        </span>
-                        {delivery.timeToRead && (
-                          <span className="text-xs text-gray-500">
-                            (read in {delivery.timeToRead}s)
-                          </span>
-                        )}
-                        <span className="text-gray-500 ml-auto">
-                          {new Date(delivery.deliveredAt).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
