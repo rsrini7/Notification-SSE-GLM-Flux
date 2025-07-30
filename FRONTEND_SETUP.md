@@ -78,11 +78,11 @@ Edit `.env.local` with your configuration:
 
 ```env
 # Backend API URL
-NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_API_URL=http://localhost:8081
 
 # WebSocket/SSE Configuration
-NEXT_PUBLIC_SSE_URL=http://localhost:8080/sse
-NEXT_PUBLIC_WS_URL=ws://localhost:8080/ws
+NEXT_PUBLIC_SSE_URL=http://localhost:8081/sse
+NEXT_PUBLIC_WS_URL=ws://localhost:8081/ws
 
 # Application Configuration
 NEXT_PUBLIC_APP_NAME=Broadcast System
@@ -439,10 +439,10 @@ npx tsc --noEmit
 ### Issue 4: SSE Connection Issues
 ```bash
 # Check backend server is running
-curl http://localhost:8080/actuator/health
+curl http://localhost:8081/actuator/health
 
 # Verify SSE endpoint
-curl -N -H "Accept: text/event-stream" http://localhost:8080/sse/connect?userId=test-user
+curl -N -H "Accept: text/event-stream" http://localhost:8081/sse/connect?userId=test-user
 ```
 
 ### Issue 5: Database Connection Issues
@@ -501,7 +501,7 @@ npm run dev
 
 ### 16.1 Development (.env.local)
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_API_URL=http://localhost:8081
 NEXT_PUBLIC_DEBUG=true
 NEXT_PUBLIC_ENABLE_DEV_TOOLS=true
 ```

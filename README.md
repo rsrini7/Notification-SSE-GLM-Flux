@@ -66,7 +66,7 @@ src/
 
 The frontend is configured to connect to a Java backend:
 
-- **Development**: `http://localhost:8080`
+- **Development**: `http://localhost:8081`
 - **Production**: `https://your-java-backend.com`
 
 ### API Endpoints Used
@@ -98,7 +98,7 @@ The frontend is configured to connect to a Java backend:
 Create a `.env` file in the root directory:
 
 ```env
-VITE_API_BASE_URL=http://localhost:8080
+VITE_API_BASE_URL=http://localhost:8081
 ```
 
 ## Building for Production
