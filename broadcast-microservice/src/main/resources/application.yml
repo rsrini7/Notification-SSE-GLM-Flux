@@ -79,8 +79,8 @@ management:
 logging:
   level:
     com.example.broadcast: DEBUG
-    org.springframework.kafka: INFO
-    org.springframework.web: INFO
+    org.springframework.kafka: WARN
+    org.springframework.web: WARN
     org.springframework.jdbc: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

@@ -3,6 +3,12 @@ package com.example.broadcast.repository;
 import com.example.broadcast.model.UserBroadcastMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+
+import java.sql.PreparedStatement;
+import java.sql.Statement;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
@@ -55,17 +61,29 @@ public class UserBroadcastRepository {
             VALUES (?, ?, ?, ?, ?, ?)
             """;
         
-        jdbcTemplate.update(sql,
+        final Object[] params = new Object[]{
                 userBroadcast.getBroadcastId(),
                 userBroadcast.getUserId(),
                 userBroadcast.getDeliveryStatus(),
                 userBroadcast.getReadStatus(),
                 userBroadcast.getDeliveredAt(),
-                userBroadcast.getReadAt());
+                userBroadcast.getReadAt()
+        };
 
-        // Get the generated ID
-        Long id = jdbcTemplate.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
-        userBroadcast.setId(id);
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            for (int i = 0; i < params.length; i++) {
+                ps.setObject(i + 1, params[i]);
+            }            return ps;
+        }, keyHolder);
+
+        // Get the generated ID from the key map
+        if (!keyHolder.getKeyList().isEmpty()) {
+            userBroadcast.setId(((Number) keyHolder.getKeyList().get(0).get("ID")).longValue());
+        } else {
+            throw new RuntimeException("Failed to retrieve generated key for user broadcast.");
+        }
         return userBroadcast;
     }
 
