@@ -3,6 +3,12 @@ package com.example.broadcast.repository;
 import com.example.broadcast.model.BroadcastMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+
+import java.sql.PreparedStatement;
+import java.sql.Statement;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
@@ -57,7 +63,7 @@ public class BroadcastRepository {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
         
-        jdbcTemplate.update(sql,
+        final Object[] params = new Object[]{
                 broadcast.getSenderId(),
                 broadcast.getSenderName(),
                 broadcast.getContent(),
@@ -66,11 +72,24 @@ public class BroadcastRepository {
                 broadcast.getPriority(),
                 broadcast.getCategory(),
                 broadcast.getExpiresAt(),
-                broadcast.getStatus() != null ? broadcast.getStatus() : "ACTIVE");
+                broadcast.getStatus() != null ? broadcast.getStatus() : "ACTIVE"
+        };
 
-        // Get the generated ID
-        Long id = jdbcTemplate.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
-        broadcast.setId(id);
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            for (int i = 0; i < params.length; i++) {
+                ps.setObject(i + 1, params[i]);
+            }
+            return ps;
+        }, keyHolder);
+
+        // Get the generated ID from the key map
+        if (!keyHolder.getKeyList().isEmpty()) {
+            broadcast.setId(((Number) keyHolder.getKeyList().get(0).get("ID")).longValue());
+        } else {
+            throw new RuntimeException("Failed to retrieve generated key for broadcast.");
+        }
         return broadcast;
     }
 

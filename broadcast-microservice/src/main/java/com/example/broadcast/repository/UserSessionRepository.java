@@ -152,7 +152,7 @@ public class UserSessionRepository {
             SET connection_status = 'EXPIRED', 
                 disconnected_at = CURRENT_TIMESTAMP 
             WHERE connection_status = 'ACTIVE' 
-            AND last_heartbeat < CURRENT_TIMESTAMP - INTERVAL '1 HOUR'
+            AND last_heartbeat < DATEADD('HOUR', -1, CURRENT_TIMESTAMP)
             """;
         return jdbcTemplate.update(sql);
     }
@@ -164,7 +164,7 @@ public class UserSessionRepository {
         String sql = """
             SELECT * FROM user_sessions 
             WHERE connection_status = 'ACTIVE' 
-            AND last_heartbeat < CURRENT_TIMESTAMP - INTERVAL '5 MINUTES'
+            AND last_heartbeat < DATEADD('MINUTE', -5, CURRENT_TIMESTAMP)
             ORDER BY last_heartbeat ASC
             """;
         return jdbcTemplate.query(sql, sessionRowMapper);
