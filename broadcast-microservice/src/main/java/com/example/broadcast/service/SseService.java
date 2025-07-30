@@ -8,6 +8,7 @@ import com.example.broadcast.repository.UserSessionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.extern.slf4j.Slf4j;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -52,7 +53,10 @@ public class SseService {
         this.userBroadcastRepository = userBroadcastRepository;
         this.userSessionRepository = userSessionRepository;
         this.objectMapper = objectMapper;
+    }
 
+    @PostConstruct
+    public void init() {
         // Start heartbeat task
         startHeartbeat();
         // Start cleanup task
