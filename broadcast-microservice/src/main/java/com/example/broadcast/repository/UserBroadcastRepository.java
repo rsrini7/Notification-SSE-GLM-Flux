@@ -230,4 +230,35 @@ public class UserBroadcastRepository {
         
         return stats;
     }
+
+    /**
+     * Mark message as read with specific timestamp
+     */
+    public int markAsRead(Long id, LocalDateTime readAt) {
+        String sql = """
+            UPDATE user_broadcast_messages 
+            SET read_status = 'READ', read_at = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+            """;
+        return jdbcTemplate.update(sql, readAt, id);
+    }
+
+     /**
+     * Find user broadcasts by user ID
+     */
+    public List<UserBroadcastMessage> findByUserId(String userId) {
+        String sql = """
+            SELECT * FROM user_broadcast_messages 
+            WHERE user_id = ? 
+            ORDER BY created_at DESC
+            """;
+        return jdbcTemplate.query(sql, userBroadcastRowMapper, userId);
+    }
+
+    /**
+     * Find unread messages for a user (alias for findUnreadMessages)
+     */
+    public List<UserBroadcastMessage> findUnreadByUserId(String userId) {
+        return findUnreadMessages(userId);
+    }
 }

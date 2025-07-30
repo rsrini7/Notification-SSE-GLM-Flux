@@ -170,4 +170,24 @@ public class SseController {
         
         return ResponseEntity.ok("Message marked as read");
     }
+
+    /**
+   * Poll for new messages
+   * GET /api/sse/poll?userId={userId}&lastTimestamp={lastTimestamp}
+   */
+  @GetMapping("/poll")
+  public ResponseEntity<java.util.Map<String, Object>> pollForMessages(
+          @RequestParam String userId,
+          @RequestParam(defaultValue = "0") String lastTimestamp) {
+      
+      log.debug("Polling for messages: user={}, lastTimestamp={}", userId, lastTimestamp);
+      
+      // In a real implementation, this would query for new messages since lastTimestamp
+      // For now, return empty response
+      java.util.Map<String, Object> response = new java.util.HashMap<>();
+      response.put("messages", java.util.List.of());
+      response.put("timestamp", java.time.LocalDateTime.now().toString());
+      
+      return ResponseEntity.ok(response);
+  }
 }

@@ -5,10 +5,13 @@ import com.example.broadcast.dto.BroadcastResponse;
 import com.example.broadcast.dto.MessageDeliveryEvent;
 import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.UserBroadcastMessage;
+import com.example.broadcast.model.BroadcastStatistics;
+import com.example.broadcast.dto.UserBroadcastResponse;
 import com.example.broadcast.model.UserPreferences;
 import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserPreferencesRepository;
+import com.example.broadcast.repository.BroadcastStatisticsRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +39,7 @@ public class BroadcastService {
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastRepository userBroadcastRepository;
     private final UserPreferencesRepository userPreferencesRepository;
+    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
     
@@ -67,9 +71,20 @@ public class BroadcastService {
 
         // Save broadcast to database
         broadcast = broadcastRepository.save(broadcast);
-        
+
         // Determine target users and create user broadcast records
         List<String> targetUsers = determineTargetUsers(request);
+
+        // Save initial broadcast statistics
+        BroadcastStatistics initialStats = BroadcastStatistics.builder()
+                .broadcastId(broadcast.getId())
+                .totalTargeted(targetUsers.size())
+                .totalDelivered(0)
+                .totalRead(0)
+                .totalFailed(0)
+                .calculatedAt(LocalDateTime.now())
+                .build();
+        broadcastStatisticsRepository.save(initialStats);
         List<UserBroadcastMessage> userBroadcasts = createUserBroadcastMessages(broadcast.getId(), targetUsers);
         
         // Batch insert user broadcast messages for performance
@@ -244,14 +259,14 @@ public class BroadcastService {
         BroadcastMessage broadcast = broadcastRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Broadcast not found: " + id));
         
-        // Get delivery statistics
-        java.util.Map<String, Long> stats = userBroadcastRepository.getDeliveryStats(id);
-        long totalDelivered = stats.entrySet().stream()
-                .filter(e -> e.getKey().startsWith("DELIVERED_"))
-                .mapToLong(java.util.Map.Entry::getValue)
-                .sum();
-        
-        long totalRead = stats.getOrDefault("DELIVERED_READ", 0L);
+        // Get statistics from dedicated repository
+        BroadcastStatistics stats = broadcastStatisticsRepository.findByBroadcastId(id)
+                .orElseGet(() -> BroadcastStatistics.builder()
+                        .broadcastId(id)
+                        .totalTargeted(0)
+                        .totalDelivered(0)
+                        .totalRead(0)
+                        .build());
         
         return BroadcastResponse.builder()
                 .id(broadcast.getId())
@@ -265,9 +280,9 @@ public class BroadcastService {
                 .expiresAt(broadcast.getExpiresAt())
                 .createdAt(broadcast.getCreatedAt())
                 .status(broadcast.getStatus())
-                .totalTargeted((int) stats.values().stream().mapToLong(Long::longValue).sum())
-                .totalDelivered((int) totalDelivered)
-                .totalRead((int) totalRead)
+                .totalTargeted(stats.getTotalTargeted())
+                .totalDelivered(stats.getTotalDelivered())
+                .totalRead(stats.getTotalRead())
                 .build();
     }
 
@@ -277,7 +292,7 @@ public class BroadcastService {
     public List<BroadcastResponse> getActiveBroadcasts() {
         List<BroadcastMessage> broadcasts = broadcastRepository.findActiveBroadcasts();
         return broadcasts.stream()
-                .map(broadcast -> getBroadcast(broadcast.getId()))
+                .map(broadcast -> getBroadcast(broadcast.getId())) // broadcast.getId() is already Long
                 .collect(Collectors.toList());
     }
 
@@ -301,5 +316,76 @@ public class BroadcastService {
         sendBroadcastEvent(broadcast, targetUsers, "CANCELLED");
         
         log.info("Broadcast cancelled: {}", id);
+    }
+
+     /**
+     * Get user messages
+     */
+    public List<UserBroadcastResponse> getUserMessages(String userId) {
+        log.info("Getting messages for user: {}", userId);
+        
+        List<UserBroadcastMessage> userMessages = userBroadcastRepository.findByUserId(userId);
+        
+        return userMessages.stream()
+                .map(this::buildUserBroadcastResponse)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get unread messages for user
+     */
+    public List<UserBroadcastResponse> getUnreadMessages(String userId) {
+        log.info("Getting unread messages for user: {}", userId);
+        
+        List<UserBroadcastMessage> unreadMessages = userBroadcastRepository.findUnreadByUserId(userId);
+        
+        return unreadMessages.stream()
+                .map(this::buildUserBroadcastResponse)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Mark message as read
+     */
+    @Transactional
+    public void markMessageAsRead(String userId, Long messageId) {
+        log.info("Marking message as read: user={}, message={}", userId, messageId);
+        
+        UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("User message not found: " + messageId));
+        
+        // Verify the message belongs to the user
+        if (!userId.equals(userMessage.getUserId())) {
+            throw new RuntimeException("Message does not belong to user: " + userId);
+        }
+        
+        // Update read status and timestamp
+        userBroadcastRepository.markAsRead(messageId, LocalDateTime.now());
+        
+        log.info("Message marked as read: user={}, message={}", userId, messageId);
+    }
+
+    /**
+     * Build user broadcast response
+     */
+    private UserBroadcastResponse buildUserBroadcastResponse(UserBroadcastMessage userMessage) {
+        BroadcastMessage broadcast = broadcastRepository.findById(userMessage.getBroadcastId())
+                .orElseThrow(() -> new RuntimeException("Broadcast not found: " + userMessage.getBroadcastId()));
+        
+        return UserBroadcastResponse.builder()
+                .id(userMessage.getId())
+                .broadcastId(userMessage.getBroadcastId())
+                .userId(userMessage.getUserId())
+                .deliveryStatus(userMessage.getDeliveryStatus())
+                .readStatus(userMessage.getReadStatus())
+                .deliveredAt(userMessage.getDeliveredAt())
+                .readAt(userMessage.getReadAt())
+                .createdAt(userMessage.getCreatedAt())
+                .senderName(broadcast.getSenderName())
+                .content(broadcast.getContent())
+                .priority(broadcast.getPriority())
+                .category(broadcast.getCategory())
+                .broadcastCreatedAt(broadcast.getCreatedAt())
+                .build();
     }
 }

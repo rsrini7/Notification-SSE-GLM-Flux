@@ -98,8 +98,7 @@ public class BroadcastRepository {
      */
     public Optional<BroadcastMessage> findById(Long id) {
         String sql = "SELECT * FROM broadcast_messages WHERE id = ?";
-        List<BroadcastMessage> results = jdbcTemplate.query(sql, broadcastRowMapper, id);
-        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+        return jdbcTemplate.query(sql, broadcastRowMapper, id).stream().findFirst();
     }
 
     /**

@@ -15,6 +15,9 @@ import jakarta.validation.constraints.NotNull;
 @NoArgsConstructor
 @AllArgsConstructor
 public class MessageReadRequest {
+    @NotNull(message = "User ID is required")
+    private String userId;
+    
     @NotNull(message = "Message ID is required")
     private Long messageId;
     
