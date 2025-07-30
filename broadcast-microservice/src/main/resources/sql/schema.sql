@@ -1,0 +1,123 @@
+-- Broadcast Messaging Database Schema
+-- Designed for high-scale operations with 400K+ users and 30K+ concurrent connections
+
+-- Enable h2 PostgreSQL compatibility mode
+SET MODE PostgreSQL;
+
+-- Broadcast Messages Table (Admin-side records)
+-- Stores permanent records of all broadcasts created by administrators
+CREATE TABLE IF NOT EXISTS broadcast_messages (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    sender_id VARCHAR(255) NOT NULL,
+    sender_name VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    target_type VARCHAR(50) NOT NULL CHECK (target_type IN ('ALL', 'SELECTED', 'ROLE')),
+    target_ids TEXT, -- JSON array of user IDs or role IDs for targeted broadcasts
+    priority VARCHAR(20) DEFAULT 'NORMAL' CHECK (priority IN ('LOW', 'NORMAL', 'HIGH', 'URGENT')),
+    category VARCHAR(100),
+    expires_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'EXPIRED', 'CANCELLED')),
+    
+    -- Indexes for performance
+    INDEX idx_broadcast_created_at (created_at),
+    INDEX idx_broadcast_status (status),
+    INDEX idx_broadcast_expires_at (expires_at),
+    INDEX idx_broadcast_sender (sender_id)
+);
+
+-- User Broadcast Messages Table (User-side records)
+-- Tracks delivery and read status for each user per broadcast
+CREATE TABLE IF NOT EXISTS user_broadcast_messages (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    broadcast_id BIGINT NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
+    delivery_status VARCHAR(20) DEFAULT 'PENDING' CHECK (delivery_status IN ('PENDING', 'DELIVERED', 'FAILED')),
+    read_status VARCHAR(20) DEFAULT 'UNREAD' CHECK (read_status IN ('UNREAD', 'READ', 'ARCHIVED')),
+    delivered_at TIMESTAMP WITH TIME ZONE,
+    read_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Foreign key constraint
+    FOREIGN KEY (broadcast_id) REFERENCES broadcast_messages(id) ON DELETE CASCADE,
+    
+    -- Unique constraint to prevent duplicate user-broadcast entries
+    UNIQUE (broadcast_id, user_id),
+    
+    -- Indexes for high-performance queries
+    INDEX idx_user_broadcast_user_id (user_id),
+    INDEX idx_user_broadcast_status (delivery_status, read_status),
+    INDEX idx_user_broadcast_broadcast_id (broadcast_id),
+    INDEX idx_user_broadcast_created_at (created_at),
+    INDEX idx_user_broadcast_unread (user_id, read_status, delivery_status)
+);
+
+-- User Sessions Table (for connection tracking)
+-- Tracks active user sessions and pod assignments for efficient SSE routing
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id VARCHAR(255) NOT NULL,
+    session_id VARCHAR(255) NOT NULL,
+    pod_id VARCHAR(255) NOT NULL,
+    connection_status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (connection_status IN ('ACTIVE', 'INACTIVE', 'EXPIRED')),
+    connected_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    disconnected_at TIMESTAMP WITH TIME ZONE,
+    last_heartbeat TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Indexes for fast session lookups
+    INDEX idx_user_sessions_user_id (user_id),
+    INDEX idx_user_sessions_pod_id (pod_id),
+    INDEX idx_user_sessions_status (connection_status),
+    INDEX idx_user_sessions_heartbeat (last_heartbeat),
+    
+    -- Unique constraint for active sessions
+    UNIQUE (user_id, session_id, pod_id)
+);
+
+-- Broadcast Statistics Table (for monitoring and analytics)
+-- Tracks performance metrics and delivery statistics
+CREATE TABLE IF NOT EXISTS broadcast_statistics (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    broadcast_id BIGINT NOT NULL,
+    total_targeted INTEGER NOT NULL,
+    total_delivered INTEGER DEFAULT 0,
+    total_read INTEGER DEFAULT 0,
+    total_failed INTEGER DEFAULT 0,
+    avg_delivery_time_ms BIGINT,
+    calculated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Foreign key constraint
+    FOREIGN KEY (broadcast_id) REFERENCES broadcast_messages(id) ON DELETE CASCADE,
+    
+    -- Indexes for analytics queries
+    INDEX idx_stats_broadcast_id (broadcast_id),
+    INDEX idx_stats_calculated_at (calculated_at)
+);
+
+-- User Preferences Table (for notification filtering)
+-- Stores user preferences for broadcast notifications
+CREATE TABLE IF NOT EXISTS user_preferences (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id VARCHAR(255) NOT NULL UNIQUE,
+    notification_enabled BOOLEAN DEFAULT true,
+    email_notifications BOOLEAN DEFAULT true,
+    push_notifications BOOLEAN DEFAULT true,
+    preferred_categories TEXT, -- JSON array of preferred categories
+    quiet_hours_start TIME,
+    quiet_hours_end TIME,
+    timezone VARCHAR(50) DEFAULT 'UTC',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Index for user preference lookups
+    INDEX idx_user_preferences_user_id (user_id)
+);
+
+-- Create sequence for ID generation
+CREATE SEQUENCE IF NOT EXISTS broadcast_seq START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS user_broadcast_seq START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS session_seq START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS stats_seq START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS preferences_seq START WITH 1 INCREMENT BY 1;

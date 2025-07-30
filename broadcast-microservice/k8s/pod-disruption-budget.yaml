@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: broadcast-pdb
+  namespace: broadcast-system
+  labels:
+    app: broadcast-microservice
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: broadcast-microservice

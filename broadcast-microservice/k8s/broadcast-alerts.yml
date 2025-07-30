@@ -1,0 +1,74 @@
+groups:
+- name: broadcast-microservice
+  rules:
+  - alert: BroadcastServiceDown
+    expr: up{job="broadcast-microservice"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Broadcast service is down"
+      description: "Broadcast service has been down for more than 1 minute"
+  
+  - alert: HighMemoryUsage
+    expr: (container_memory_usage_bytes{container="broadcast-microservice"} / container_spec_memory_limit_bytes{container="broadcast-microservice"}) * 100 > 90
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High memory usage detected"
+      description: "Broadcast service memory usage is above 90% for 5 minutes"
+  
+  - alert: HighCPUUsage
+    expr: (rate(container_cpu_usage_seconds_total{container="broadcast-microservice"}[5m]) * 100) > 80
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High CPU usage detected"
+      description: "Broadcast service CPU usage is above 80% for 5 minutes"
+  
+  - alert: HighSSEConnections
+    expr: sse_connections > 25000
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High SSE connections detected"
+      description: "SSE connections are above 25,000 for 5 minutes"
+  
+  - alert: KafkaConsumerLag
+    expr: kafka_consumer_lag > 1000
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Kafka consumer lag detected"
+      description: "Kafka consumer lag is above 1000 messages for 5 minutes"
+  
+  - alert: DatabaseConnectionErrors
+    expr: rate(database_connection_errors_total[5m]) > 0.1
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Database connection errors detected"
+      description: "Database connection error rate is above 0.1 per second"
+  
+  - alert: MessageDeliveryFailure
+    expr: rate(message_delivery_failures_total[5m]) > 0.05
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High message delivery failure rate"
+      description: "Message delivery failure rate is above 5% for 2 minutes"
+  
+  - alert: PodRestarts
+    expr: changes(kube_pod_container_status_restarts_total{container="broadcast-microservice"}[15m]) > 2
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Pod restarts detected"
+      description: "Broadcast service pods have restarted more than 2 times in 15 minutes"

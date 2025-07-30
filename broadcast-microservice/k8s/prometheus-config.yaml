@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    
+    scrape_configs:
+    - job_name: 'broadcast-microservice'
+      static_configs:
+      - targets: ['broadcast-service.broadcast-system.svc.cluster.local:8080']
+      metrics_path: '/api/actuator/prometheus'
+      scrape_interval: 10s
+      scrape_timeout: 5s
+    
+    - job_name: 'kafka'
+      static_configs:
+      - targets: ['kafka-service.kafka-system.svc.cluster.local:9092']
+    
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - alertmanager.monitoring.svc.cluster.local:9093
+    
+    rule_files:
+    - "/etc/prometheus/rules/broadcast-alerts.yml"

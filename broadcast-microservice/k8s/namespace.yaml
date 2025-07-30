@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: broadcast-system
+  labels:
+    name: broadcast-system
+    app: broadcast-microservice
