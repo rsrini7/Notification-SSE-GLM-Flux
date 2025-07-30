@@ -16,7 +16,7 @@ import java.util.List;
  * Provides endpoints for users to retrieve their messages and manage read status
  */
 @RestController
-@RequestMapping("/user")
+@RequestMapping("/api/user")
 @RequiredArgsConstructor
 @Slf4j
 public class UserController {

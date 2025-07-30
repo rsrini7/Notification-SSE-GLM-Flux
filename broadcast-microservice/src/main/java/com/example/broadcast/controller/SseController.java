@@ -10,9 +10,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Sinks;
 
-import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.server.ServerWebExchange;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -21,7 +20,7 @@ import java.util.UUID;
  * Provides real-time message delivery to connected users
  */
 @RestController
-@RequestMapping("/sse")
+@RequestMapping("/api/sse")
 @RequiredArgsConstructor
 @Slf4j
 public class SseController {
@@ -40,10 +39,10 @@ public class SseController {
     public Flux<String> connect(
             @RequestParam String userId,
             @RequestParam(required = false) String sessionId,
-            HttpServletRequest request) {
+            ServerWebExchange exchange) {
         
         log.info("SSE connection request from user: {}, session: {}, IP: {}", 
-                userId, sessionId, request.getRemoteAddr());
+                userId, sessionId, exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
         
         // Generate session ID if not provided
         if (sessionId == null || sessionId.trim().isEmpty()) {

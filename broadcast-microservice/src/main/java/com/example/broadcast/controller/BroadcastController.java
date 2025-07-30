@@ -16,7 +16,7 @@ import java.util.List;
  * Provides endpoints for administrators to create and manage broadcasts
  */
 @RestController
-@RequestMapping("/broadcasts")
+@RequestMapping("/api/broadcasts")
 @RequiredArgsConstructor
 @Slf4j
 public class BroadcastController {
