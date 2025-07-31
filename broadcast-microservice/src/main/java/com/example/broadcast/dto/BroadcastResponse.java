@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 /**
@@ -25,8 +25,8 @@ public class BroadcastResponse {
     private List<String> targetIds;
     private String priority;
     private String category;
-    private LocalDateTime expiresAt;
-    private LocalDateTime createdAt;
+    private ZonedDateTime expiresAt;
+    private ZonedDateTime createdAt;
     private String status;
     private Integer totalTargeted;
     private Integer totalDelivered;

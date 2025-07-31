@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.With;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 /**
@@ -27,9 +27,9 @@ public class BroadcastMessage {
     private List<String> targetIds; // JSON array of user IDs or role IDs
     private String priority; // LOW, NORMAL, HIGH, URGENT
     private String category;
-    private LocalDateTime scheduledAt;
-    private LocalDateTime expiresAt;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private ZonedDateTime scheduledAt;
+    private ZonedDateTime expiresAt;
+    private ZonedDateTime createdAt;
+    private ZonedDateTime updatedAt;
     private String status; // ACTIVE, EXPIRED, CANCELLED
 }

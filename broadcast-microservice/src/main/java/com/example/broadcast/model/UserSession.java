@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 
 /**
  * Entity representing user session and connection tracking
@@ -21,7 +21,7 @@ public class UserSession {
     private String sessionId;
     private String podId;
     private String connectionStatus; // ACTIVE, INACTIVE, EXPIRED
-    private LocalDateTime connectedAt;
-    private LocalDateTime disconnectedAt;
-    private LocalDateTime lastHeartbeat;
+    private ZonedDateTime connectedAt;
+    private ZonedDateTime disconnectedAt;
+    private ZonedDateTime lastHeartbeat;
 }

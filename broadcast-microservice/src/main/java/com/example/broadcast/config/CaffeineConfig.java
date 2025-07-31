@@ -132,11 +132,11 @@ public class CaffeineConfig {
         private final String userId;
         private final String sessionId;
         private final String podId;
-        private final java.time.LocalDateTime connectedAt;
-        private final java.time.LocalDateTime lastActivity;
+        private final java.time.ZonedDateTime connectedAt;
+        private final java.time.ZonedDateTime lastActivity;
 
         public UserConnectionInfo(String userId, String sessionId, String podId, 
-                                 java.time.LocalDateTime connectedAt, java.time.LocalDateTime lastActivity) {
+                                 java.time.ZonedDateTime connectedAt, java.time.ZonedDateTime lastActivity) {
             this.userId = userId;
             this.sessionId = sessionId;
             this.podId = podId;
@@ -148,8 +148,8 @@ public class CaffeineConfig {
         public String getUserId() { return userId; }
         public String getSessionId() { return sessionId; }
         public String getPodId() { return podId; }
-        public java.time.LocalDateTime getConnectedAt() { return connectedAt; }
-        public java.time.LocalDateTime getLastActivity() { return lastActivity; }
+        public java.time.ZonedDateTime getConnectedAt() { return connectedAt; }
+        public java.time.ZonedDateTime getLastActivity() { return lastActivity; }
     }
 
     public static class UserMessageInfo {
@@ -157,12 +157,12 @@ public class CaffeineConfig {
         private final Long broadcastId;
         private final String content;
         private final String priority;
-        private final java.time.LocalDateTime createdAt;
+        private final java.time.ZonedDateTime createdAt;
         private final String deliveryStatus;
         private final String readStatus;
 
         public UserMessageInfo(Long messageId, Long broadcastId, String content, String priority,
-                              java.time.LocalDateTime createdAt, String deliveryStatus, String readStatus) {
+                              java.time.ZonedDateTime createdAt, String deliveryStatus, String readStatus) {
             this.messageId = messageId;
             this.broadcastId = broadcastId;
             this.content = content;
@@ -177,7 +177,7 @@ public class CaffeineConfig {
         public Long getBroadcastId() { return broadcastId; }
         public String getContent() { return content; }
         public String getPriority() { return priority; }
-        public java.time.LocalDateTime getCreatedAt() { return createdAt; }
+        public java.time.ZonedDateTime getCreatedAt() { return createdAt; }
         public String getDeliveryStatus() { return deliveryStatus; }
         public String getReadStatus() { return readStatus; }
     }
@@ -186,11 +186,11 @@ public class CaffeineConfig {
         private final String eventId;
         private final Long broadcastId;
         private final String eventType;
-        private final java.time.LocalDateTime timestamp;
+        private final java.time.ZonedDateTime timestamp;
         private final String message;
 
         public PendingEventInfo(String eventId, Long broadcastId, String eventType,
-                               java.time.LocalDateTime timestamp, String message) {
+                               java.time.ZonedDateTime timestamp, String message) {
             this.eventId = eventId;
             this.broadcastId = broadcastId;
             this.eventType = eventType;
@@ -202,7 +202,7 @@ public class CaffeineConfig {
         public String getEventId() { return eventId; }
         public Long getBroadcastId() { return broadcastId; }
         public String getEventType() { return eventType; }
-        public java.time.LocalDateTime getTimestamp() { return timestamp; }
+        public java.time.ZonedDateTime getTimestamp() { return timestamp; }
         public String getMessage() { return message; }
     }
 
@@ -210,9 +210,9 @@ public class CaffeineConfig {
         private final String userId;
         private final String sessionId;
         private final String podId;
-        private final java.time.LocalDateTime lastHeartbeat;
+        private final java.time.ZonedDateTime lastHeartbeat;
 
-        public UserSessionInfo(String userId, String sessionId, String podId, java.time.LocalDateTime lastHeartbeat) {
+        public UserSessionInfo(String userId, String sessionId, String podId, java.time.ZonedDateTime lastHeartbeat) {
             this.userId = userId;
             this.sessionId = sessionId;
             this.podId = podId;
@@ -223,7 +223,7 @@ public class CaffeineConfig {
         public String getUserId() { return userId; }
         public String getSessionId() { return sessionId; }
         public String getPodId() { return podId; }
-        public java.time.LocalDateTime getLastHeartbeat() { return lastHeartbeat; }
+        public java.time.ZonedDateTime getLastHeartbeat() { return lastHeartbeat; }
     }
 
     public static class BroadcastStatsInfo {
@@ -231,10 +231,10 @@ public class CaffeineConfig {
         private final Integer totalTargeted;
         private final Integer totalDelivered;
         private final Integer totalRead;
-        private final java.time.LocalDateTime calculatedAt;
+        private final java.time.ZonedDateTime calculatedAt;
 
         public BroadcastStatsInfo(Long broadcastId, Integer totalTargeted, Integer totalDelivered, 
-                                 Integer totalRead, java.time.LocalDateTime calculatedAt) {
+                                 Integer totalRead, java.time.ZonedDateTime calculatedAt) {
             this.broadcastId = broadcastId;
             this.totalTargeted = totalTargeted;
             this.totalDelivered = totalDelivered;
@@ -247,6 +247,6 @@ public class CaffeineConfig {
         public Integer getTotalTargeted() { return totalTargeted; }
         public Integer getTotalDelivered() { return totalDelivered; }
         public Integer getTotalRead() { return totalRead; }
-        public java.time.LocalDateTime getCalculatedAt() { return calculatedAt; }
+        public java.time.ZonedDateTime getCalculatedAt() { return calculatedAt; }
     }
 }

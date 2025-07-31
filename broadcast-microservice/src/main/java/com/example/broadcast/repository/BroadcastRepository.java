@@ -14,7 +14,9 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,11 +47,11 @@ public class BroadcastRepository {
                     .priority(rs.getString("priority"))
                     .category(rs.getString("category"))
                     .scheduledAt(rs.getTimestamp("scheduled_at") != null ?
-                            rs.getTimestamp("scheduled_at").toLocalDateTime() : null)
-                    .expiresAt(rs.getTimestamp("expires_at") != null ? 
-                            rs.getTimestamp("expires_at").toLocalDateTime() : null)
-                    .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
-                    .updatedAt(rs.getTimestamp("updated_at").toLocalDateTime())
+                            rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
+                    .expiresAt(rs.getTimestamp("expires_at") != null ?
+                            rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
+                    .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
+                    .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
                     .status(rs.getString("status"))
                     .build();
         }
@@ -133,7 +135,7 @@ public class BroadcastRepository {
     /**
      * Find scheduled broadcasts that are ready to be processed
      */
-    public List<BroadcastMessage> findScheduledBroadcastsToProcess(LocalDateTime now) {
+    public List<BroadcastMessage> findScheduledBroadcastsToProcess(ZonedDateTime now) {
         String sql = """
             SELECT * FROM broadcast_messages
             WHERE status = 'SCHEDULED'
@@ -181,8 +183,8 @@ public class BroadcastRepository {
             ps.setString(5, toJsonArray(broadcast.getTargetIds()));
             ps.setString(6, broadcast.getPriority());
             ps.setString(7, broadcast.getCategory());
-            ps.setTimestamp(8, broadcast.getExpiresAt() != null ? 
-                    java.sql.Timestamp.valueOf(broadcast.getExpiresAt()) : null);
+            ps.setTimestamp(8, broadcast.getExpiresAt() != null ?
+                    java.sql.Timestamp.from(broadcast.getExpiresAt().toInstant()) : null);
             ps.setString(9, broadcast.getStatus() != null ? broadcast.getStatus() : "ACTIVE");
         });
     }

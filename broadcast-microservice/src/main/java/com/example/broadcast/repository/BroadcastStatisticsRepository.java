@@ -8,9 +8,9 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.util.List;
 import java.util.Optional;
+import java.time.ZoneOffset;
 
 @Repository
 public class BroadcastStatisticsRepository {
@@ -28,7 +28,7 @@ public class BroadcastStatisticsRepository {
                 .totalRead(rs.getInt("total_read"))
                 .totalFailed(rs.getInt("total_failed"))
                 .avgDeliveryTimeMs(rs.getObject("avg_delivery_time_ms", Long.class))
-                .calculatedAt(rs.getTimestamp("calculated_at").toLocalDateTime())
+                .calculatedAt(rs.getTimestamp("calculated_at").toInstant().atZone(ZoneOffset.UTC))
                 .build();
     }
 

@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -27,6 +27,6 @@ public class UserPreferences {
     private LocalTime quietHoursStart;
     private LocalTime quietHoursEnd;
     private String timezone;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private ZonedDateTime createdAt;
+    private ZonedDateTime updatedAt;
 }

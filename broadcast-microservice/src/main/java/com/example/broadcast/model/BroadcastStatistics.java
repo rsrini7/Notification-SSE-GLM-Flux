@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 
 /**
  * Entity representing broadcast statistics
@@ -23,5 +23,5 @@ public class BroadcastStatistics {
     private Integer totalRead;
     private Integer totalFailed;
     private Long avgDeliveryTimeMs;
-    private LocalDateTime calculatedAt;
+    private ZonedDateTime calculatedAt;
 }

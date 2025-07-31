@@ -14,7 +14,8 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -42,11 +43,11 @@ public class UserBroadcastRepository {
                     .deliveryStatus(rs.getString("delivery_status"))
                     .readStatus(rs.getString("read_status"))
                     .deliveredAt(rs.getTimestamp("delivered_at") != null ? 
-                            rs.getTimestamp("delivered_at").toLocalDateTime() : null)
+                            rs.getTimestamp("delivered_at").toInstant().atZone(ZoneOffset.UTC) : null)
                     .readAt(rs.getTimestamp("read_at") != null ? 
-                            rs.getTimestamp("read_at").toLocalDateTime() : null)
-                    .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
-                    .updatedAt(rs.getTimestamp("updated_at").toLocalDateTime())
+                            rs.getTimestamp("read_at").toInstant().atZone(ZoneOffset.UTC) : null)
+                    .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
+                    .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
                     .build();
         }
     };
@@ -181,9 +182,9 @@ public class UserBroadcastRepository {
             ps.setString(3, ub.getDeliveryStatus());
             ps.setString(4, ub.getReadStatus());
             ps.setTimestamp(5, ub.getDeliveredAt() != null ? 
-                    java.sql.Timestamp.valueOf(ub.getDeliveredAt()) : null);
+                    java.sql.Timestamp.from(ub.getDeliveredAt().toInstant()) : null);
             ps.setTimestamp(6, ub.getReadAt() != null ? 
-                    java.sql.Timestamp.valueOf(ub.getReadAt()) : null);
+                    java.sql.Timestamp.from(ub.getReadAt().toInstant()) : null);
         });
     }
 
@@ -238,7 +239,7 @@ public class UserBroadcastRepository {
     /**
      * Mark message as read with specific timestamp
      */
-    public int markAsRead(Long id, LocalDateTime readAt) {
+    public int markAsRead(Long id, ZonedDateTime readAt) {
         String sql = """
             UPDATE user_broadcast_messages 
             SET read_status = 'READ', read_at = ?, updated_at = CURRENT_TIMESTAMP 

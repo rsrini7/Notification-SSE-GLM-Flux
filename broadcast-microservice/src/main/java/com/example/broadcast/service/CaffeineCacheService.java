@@ -6,10 +6,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -37,14 +36,14 @@ public class CaffeineCacheService {
     public void registerUserConnection(String userId, String sessionId, String podId) {
         try {
             CaffeineConfig.UserConnectionInfo connectionInfo = new CaffeineConfig.UserConnectionInfo(
-                    userId, sessionId, podId, LocalDateTime.now(), LocalDateTime.now());
+                    userId, sessionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
             
             userConnectionsCache.put(userId, connectionInfo);
             onlineUsers.put(userId, true);
             
             // Also update session cache
             CaffeineConfig.UserSessionInfo sessionInfo = new CaffeineConfig.UserSessionInfo(
-                    userId, sessionId, podId, LocalDateTime.now());
+                    userId, sessionId, podId, ZonedDateTime.now());
             userSessionCache.put(sessionId, sessionInfo);
             
             log.debug("User connection registered: {} on pod {}", userId, podId);
@@ -84,7 +83,7 @@ public class CaffeineCacheService {
                         connectionInfo.getSessionId(),
                         connectionInfo.getPodId(),
                         connectionInfo.getConnectedAt(),
-                        LocalDateTime.now());
+                        ZonedDateTime.now());
                 
                 userConnectionsCache.put(userId, updatedInfo);
             }
@@ -333,7 +332,7 @@ public class CaffeineCacheService {
             onlineUsers.entrySet().removeIf(entry -> {
                 CaffeineConfig.UserConnectionInfo connection = userConnectionsCache.getIfPresent(entry.getKey());
                 if (connection == null || 
-                    connection.getLastActivity().isBefore(LocalDateTime.now().minusMinutes(5))) {
+                    connection.getLastActivity().isBefore(ZonedDateTime.now().minusMinutes(5))) {
                     return true;
                 }
                 return false;

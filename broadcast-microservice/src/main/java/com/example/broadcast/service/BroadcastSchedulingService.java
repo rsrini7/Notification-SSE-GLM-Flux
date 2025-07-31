@@ -8,7 +8,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 @Service
@@ -23,7 +24,7 @@ public class BroadcastSchedulingService {
     @Transactional
     public void processScheduledBroadcasts() {
         log.info("Checking for scheduled broadcasts to process...");
-        List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findScheduledBroadcastsToProcess(LocalDateTime.now(java.time.ZoneOffset.UTC));
+        List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findScheduledBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC));
 
         if (broadcastsToProcess.isEmpty()) {
             log.info("No scheduled broadcasts to process at this time.");

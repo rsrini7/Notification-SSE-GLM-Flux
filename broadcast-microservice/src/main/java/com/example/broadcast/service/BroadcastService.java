@@ -20,7 +20,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -64,11 +66,11 @@ public class BroadcastService {
                 .category(request.getCategory())
                 .scheduledAt(request.getScheduledAt())
                 .expiresAt(request.getExpiresAt())
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
+                .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
 
-        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
+        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
             broadcast.setStatus("SCHEDULED");
             broadcast = broadcastRepository.save(broadcast);
             log.info("Broadcast with ID: {} is scheduled for: {}", broadcast.getId(), broadcast.getScheduledAt());
@@ -86,7 +88,7 @@ public class BroadcastService {
                 .orElseThrow(() -> new RuntimeException("Broadcast not found: " + broadcastId));
         
         broadcast.setStatus("ACTIVE");
-        broadcast.setUpdatedAt(LocalDateTime.now());
+        broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
         broadcastRepository.updateStatus(broadcast.getId(), "ACTIVE");
 
         triggerBroadcast(broadcast);
@@ -101,7 +103,7 @@ public class BroadcastService {
                 .totalDelivered(0)
                 .totalRead(0)
                 .totalFailed(0)
-                .calculatedAt(LocalDateTime.now())
+                .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC).toInstant().atZone(ZoneOffset.UTC))
                 .build();
         broadcastStatisticsRepository.save(initialStats);
         List<UserBroadcastMessage> userBroadcasts = createUserBroadcastMessages(broadcast.getId(), targetUsers);
@@ -154,8 +156,8 @@ public class BroadcastService {
                         .userId(userId)
                         .deliveryStatus("PENDING")
                         .readStatus("UNREAD")
-                        .createdAt(LocalDateTime.now())
-                        .updatedAt(LocalDateTime.now())
+                        .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
+                        .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                         .build();
                 
                 userBroadcasts.add(userBroadcast);
@@ -215,7 +217,7 @@ public class BroadcastService {
                         .userId(userId)
                         .eventType(eventType)
                         .podId(getCurrentPodId())
-                        .timestamp(LocalDateTime.now())
+                        .timestamp(ZonedDateTime.now(ZoneOffset.UTC).toInstant().atZone(ZoneOffset.UTC))
                         .message("Broadcast " + eventType.toLowerCase())
                         .build();
                 
@@ -377,7 +379,7 @@ public class BroadcastService {
         }
         
         // Update read status and timestamp
-        userBroadcastRepository.markAsRead(messageId, LocalDateTime.now());
+        userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC).toInstant().atZone(ZoneOffset.UTC));
         
         log.info("Message marked as read: user={}, message={}", userId, messageId);
     }

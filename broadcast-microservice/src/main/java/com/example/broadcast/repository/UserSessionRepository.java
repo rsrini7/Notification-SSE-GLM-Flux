@@ -8,9 +8,10 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.time.ZoneOffset;
 
 /**
  * Repository for user session operations using Spring JDBC
@@ -35,10 +36,10 @@ public class UserSessionRepository {
                     .sessionId(rs.getString("session_id"))
                     .podId(rs.getString("pod_id"))
                     .connectionStatus(rs.getString("connection_status"))
-                    .connectedAt(rs.getTimestamp("connected_at").toLocalDateTime())
+                    .connectedAt(rs.getTimestamp("connected_at").toInstant().atZone(ZoneOffset.UTC))
                     .disconnectedAt(rs.getTimestamp("disconnected_at") != null ? 
-                            rs.getTimestamp("disconnected_at").toLocalDateTime() : null)
-                    .lastHeartbeat(rs.getTimestamp("last_heartbeat").toLocalDateTime())
+                            rs.getTimestamp("disconnected_at").toInstant().atZone(ZoneOffset.UTC) : null)
+                    .lastHeartbeat(rs.getTimestamp("last_heartbeat").toInstant().atZone(ZoneOffset.UTC))
                     .build();
         }
     };
@@ -195,8 +196,8 @@ public class UserSessionRepository {
             ps.setString(2, session.getSessionId());
             ps.setString(3, session.getPodId());
             ps.setString(4, session.getConnectionStatus());
-            ps.setTimestamp(5, java.sql.Timestamp.valueOf(session.getConnectedAt()));
-            ps.setTimestamp(6, java.sql.Timestamp.valueOf(session.getLastHeartbeat()));
+            ps.setTimestamp(5, java.sql.Timestamp.from(session.getConnectedAt().toInstant()));
+            ps.setTimestamp(6, java.sql.Timestamp.from(session.getLastHeartbeat().toInstant()));
         });
     }
 }

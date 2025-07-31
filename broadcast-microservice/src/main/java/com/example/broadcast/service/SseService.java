@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -84,7 +84,7 @@ public class SseService {
         // Send initial connection event
         sendEvent(userId, Map.of(
                 "type", "CONNECTED",
-                "timestamp", LocalDateTime.now(),
+                "timestamp", ZonedDateTime.now(),
                 "message", "SSE connection established"
         ));
         
@@ -114,7 +114,7 @@ public class SseService {
                 sendEventToSink(sink, Map.of(
                         "type", "MESSAGE",
                         "data", response,
-                        "timestamp", LocalDateTime.now()
+                        "timestamp", ZonedDateTime.now()
                 ));
                 
                 // Mark as delivered
@@ -127,7 +127,7 @@ public class SseService {
                 sendEventToSink(sink, Map.of(
                         "type", "MESSAGE",
                         "data", response,
-                        "timestamp", LocalDateTime.now()
+                        "timestamp", ZonedDateTime.now()
                 ));
             }
             
@@ -200,7 +200,7 @@ public class SseService {
                     sendEvent(userId, Map.of(
                             "type", "MESSAGE",
                             "data", response,
-                            "timestamp", LocalDateTime.now()
+                            "timestamp", ZonedDateTime.now()
                     ));
                     
                     // Mark as delivered
@@ -247,7 +247,7 @@ public class SseService {
             try {
                 Map<String, Object> heartbeat = Map.of(
                         "type", "HEARTBEAT",
-                        "timestamp", LocalDateTime.now(),
+                        "timestamp", ZonedDateTime.now(),
                         "message", "Connection alive"
                 );
                 

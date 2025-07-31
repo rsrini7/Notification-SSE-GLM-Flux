@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 
 /**
  * DTO for message delivery events
@@ -21,7 +21,7 @@ public class MessageDeliveryEvent {
     private String userId;
     private String eventType; // CREATED, DELIVERED, READ, FAILED
     private String podId;
-    private LocalDateTime timestamp;
+    private ZonedDateTime timestamp;
     private String message;
     private String errorDetails;
 }

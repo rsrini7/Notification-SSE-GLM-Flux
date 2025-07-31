@@ -37,7 +37,7 @@ public class BroadcastRequest {
     
     private String category;
     
-    private java.time.LocalDateTime scheduledAt;
+    private java.time.ZonedDateTime scheduledAt;
 
-    private java.time.LocalDateTime expiresAt;
+    private java.time.ZonedDateTime expiresAt;
 }

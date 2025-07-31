@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import org.springframework.web.server.ServerWebExchange;
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.UUID;
 import com.example.broadcast.service.BroadcastService;
 import org.springframework.http.HttpStatus;
@@ -58,8 +58,8 @@ public class SseController {
                 .sessionId(sessionId)
                 .podId(podId)
                 .connectionStatus("ACTIVE")
-                .connectedAt(LocalDateTime.now())
-                .lastHeartbeat(LocalDateTime.now())
+                .connectedAt(ZonedDateTime.now())
+                .lastHeartbeat(ZonedDateTime.now())
                 .build();
         
         userSessionRepository.save(session);
@@ -138,7 +138,7 @@ public class SseController {
         
         // Get pod information
         stats.put("podId", podId);
-        stats.put("timestamp", LocalDateTime.now());
+        stats.put("timestamp", ZonedDateTime.now());
         
         log.info("SSE stats: total={}, pod={}, sse={}", 
                 totalActiveUsers, podActiveUsers, sseConnectedUsers);

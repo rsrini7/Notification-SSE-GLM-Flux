@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 
 /**
  * Entity representing user-specific broadcast message tracking
@@ -21,8 +21,8 @@ public class UserBroadcastMessage {
     private String userId;
     private String deliveryStatus; // PENDING, DELIVERED, FAILED
     private String readStatus; // UNREAD, READ, ARCHIVED
-    private LocalDateTime deliveredAt;
-    private LocalDateTime readAt;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private ZonedDateTime deliveredAt;
+    private ZonedDateTime readAt;
+    private ZonedDateTime createdAt;
+    private ZonedDateTime updatedAt;
 }

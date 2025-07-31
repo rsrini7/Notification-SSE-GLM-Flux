@@ -5,7 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+
 import java.util.List;
 
 /**
@@ -25,7 +26,7 @@ public class BroadcastEvent {
     private List<String> targetIds;
     private String priority;
     private String category;
-    private LocalDateTime createdAt;
+    private ZonedDateTime createdAt;
     private String podId;
     private Integer retryCount;
 }

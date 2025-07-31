@@ -8,9 +8,9 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.time.ZoneOffset;
 
 /**
  * Repository for user preferences operations using Spring JDBC
@@ -40,8 +40,8 @@ public class UserPreferencesRepository {
                     .quietHoursEnd(rs.getTime("quiet_hours_end") != null ? 
                             rs.getTime("quiet_hours_end").toLocalTime() : null)
                     .timezone(rs.getString("timezone"))
-                    .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
-                    .updatedAt(rs.getTimestamp("updated_at").toLocalDateTime())
+                    .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
+                    .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
                     .build();
         }
     };

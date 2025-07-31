@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 
 /**
  * DTO for user message responses
@@ -24,7 +24,7 @@ public class UserMessageResponse {
     private String category;
     private String deliveryStatus;
     private String readStatus;
-    private LocalDateTime deliveredAt;
-    private LocalDateTime readAt;
-    private LocalDateTime createdAt;
+    private ZonedDateTime deliveredAt;
+    private ZonedDateTime readAt;
+    private ZonedDateTime createdAt;
 }
