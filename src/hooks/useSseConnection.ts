@@ -127,11 +127,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         }
       };
 
-      // Handle named 'HEARTBEAT' events to prevent them from being processed by onmessage
-      eventSourceRef.current.addEventListener('HEARTBEAT', () => {
-        // Do nothing, this is just a keep-alive message
-      });
-
       eventSourceRef.current.onerror = (error) => {
         console.error('SSE connection error:', error);
         

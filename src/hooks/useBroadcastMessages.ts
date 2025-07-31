@@ -57,6 +57,10 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         // Connection established, fetch any pending messages
         fetchMessages();
         break;
+
+      case 'HEARTBEAT':
+        // Ignore heartbeat events
+        break;
       
       default:
         console.log('Unhandled SSE event type:', event.type);
