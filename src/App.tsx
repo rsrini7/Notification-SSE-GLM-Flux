@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Badge } from './components/ui/badge';
 import { Toaster } from './components/ui/toaster';
 import BroadcastAdminPanel from './components/broadcast/BroadcastAdminPanel';
 import BroadcastUserPanel from './components/broadcast/BroadcastUserPanel';
+import { Separator } from './components/ui/separator';
 import { 
   MessageSquare, 
   Users, 
@@ -121,46 +122,52 @@ export default function App() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div className="space-y-4">
-                    <h3 className="font-semibold text-lg">Frontend</h3>
+                <div className="flex flex-col md:flex-row items-stretch justify-center gap-6">
+                  {/* Frontend Column */}
+                  <div className="flex-1 space-y-4">
+                    <h3 className="font-semibold text-lg text-left">Frontend</h3>
                     <ul className="space-y-2 text-sm">
                       <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <div className="w-2 h-2 bg-blue-500 rounded-full shrink-0"></div>
                         React 19 with TypeScript
                       </li>
                       <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <div className="w-2 h-2 bg-blue-500 rounded-full shrink-0"></div>
                         Real-time SSE connections
                       </li>
                       <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <div className="w-2 h-2 bg-blue-500 rounded-full shrink-0"></div>
                         Responsive UI components
                       </li>
                       <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <div className="w-2 h-2 bg-blue-500 rounded-full shrink-0"></div>
                         shadcn/ui component library
                       </li>
                     </ul>
                   </div>
                   
-                  <div className="space-y-4">
-                    <h3 className="font-semibold text-lg">Backend</h3>
+                  {/* Separator */}
+                  <Separator orientation="vertical" className="h-auto hidden md:block" />
+                  <Separator orientation="horizontal" className="w-full md:hidden" />
+
+                  {/* Backend Column */}
+                  <div className="flex-1 space-y-4">
+                    <h3 className="font-semibold text-lg text-left">Backend</h3>
                     <ul className="space-y-2 text-sm">
                       <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <div className="w-2 h-2 bg-green-500 rounded-full shrink-0"></div>
                         Spring Boot WebFlux (Reactive)
                       </li>
                       <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <div className="w-2 h-2 bg-green-500 rounded-full shrink-0"></div>
                         h2 Database with JDBC
                       </li>
                       <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <div className="w-2 h-2 bg-green-500 rounded-full shrink-0"></div>
                         Kafka event streaming
                       </li>
                       <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <div className="w-2 h-2 bg-green-500 rounded-full shrink-0"></div>
                         Caffeine high-performance cache
                       </li>
                     </ul>
