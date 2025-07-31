@@ -88,7 +88,6 @@ public class SseService {
                     "data", Map.of("broadcastId", event.getBroadcastId()),
                     "timestamp", event.getTimestamp()
             ));
-        // **NEW:** Send a message expiration event to the client
         } else if ("EXPIRED".equals(event.getEventType())) {
             sendEvent(event.getUserId(), Map.of(
                     "type", "MESSAGE_EXPIRED",
@@ -101,9 +100,9 @@ public class SseService {
     private void sendPendingMessages(String userId, Sinks.Many<String> sink) {
         try {
             List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
-            List<UserBroadcastMessage> unreadMessages = userBroadcastRepository.findUnreadMessages(userId);
+            // **FIX:** Changed call from findUnreadMessages to findUnreadByUserId
+            List<UserBroadcastMessage> unreadMessages = userBroadcastRepository.findUnreadByUserId(userId);
             
-            // Send pending messages first
             for (UserBroadcastMessage message : pendingMessages) {
                 UserBroadcastResponse response = buildUserBroadcastResponse(message);
                 sendEventToSink(sink, Map.of(
@@ -111,11 +110,9 @@ public class SseService {
                         "data", response,
                         "timestamp", ZonedDateTime.now()
                 ));
-                // Mark as delivered
                 userBroadcastRepository.updateDeliveryStatus(message.getId(), "DELIVERED");
             }
             
-            // Send unread messages
             for (UserBroadcastMessage message : unreadMessages) {
                 UserBroadcastResponse response = buildUserBroadcastResponse(message);
                 sendEventToSink(sink, Map.of(
@@ -167,7 +164,6 @@ public class SseService {
                             "timestamp", ZonedDateTime.now()
                     ));
                     
-                    // Mark as delivered
                     userBroadcastRepository.updateDeliveryStatus(message.getId(), "DELIVERED");
                     log.debug("Message delivered to user: {}, broadcast: {}", userId, broadcastId);
                     break;

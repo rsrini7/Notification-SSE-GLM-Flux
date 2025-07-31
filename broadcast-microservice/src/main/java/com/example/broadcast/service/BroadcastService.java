@@ -254,4 +254,14 @@ public class BroadcastService {
                 .expiresAt(broadcast.getExpiresAt())
                 .build();
     }
+
+    /**
+     * **NEW:** Retrieves the delivery details for a specific broadcast.
+     * @param broadcastId The ID of the broadcast.
+     * @return A list of user-specific message details.
+     */
+    public List<UserBroadcastMessage> getBroadcastDeliveries(Long broadcastId) {
+        log.info("Retrieving delivery details for broadcast ID: {}", broadcastId);
+        return userBroadcastRepository.findByBroadcastId(broadcastId);
+    }
 }
