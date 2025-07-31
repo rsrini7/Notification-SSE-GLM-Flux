@@ -3,13 +3,13 @@ package com.example.broadcast.service;
 import com.example.broadcast.dto.BroadcastRequest;
 import com.example.broadcast.dto.BroadcastResponse;
 import com.example.broadcast.dto.MessageDeliveryEvent;
-import com.example.broadcast.model.BroadcastMessage;
-import com.example.broadcast.model.UserBroadcastMessage;
-import com.example.broadcast.model.BroadcastStatistics;
 import com.example.broadcast.dto.UserBroadcastResponse;
+import com.example.broadcast.model.BroadcastMessage;
+import com.example.broadcast.model.BroadcastStatistics;
+import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.repository.BroadcastRepository;
-import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.BroadcastStatisticsRepository;
+import com.example.broadcast.repository.UserBroadcastRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,8 +17,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -33,7 +33,7 @@ public class BroadcastService {
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final BroadcastTargetingService broadcastTargetingService;
-    
+
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
     private String kafkaTopic;
 
@@ -114,6 +114,14 @@ public class BroadcastService {
     public List<BroadcastResponse> getActiveBroadcasts() {
         return broadcastRepository.findActiveBroadcastsWithStats();
     }
+    
+    public List<BroadcastResponse> getScheduledBroadcasts() {
+        return broadcastRepository.findScheduledBroadcastsWithStats();
+    }
+
+    public List<BroadcastResponse> getAllBroadcasts() {
+        return broadcastRepository.findAllBroadcastsWithStats();
+    }
 
     @Transactional
     public void cancelBroadcast(Long id) {
@@ -132,9 +140,6 @@ public class BroadcastService {
         log.info("Broadcast cancelled: {}", id);
     }
 
-    /**
-     * **NEW:** Marks a broadcast as EXPIRED and notifies users.
-     */
     @Transactional
     public void expireBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
@@ -220,6 +225,7 @@ public class BroadcastService {
                 .category(broadcast.getCategory())
                 .expiresAt(broadcast.getExpiresAt())
                 .createdAt(broadcast.getCreatedAt())
+                .scheduledAt(broadcast.getScheduledAt())
                 .status(broadcast.getStatus())
                 .totalTargeted(totalTargeted)
                 .totalDelivered(0)

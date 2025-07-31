@@ -2,6 +2,7 @@ package com.example.broadcast.service;
 
 import com.example.broadcast.dto.MessageDeliveryEvent;
 import com.example.broadcast.model.UserBroadcastMessage;
+import com.example.broadcast.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class KafkaConsumerService {
     private final SseService sseService;
     private final UserBroadcastRepository userBroadcastRepository;
     private final CaffeineCacheService caffeineCacheService;
+    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     
     @Getter
     private final ExecutorService executorService = Executors.newFixedThreadPool(10);
@@ -82,21 +84,6 @@ public class KafkaConsumerService {
         }
     }
 
-    /**
-     * **NEW:** Handles the broadcast expired event.
-     */
-    private void handleBroadcastExpired(MessageDeliveryEvent event) {
-        log.info("Handling broadcast expired event for user: {}, broadcast: {}",
-                event.getUserId(), event.getBroadcastId());
-        try {
-            // Notify user via SSE to remove the message from their UI
-            sseService.handleMessageEvent(event);
-        } catch (Exception e) {
-            log.error("Error handling broadcast expired event: {}", e.getMessage());
-            throw new RuntimeException("Failed to handle broadcast expired event", e);
-        }
-    }
-
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}", 
                 event.getUserId(), event.getBroadcastId());
@@ -108,6 +95,8 @@ public class KafkaConsumerService {
             if (isOnline) {
                 sseService.handleMessageEvent(event);
                 updateDeliveryStatus(event.getBroadcastId(), event.getUserId(), "DELIVERED");
+                // A "created" event for an online user is an immediate delivery.
+                broadcastStatisticsRepository.incrementDeliveredCount(event.getBroadcastId());
                 log.info("Broadcast delivered to online user: {}", event.getUserId());
             } else {
                 log.info("User {} is offline, message remains pending", event.getUserId());
@@ -122,17 +111,11 @@ public class KafkaConsumerService {
     private void handleMessageDelivered(MessageDeliveryEvent event) {
         log.debug("Handling message delivered event for user: {}, broadcast: {}", 
                 event.getUserId(), event.getBroadcastId());
-        
         try {
-            // Update delivery status in database
             updateDeliveryStatus(event.getBroadcastId(), event.getUserId(), "DELIVERED");
-            
-            // Remove from pending cache
+            broadcastStatisticsRepository.incrementDeliveredCount(event.getBroadcastId());
             caffeineCacheService.removePendingEvent(event.getUserId(), event.getBroadcastId());
-            
-            // Send delivery confirmation via SSE if user is connected
             sseService.handleMessageEvent(event);
-            
         } catch (Exception e) {
             log.error("Error handling message delivered event: {}", e.getMessage());
             throw new RuntimeException("Failed to handle message delivered event", e);
@@ -142,17 +125,11 @@ public class KafkaConsumerService {
     private void handleMessageRead(MessageDeliveryEvent event) {
         log.info("Handling message read event for user: {}, broadcast: {}", 
                 event.getUserId(), event.getBroadcastId());
-        
         try {
-            // Update read status in database
             updateReadStatus(event.getBroadcastId(), event.getUserId(), "READ");
-            
-            // Send read confirmation via SSE
+            broadcastStatisticsRepository.incrementReadCount(event.getBroadcastId());
             sseService.handleMessageEvent(event);
-            
-            // Update cache
             caffeineCacheService.updateMessageReadStatus(event.getUserId(), event.getBroadcastId());
-            
         } catch (Exception e) {
             log.error("Error handling message read event: {}", e.getMessage());
             throw new RuntimeException("Failed to handle message read event", e);
@@ -162,18 +139,11 @@ public class KafkaConsumerService {
     private void handleDeliveryFailed(MessageDeliveryEvent event) {
         log.warn("Handling delivery failed event for user: {}, broadcast: {}, error: {}", 
                 event.getUserId(), event.getBroadcastId(), event.getErrorDetails());
-        
         try {
-            // Update delivery status in database
             updateDeliveryStatus(event.getBroadcastId(), event.getUserId(), "FAILED");
-            
-            // Remove from pending cache
             caffeineCacheService.removePendingEvent(event.getUserId(), event.getBroadcastId());
-            
-            // Log the failure for monitoring
             log.error("Message delivery failed - User: {}, Broadcast: {}, Error: {}", 
                     event.getUserId(), event.getBroadcastId(), event.getErrorDetails());
-            
         } catch (Exception e) {
             log.error("Error handling delivery failed event: {}", e.getMessage());
             throw new RuntimeException("Failed to handle delivery failed event", e);
@@ -183,28 +153,31 @@ public class KafkaConsumerService {
     private void handleBroadcastCancelled(MessageDeliveryEvent event) {
         log.info("Handling broadcast cancelled event for user: {}, broadcast: {}", 
                 event.getUserId(), event.getBroadcastId());
-        
         try {
-            // Find and cancel pending messages for this user
             List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findByUserIdAndStatus(
                     event.getUserId(), "PENDING", "UNREAD");
             
             for (UserBroadcastMessage message : pendingMessages) {
                 if (message.getBroadcastId().equals(event.getBroadcastId())) {
-                    // Mark as failed (cancelled)
                     userBroadcastRepository.updateDeliveryStatus(message.getId(), "FAILED");
-                    
-                    // Remove from cache
                     caffeineCacheService.removePendingEvent(event.getUserId(), event.getBroadcastId());
-                    
-                    // Notify user via SSE
                     sseService.handleMessageEvent(event);
                 }
             }
-            
         } catch (Exception e) {
             log.error("Error handling broadcast cancelled event: {}", e.getMessage());
             throw new RuntimeException("Failed to handle broadcast cancelled event", e);
+        }
+    }
+
+    private void handleBroadcastExpired(MessageDeliveryEvent event) {
+        log.info("Handling broadcast expired event for user: {}, broadcast: {}",
+                event.getUserId(), event.getBroadcastId());
+        try {
+            sseService.handleMessageEvent(event);
+        } catch (Exception e) {
+            log.error("Error handling broadcast expired event: {}", e.getMessage());
+            throw new RuntimeException("Failed to handle broadcast expired event", e);
         }
     }
 
@@ -219,9 +192,8 @@ public class KafkaConsumerService {
                     break;
                 }
             }
-            
         } catch (Exception e) {
-            log.error("Error updating delivery status: {}", e.getMessage());
+            log.error("Error updating delivery status for user {} broadcast {}: {}", userId, broadcastId, e.getMessage());
             throw new RuntimeException("Failed to update delivery status", e);
         }
     }
@@ -237,32 +209,9 @@ public class KafkaConsumerService {
                     break;
                 }
             }
-            
         } catch (Exception e) {
-            log.error("Error updating read status: {}", e.getMessage());
+            log.error("Error updating read status for user {} broadcast {}: {}", userId, broadcastId, e.getMessage());
             throw new RuntimeException("Failed to update read status", e);
-        }
-    }
-
-    public void processPendingEvents(String userId) {
-        log.info("Processing pending events for user: {}", userId);
-        
-        try {
-            // Get pending events from cache
-            List<MessageDeliveryEvent> pendingEvents = caffeineCacheService.getPendingEvents(userId);
-            
-            // Process each pending event
-            for (MessageDeliveryEvent event : pendingEvents) {
-                handleEvent(event);
-            }
-            
-            // Clear pending events from cache
-            caffeineCacheService.clearPendingEvents(userId);
-            
-            log.info("Processed {} pending events for user: {}", pendingEvents.size(), userId);
-            
-        } catch (Exception e) {
-            log.error("Error processing pending events for user {}: {}", userId, e.getMessage());
         }
     }
 }

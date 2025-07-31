@@ -8,10 +8,6 @@ import lombok.NoArgsConstructor;
 import java.time.ZonedDateTime;
 import java.util.List;
 
-/**
- * DTO for broadcast message responses
- * Used to return broadcast information to clients
- */
 @Data
 @Builder
 @NoArgsConstructor
@@ -27,6 +23,8 @@ public class BroadcastResponse {
     private String category;
     private ZonedDateTime expiresAt;
     private ZonedDateTime createdAt;
+    // **FIX:** Added the scheduledAt field to be sent to the frontend.
+    private ZonedDateTime scheduledAt;
     private String status;
     private Integer totalTargeted;
     private Integer totalDelivered;

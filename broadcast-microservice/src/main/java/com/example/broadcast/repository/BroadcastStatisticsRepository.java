@@ -60,9 +60,23 @@ public class BroadcastStatisticsRepository {
         return results.stream().findFirst();
     }
 
-    public Optional<BroadcastStatistics> findById(Long id) {
-        String sql = "SELECT * FROM broadcast_statistics WHERE id = ?";
-        List<BroadcastStatistics> results = jdbcTemplate.query(sql, rowMapper, id);
-        return results.stream().findFirst();
+    /**
+     * **NEW:** Atomically increments the total_delivered count for a broadcast.
+     * @param broadcastId The ID of the broadcast to update.
+     * @return The number of rows affected.
+     */
+    public int incrementDeliveredCount(Long broadcastId) {
+        String sql = "UPDATE broadcast_statistics SET total_delivered = total_delivered + 1, calculated_at = CURRENT_TIMESTAMP WHERE broadcast_id = ?";
+        return jdbcTemplate.update(sql, broadcastId);
+    }
+
+    /**
+     * **NEW:** Atomically increments the total_read count for a broadcast.
+     * @param broadcastId The ID of the broadcast to update.
+     * @return The number of rows affected.
+     */
+    public int incrementReadCount(Long broadcastId) {
+        String sql = "UPDATE broadcast_statistics SET total_read = total_read + 1, calculated_at = CURRENT_TIMESTAMP WHERE broadcast_id = ?";
+        return jdbcTemplate.update(sql, broadcastId);
     }
 }

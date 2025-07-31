@@ -11,10 +11,6 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.validation.Valid;
 import java.util.List;
 
-/**
- * REST Controller for broadcast message operations
- * Provides endpoints for administrators to create and manage broadcasts
- */
 @RestController
 @RequestMapping("/api/broadcasts")
 @RequiredArgsConstructor
@@ -23,10 +19,6 @@ public class BroadcastController {
 
     private final BroadcastService broadcastService;
 
-    /**
-     * Create a new broadcast message
-     * POST /api/broadcasts
-     */
     @PostMapping
     public ResponseEntity<BroadcastResponse> createBroadcast(
             @Valid @RequestBody BroadcastRequest request) {
@@ -38,10 +30,6 @@ public class BroadcastController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Get broadcast by ID
-     * GET /api/broadcasts/{id}
-     */
     @GetMapping("/{id}")
     public ResponseEntity<BroadcastResponse> getBroadcast(@PathVariable Long id) {
         log.info("Retrieving broadcast with ID: {}", id);
@@ -51,23 +39,28 @@ public class BroadcastController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Get all active broadcasts
-     * GET /api/broadcasts
-     */
     @GetMapping
-    public ResponseEntity<List<BroadcastResponse>> getActiveBroadcasts() {
-        log.info("Retrieving all active broadcasts");
+    public ResponseEntity<List<BroadcastResponse>> getBroadcasts(
+            @RequestParam(defaultValue = "all") String filter) {
+        log.info("Retrieving broadcasts with filter: {}", filter);
         
-        List<BroadcastResponse> broadcasts = broadcastService.getActiveBroadcasts();
+        List<BroadcastResponse> broadcasts;
+        switch (filter.toLowerCase()) {
+            case "active":
+                broadcasts = broadcastService.getActiveBroadcasts();
+                break;
+            case "scheduled":
+                broadcasts = broadcastService.getScheduledBroadcasts();
+                break;
+            case "all":
+            default:
+                broadcasts = broadcastService.getAllBroadcasts();
+                break;
+        }
         
         return ResponseEntity.ok(broadcasts);
     }
 
-    /**
-     * Cancel a broadcast
-     * DELETE /api/broadcasts/{id}
-     */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> cancelBroadcast(@PathVariable Long id) {
         log.info("Cancelling broadcast with ID: {}", id);
@@ -77,10 +70,6 @@ public class BroadcastController {
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * Get broadcast statistics
-     * GET /api/broadcasts/{id}/stats
-     */
     @GetMapping("/{id}/stats")
     public ResponseEntity<java.util.Map<String, Object>> getBroadcastStats(@PathVariable Long id) {
         log.info("Retrieving statistics for broadcast ID: {}", id);

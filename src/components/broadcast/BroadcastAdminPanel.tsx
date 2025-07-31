@@ -24,10 +24,9 @@ const BroadcastAdminPanel: React.FC = () => {
   const [stats, setStats] = useState<BroadcastStats | null>(null);
   const [deliveryDetails, setDeliveryDetails] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('create');
-  const [manageFilter, setManageFilter] = useState('all'); // 'all', 'active', 'scheduled'
+  const [manageFilter, setManageFilter] = useState('all');
   const { toast } = useToast();
 
-  // Form state
   const [formData, setFormData] = useState({
     senderId: 'admin-001',
     senderName: 'System Administrator',
@@ -41,8 +40,8 @@ const BroadcastAdminPanel: React.FC = () => {
     expiresAt: ''
   });
 
-  // Fetch broadcasts
   const fetchBroadcasts = useCallback(async (filter = 'all') => {
+    setLoading(true);
     try {
       const data = await broadcastService.getBroadcasts(filter);
       setBroadcasts(data);
@@ -52,10 +51,11 @@ const BroadcastAdminPanel: React.FC = () => {
         description: 'Failed to fetch broadcasts',
         variant: 'destructive',
       });
+    } finally {
+      setLoading(false);
     }
   }, [toast]);
 
-  // Fetch broadcast stats
   const fetchBroadcastStats = useCallback(async (broadcastId: string) => {
     try {
       const data = await broadcastService.getBroadcastStats(broadcastId);
@@ -69,7 +69,6 @@ const BroadcastAdminPanel: React.FC = () => {
     }
   }, [toast]);
 
-  // Fetch delivery details
   const fetchDeliveryDetails = useCallback(async (broadcastId: string) => {
     try {
       const data = await broadcastService.getBroadcastDeliveries(broadcastId);
@@ -80,27 +79,23 @@ const BroadcastAdminPanel: React.FC = () => {
     }
   }, []);
 
-  // Create broadcast
   const createBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // **FIX:** Changed `startTime` to `scheduledAt` and `endTime` to `expiresAt`
       const payload: BroadcastRequest = {
         ...formData,
         targetIds: formData.targetType === 'ALL' ? [] : formData.targetIds.split(',').map(id => id.trim()),
         scheduledAt: formData.isImmediate ? undefined : new Date(formData.scheduledAt).toISOString(),
-        expiresAt: formData.expiresAt ? new Date(formData.expiresAt).toISOString() : undefined
+        expiresAt: formData.expiresAt ? new Date(formData.expiresAt).toISOString() : undefined,
+        isImmediate: formData.isImmediate, // Pass isImmediate flag
       };
 
-      const newBroadcast = await broadcastService.createBroadcast(payload);
-      setBroadcasts(prev => [newBroadcast, ...prev]);
-
-      // Refresh the broadcast list to ensure we have the latest data
+      await broadcastService.createBroadcast(payload);
+      
       await fetchBroadcasts(manageFilter);
-
-      // Reset form
+      
       setFormData({
         senderId: 'admin-001',
         senderName: 'System Administrator',
@@ -118,6 +113,7 @@ const BroadcastAdminPanel: React.FC = () => {
         title: 'Success',
         description: 'Broadcast created successfully',
       });
+      setActiveTab('manage'); // Switch to manage tab after creation
     } catch {
       toast({
         title: 'Error',
@@ -129,17 +125,10 @@ const BroadcastAdminPanel: React.FC = () => {
     }
   };
 
-  // Cancel broadcast
   const cancelBroadcast = async (broadcastId: string) => {
     try {
       await broadcastService.cancelBroadcast(broadcastId);
-      setBroadcasts(prev => prev.map(b =>
-        b.id === broadcastId ? { ...b, status: 'CANCELLED' } : b
-      ));
-
-      // Refresh the broadcast list to ensure we have the latest data
       await fetchBroadcasts(manageFilter);
-
       toast({
         title: 'Success',
         description: 'Broadcast cancelled successfully',
@@ -182,18 +171,6 @@ const BroadcastAdminPanel: React.FC = () => {
       case 'SCHEDULED': return 'bg-purple-200 text-purple-900';
       default: return 'bg-gray-200 text-gray-900';
     }
-  };
-
-  const getBroadcastStatus = (broadcast: BroadcastMessage) => {
-    const now = new Date();
-    // **FIX:** Changed `startTime` to `scheduledAt`
-    const startTime = new Date(broadcast.scheduledAt);
-    const endTime = broadcast.expiresAt ? new Date(broadcast.expiresAt) : null;
-
-    if (broadcast.status === 'CANCELLED') return 'CANCELLED';
-    if (endTime && now > endTime) return 'EXPIRED';
-    if (now >= startTime) return 'ACTIVE';
-    return 'SCHEDULED';
   };
 
   return (
@@ -330,7 +307,6 @@ const BroadcastAdminPanel: React.FC = () => {
                 {!formData.isImmediate && (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      {/* **FIX:** Changed label and input id/value to `scheduledAt` */}
                       <Label htmlFor="scheduledAt">Start Date & Time</Label>
                       <Input
                         id="scheduledAt"
@@ -341,7 +317,6 @@ const BroadcastAdminPanel: React.FC = () => {
                       />
                     </div>
                     <div>
-                      {/* **FIX:** Changed label and input id/value to `expiresAt` */}
                       <Label htmlFor="expiresAt">End Date & Time (optional)</Label>
                       <Input
                         id="expiresAt"
@@ -370,7 +345,7 @@ const BroadcastAdminPanel: React.FC = () => {
               </CardDescription>
               <Tabs value={manageFilter} onValueChange={setManageFilter} className="w-full">
                 <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="all">All ({broadcasts.length})</TabsTrigger>
+                  <TabsTrigger value="all">All</TabsTrigger>
                   <TabsTrigger value="active">Active</TabsTrigger>
                   <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
                 </TabsList>
@@ -387,8 +362,8 @@ const BroadcastAdminPanel: React.FC = () => {
                             {broadcast.priority}
                           </Badge>
                           <Badge variant="outline">{broadcast.category}</Badge>
-                          <Badge className={getStatusColor(getBroadcastStatus(broadcast))}>
-                            {getBroadcastStatus(broadcast)}
+                          <Badge className={getStatusColor(broadcast.status)}>
+                            {broadcast.status}
                           </Badge>
                         </div>
                         <p className="text-sm text-gray-800">{broadcast.content}</p>
@@ -396,7 +371,7 @@ const BroadcastAdminPanel: React.FC = () => {
                           From {broadcast.senderName} • {new Date(broadcast.createdAt).toLocaleString()}
                         </p>
                       </div>
-                      {getBroadcastStatus(broadcast) === 'ACTIVE' && (
+                      {broadcast.status !== 'CANCELLED' && broadcast.status !== 'EXPIRED' && (
                         <Button
                           variant="outline"
                           size="sm"

@@ -23,7 +23,6 @@ public class BroadcastRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
-    // RowMappers and constructor remain the same...
     public BroadcastRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -55,6 +54,8 @@ public class BroadcastRepository {
             .targetIds(parseJsonArray(rs.getString("target_ids")))
             .priority(rs.getString("priority"))
             .category(rs.getString("category"))
+            .scheduledAt(rs.getTimestamp("scheduled_at") != null ?
+                    rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .expiresAt(rs.getTimestamp("expires_at") != null ?
                     rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
@@ -63,8 +64,7 @@ public class BroadcastRepository {
             .totalDelivered(rs.getInt("total_delivered"))
             .totalRead(rs.getInt("total_read"))
             .build();
-    
-    // save, findById, findBroadcastWithStatsById, findActiveBroadcastsWithStats remain the same...
+
     public BroadcastMessage save(BroadcastMessage broadcast) {
         String sql = """
             INSERT INTO broadcast_messages 
@@ -140,32 +140,48 @@ public class BroadcastRepository {
                 broadcast_statistics s ON b.id = s.broadcast_id
             WHERE
                 b.status = 'ACTIVE'
-                AND (b.scheduled_at IS NULL OR b.scheduled_at <= CURRENT_TIMESTAMP)
-                AND (b.expires_at IS NULL OR b.expires_at > CURRENT_TIMESTAMP)
             ORDER BY
                 b.created_at DESC
             """;
         return jdbcTemplate.query(sql, broadcastResponseRowMapper);
     }
 
-    /**
-     * **MODIFIED:** This method is no longer used by the scheduler.
-     * Kept for other potential uses.
-     */
-    public List<BroadcastMessage> findScheduledBroadcastsToProcess(ZonedDateTime now) {
-        String sql = "SELECT * FROM broadcast_messages WHERE status = 'SCHEDULED' AND scheduled_at <= ?";
-        return jdbcTemplate.query(sql, broadcastRowMapper, now);
+    public List<BroadcastResponse> findAllBroadcastsWithStats() {
+        String sql = """
+            SELECT
+                b.*,
+                COALESCE(s.total_targeted, 0) as total_targeted,
+                COALESCE(s.total_delivered, 0) as total_delivered,
+                COALESCE(s.total_read, 0) as total_read
+            FROM
+                broadcast_messages b
+            LEFT JOIN
+                broadcast_statistics s ON b.id = s.broadcast_id
+            ORDER BY
+                b.created_at DESC
+            """;
+        return jdbcTemplate.query(sql, broadcastResponseRowMapper);
     }
-    
-    /**
-     * **NEW:** Finds and locks scheduled broadcasts that are ready for processing.
-     * The `FOR UPDATE SKIP LOCKED` clause ensures that only one pod can select a given row.
-     * If a row is already locked by another pod's transaction, it is skipped.
-     *
-     * @param now The current time to check against the scheduled time.
-     * @param limit The maximum number of broadcasts to fetch and lock in one go.
-     * @return A list of exclusively locked broadcast messages ready for processing.
-     */
+
+    public List<BroadcastResponse> findScheduledBroadcastsWithStats() {
+        String sql = """
+            SELECT
+                b.*,
+                COALESCE(s.total_targeted, 0) as total_targeted,
+                COALESCE(s.total_delivered, 0) as total_delivered,
+                COALESCE(s.total_read, 0) as total_read
+            FROM
+                broadcast_messages b
+            LEFT JOIN
+                broadcast_statistics s ON b.id = s.broadcast_id
+            WHERE
+                b.status = 'SCHEDULED'
+            ORDER BY
+                b.scheduled_at ASC
+            """;
+        return jdbcTemplate.query(sql, broadcastResponseRowMapper);
+    }
+
     @Transactional
     public List<BroadcastMessage> findAndLockScheduledBroadcastsToProcess(ZonedDateTime now, int limit) {
         String sql = """
