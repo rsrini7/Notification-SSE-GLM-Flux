@@ -10,6 +10,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
@@ -17,20 +18,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Repository for broadcast message operations using Spring JDBC
- * Optimized for high-scale operations with proper indexing and batch operations
- */
 @Repository
 public class BroadcastRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
+    // RowMappers and constructor remain the same...
     public BroadcastRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    // Original RowMapper for the BroadcastMessage model
     private final RowMapper<BroadcastMessage> broadcastRowMapper = (rs, rowNum) -> BroadcastMessage.builder()
             .id(rs.getLong("id"))
             .senderId(rs.getString("sender_id"))
@@ -49,7 +46,6 @@ public class BroadcastRepository {
             .status(rs.getString("status"))
             .build();
 
-    // New RowMapper to map the JOIN result directly to BroadcastResponse DTO
     private final RowMapper<BroadcastResponse> broadcastResponseRowMapper = (rs, rowNum) -> BroadcastResponse.builder()
             .id(rs.getLong("id"))
             .senderId(rs.getString("sender_id"))
@@ -67,10 +63,8 @@ public class BroadcastRepository {
             .totalDelivered(rs.getInt("total_delivered"))
             .totalRead(rs.getInt("total_read"))
             .build();
-
-    /**
-     * Create a new broadcast message
-     */
+    
+    // save, findById, findBroadcastWithStatsById, findActiveBroadcastsWithStats remain the same...
     public BroadcastMessage save(BroadcastMessage broadcast) {
         String sql = """
             INSERT INTO broadcast_messages 
@@ -111,17 +105,11 @@ public class BroadcastRepository {
         return broadcast;
     }
 
-    /**
-     * Find broadcast by ID (original method)
-     */
     public Optional<BroadcastMessage> findById(Long id) {
         String sql = "SELECT * FROM broadcast_messages WHERE id = ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, id).stream().findFirst();
     }
 
-    /**
-     * Find a single broadcast with its statistics using a JOIN.
-     */
     public Optional<BroadcastResponse> findBroadcastWithStatsById(Long id) {
         String sql = """
             SELECT
@@ -139,9 +127,6 @@ public class BroadcastRepository {
         return jdbcTemplate.query(sql, broadcastResponseRowMapper, id).stream().findFirst();
     }
 
-    /**
-     * Find all active broadcasts with their statistics in a single query to prevent N+1 problem.
-     */
     public List<BroadcastResponse> findActiveBroadcastsWithStats() {
         String sql = """
             SELECT
@@ -164,7 +149,8 @@ public class BroadcastRepository {
     }
 
     /**
-     * Find scheduled broadcasts that are ready to be processed
+     * **MODIFIED:** This method is no longer used by the scheduler.
+     * Kept for other potential uses.
      */
     public List<BroadcastMessage> findScheduledBroadcastsToProcess(ZonedDateTime now) {
         String sql = "SELECT * FROM broadcast_messages WHERE status = 'SCHEDULED' AND scheduled_at <= ?";
@@ -172,24 +158,36 @@ public class BroadcastRepository {
     }
     
     /**
-     * **NEW:** Find active broadcasts that have passed their expiration time.
+     * **NEW:** Finds and locks scheduled broadcasts that are ready for processing.
+     * The `FOR UPDATE SKIP LOCKED` clause ensures that only one pod can select a given row.
+     * If a row is already locked by another pod's transaction, it is skipped.
+     *
+     * @param now The current time to check against the scheduled time.
+     * @param limit The maximum number of broadcasts to fetch and lock in one go.
+     * @return A list of exclusively locked broadcast messages ready for processing.
      */
+    @Transactional
+    public List<BroadcastMessage> findAndLockScheduledBroadcastsToProcess(ZonedDateTime now, int limit) {
+        String sql = """
+            SELECT * FROM broadcast_messages 
+            WHERE status = 'SCHEDULED' AND scheduled_at <= ? 
+            ORDER BY scheduled_at 
+            LIMIT ? 
+            FOR UPDATE SKIP LOCKED
+            """;
+        return jdbcTemplate.query(sql, broadcastRowMapper, now, limit);
+    }
+
     public List<BroadcastMessage> findExpiredBroadcasts(ZonedDateTime now) {
         String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at <= ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, now);
     }
 
-    /**
-     * Update broadcast status
-     */
     public int updateStatus(Long broadcastId, String status) {
         String sql = "UPDATE broadcast_messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
         return jdbcTemplate.update(sql, status, broadcastId);
     }
 
-    /**
-     * Helper method to parse JSON array from database
-     */
     private List<String> parseJsonArray(String json) {
         if (json == null || json.trim().isEmpty()) {
             return List.of();
@@ -202,9 +200,6 @@ public class BroadcastRepository {
         }
     }
 
-    /**
-     * Helper method to convert list to JSON array string
-     */
     private String toJsonArray(List<String> list) {
         if (list == null || list.isEmpty()) {
             return null;
