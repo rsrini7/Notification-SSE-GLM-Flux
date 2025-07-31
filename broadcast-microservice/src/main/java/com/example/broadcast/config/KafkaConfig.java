@@ -90,15 +90,15 @@ public class KafkaConfig {
         configProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         configProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         
-        // **RE-ADDED**: Performance tuning properties
+        // Performance tuning properties
         configProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 500);
         configProps.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, 1000);
         
-        // **RE-ADDED**: Session and heartbeat settings
+        // Session and heartbeat settings
         configProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 30000);
         configProps.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10000);
         
-        // **RE-ADDED**: Security and reliability
+        // Security and reliability
         configProps.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
         
         // JSON deserializer configuration
