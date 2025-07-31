@@ -1,9 +1,7 @@
 package com.example.broadcast.repository;
 
 import com.example.broadcast.model.BroadcastMessage;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 
@@ -14,7 +12,6 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.ZonedDateTime;
 import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -29,7 +26,6 @@ public class BroadcastRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
-    @Autowired
     public BroadcastRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }

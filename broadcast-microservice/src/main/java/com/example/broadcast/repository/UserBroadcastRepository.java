@@ -1,9 +1,7 @@
 package com.example.broadcast.repository;
 
 import com.example.broadcast.model.UserBroadcastMessage;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 
@@ -28,7 +26,6 @@ public class UserBroadcastRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
-    @Autowired
     public UserBroadcastRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }

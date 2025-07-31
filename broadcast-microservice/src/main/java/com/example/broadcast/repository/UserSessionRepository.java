@@ -1,14 +1,12 @@
 package com.example.broadcast.repository;
 
 import com.example.broadcast.model.UserSession;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.time.ZoneOffset;
@@ -22,7 +20,6 @@ public class UserSessionRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
-    @Autowired
     public UserSessionRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -69,7 +66,6 @@ public class UserSessionRepository {
                 INSERT (user_id, session_id, pod_id, connection_status, connected_at, last_heartbeat)
                 VALUES (s.user_id, s.session_id, s.pod_id, s.connection_status, s.connected_at, s.last_heartbeat)
             """;
-
         jdbcTemplate.update(sql,
                 session.getUserId(),
                 session.getSessionId(),
@@ -77,7 +73,6 @@ public class UserSessionRepository {
                 session.getConnectionStatus(),
                 session.getConnectedAt(),
                 session.getLastHeartbeat());
-
         return session;
     }
 
@@ -180,6 +175,16 @@ public class UserSessionRepository {
             """;
         return jdbcTemplate.query(sql, sessionRowMapper);
     }
+    
+    /**
+     * New method to find all active user IDs.
+     * This is used by the SseService cleanup task to prevent memory leaks.
+     */
+    public List<String> findAllActiveUserIds() {
+        String sql = "SELECT user_id FROM user_sessions WHERE connection_status = 'ACTIVE'";
+        return jdbcTemplate.queryForList(sql, String.class);
+    }
+
 
     /**
      * Batch insert sessions for high-performance operations

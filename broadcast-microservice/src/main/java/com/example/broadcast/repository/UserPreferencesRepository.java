@@ -1,7 +1,6 @@
 package com.example.broadcast.repository;
 
 import com.example.broadcast.model.UserPreferences;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -20,7 +19,6 @@ public class UserPreferencesRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
-    @Autowired
     public UserPreferencesRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
