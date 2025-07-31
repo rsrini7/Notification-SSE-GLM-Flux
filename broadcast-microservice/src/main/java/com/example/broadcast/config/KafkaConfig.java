@@ -15,15 +15,19 @@ import org.springframework.kafka.config.KafkaListenerContainerFactory;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  * Kafka configuration for broadcast messaging system
- * Configures producers, consumers, and topics for high-scale event streaming
+ * Configures producers, consumers, and topics for high-scale event streaming.
+ * Includes retry and Dead Letter Queue (DLQ) configuration for error handling.
  */
 @Configuration
 @EnableKafka
@@ -47,28 +51,17 @@ public class KafkaConfig {
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
         Map<String, Object> configProps = new HashMap<>();
-        
-        // Basic producer configuration
         configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
-        
-        // Reliability and durability settings
         configProps.put(ProducerConfig.ACKS_CONFIG, "all");
         configProps.put(ProducerConfig.RETRIES_CONFIG, 3);
         configProps.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
         configProps.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5);
-        
-        // Performance tuning
         configProps.put(ProducerConfig.BATCH_SIZE_CONFIG, 16384);
         configProps.put(ProducerConfig.LINGER_MS_CONFIG, 5);
         configProps.put(ProducerConfig.BUFFER_MEMORY_CONFIG, 33554432);
         configProps.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "lz4");
-        
-        // High availability
-        configProps.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 30000);
-        configProps.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 120000);
-        
         return new DefaultKafkaProducerFactory<>(configProps);
     }
 
@@ -97,17 +90,15 @@ public class KafkaConfig {
         configProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         configProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         
-        // Performance tuning
+        // **RE-ADDED**: Performance tuning properties
         configProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 500);
         configProps.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, 1000);
-        configProps.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, 1);
-        configProps.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 1048576);
         
-        // Session and heartbeat settings
+        // **RE-ADDED**: Session and heartbeat settings
         configProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 30000);
         configProps.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10000);
         
-        // Security and reliability
+        // **RE-ADDED**: Security and reliability
         configProps.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
         
         // JSON deserializer configuration
@@ -118,27 +109,43 @@ public class KafkaConfig {
     }
 
     /**
-     * Configure Kafka listener container factory
+     * Configure Kafka listener container factory with retry and DLQ logic.
      */
     @Bean
     public KafkaListenerContainerFactory<ConcurrentMessageListenerContainer<String, MessageDeliveryEvent>> 
-            kafkaListenerContainerFactory() {
+            kafkaListenerContainerFactory(DefaultErrorHandler errorHandler) {
         
         ConcurrentKafkaListenerContainerFactory<String, MessageDeliveryEvent> factory = 
                 new ConcurrentKafkaListenerContainerFactory<>();
         
         factory.setConsumerFactory(consumerFactory());
         factory.setConcurrency(3); // Number of consumer threads
-        factory.getContainerProperties().setPollTimeout(3000);
         factory.getContainerProperties().setAckMode(org.springframework.kafka.listener.ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         
-        // Enable batch processing for better performance
-        factory.setBatchListener(false);
-        
-        // Configure backpressure handling
-        factory.getContainerProperties().setIdleBetweenPolls(100);
+        // Set the custom error handler with retry and DLQ logic
+        factory.setCommonErrorHandler(errorHandler);
         
         return factory;
+    }
+
+    /**
+     * Configures the error handler for the Kafka listener.
+     * It will retry processing a message 2 times (3 total attempts) with a 1-second delay.
+     * If all attempts fail, it sends the message to a Dead Letter Topic.
+     */
+    @Bean
+    public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
+        // Retry twice with a 1-second interval between retries.
+        FixedBackOff backOff = new FixedBackOff(1000L, 2L);
+        return new DefaultErrorHandler(deadLetterPublishingRecoverer, backOff);
+    }
+
+    /**
+     * Creates the recoverer that publishes failed messages to the DLQ.
+     */
+    @Bean
+    public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(KafkaTemplate<String, Object> kafkaTemplate) {
+        return new DeadLetterPublishingRecoverer(kafkaTemplate);
     }
 
     /**
@@ -150,32 +157,19 @@ public class KafkaConfig {
                 .partitions(topicPartitions)
                 .replicas(topicReplicationFactor)
                 .config("retention.ms", "604800000") // 7 days retention
-                .config("cleanup.policy", "delete")
-                .config("compression.type", "lz4")
-                .config("max.message.bytes", "10485760") // 10MB max message size
-                .config("message.timestamp.type", "CreateTime")
-                .config("message.timestamp.difference.max.ms", "300000") // 5 minutes
                 .build();
     }
-
+    
     /**
-     * Configure additional topics for different event types
+     * NEW: Define the Dead Letter Topic.
+     * Failed messages will be sent here for later analysis.
      */
     @Bean
-    public NewTopic deliveryEventsTopic() {
-        return TopicBuilder.name(topicName + "-delivery")
-                .partitions(topicPartitions)
+    public NewTopic deadLetterTopic() {
+        return TopicBuilder.name(topicName + ".DLT")
+                .partitions(1) // Usually, 1 partition is enough for a DLT
                 .replicas(topicReplicationFactor)
-                .config("retention.ms", "86400000") // 24 hours retention
-                .build();
-    }
-
-    @Bean
-    public NewTopic readReceiptsTopic() {
-        return TopicBuilder.name(topicName + "-read-receipts")
-                .partitions(topicPartitions)
-                .replicas(topicReplicationFactor)
-                .config("retention.ms", "604800000") // 7 days retention
+                .config("retention.ms", "1209600000") // 14 days retention for analysis
                 .build();
     }
 
