@@ -1,5 +1,6 @@
 package com.example.broadcast.repository;
 
+import com.example.broadcast.dto.BroadcastResponse;
 import com.example.broadcast.model.BroadcastMessage;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -10,11 +11,10 @@ import java.sql.Statement;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -30,28 +30,43 @@ public class BroadcastRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    private final RowMapper<BroadcastMessage> broadcastRowMapper = new RowMapper<>() {
-        @Override
-        public BroadcastMessage mapRow(ResultSet rs, int rowNum) throws SQLException {
-            return BroadcastMessage.builder()
-                    .id(rs.getLong("id"))
-                    .senderId(rs.getString("sender_id"))
-                    .senderName(rs.getString("sender_name"))
-                    .content(rs.getString("content"))
-                    .targetType(rs.getString("target_type"))
-                    .targetIds(parseJsonArray(rs.getString("target_ids")))
-                    .priority(rs.getString("priority"))
-                    .category(rs.getString("category"))
-                    .scheduledAt(rs.getTimestamp("scheduled_at") != null ?
-                            rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
-                    .expiresAt(rs.getTimestamp("expires_at") != null ?
-                            rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
-                    .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
-                    .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
-                    .status(rs.getString("status"))
-                    .build();
-        }
-    };
+    // Original RowMapper for the BroadcastMessage model
+    private final RowMapper<BroadcastMessage> broadcastRowMapper = (rs, rowNum) -> BroadcastMessage.builder()
+            .id(rs.getLong("id"))
+            .senderId(rs.getString("sender_id"))
+            .senderName(rs.getString("sender_name"))
+            .content(rs.getString("content"))
+            .targetType(rs.getString("target_type"))
+            .targetIds(parseJsonArray(rs.getString("target_ids")))
+            .priority(rs.getString("priority"))
+            .category(rs.getString("category"))
+            .scheduledAt(rs.getTimestamp("scheduled_at") != null ?
+                    rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
+            .expiresAt(rs.getTimestamp("expires_at") != null ?
+                    rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
+            .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
+            .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
+            .status(rs.getString("status"))
+            .build();
+
+    // New RowMapper to map the JOIN result directly to BroadcastResponse DTO
+    private final RowMapper<BroadcastResponse> broadcastResponseRowMapper = (rs, rowNum) -> BroadcastResponse.builder()
+            .id(rs.getLong("id"))
+            .senderId(rs.getString("sender_id"))
+            .senderName(rs.getString("sender_name"))
+            .content(rs.getString("content"))
+            .targetType(rs.getString("target_type"))
+            .targetIds(parseJsonArray(rs.getString("target_ids")))
+            .priority(rs.getString("priority"))
+            .category(rs.getString("category"))
+            .expiresAt(rs.getTimestamp("expires_at") != null ?
+                    rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
+            .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
+            .status(rs.getString("status"))
+            .totalTargeted(rs.getInt("total_targeted"))
+            .totalDelivered(rs.getInt("total_delivered"))
+            .totalRead(rs.getInt("total_read"))
+            .build();
 
     /**
      * Create a new broadcast message
@@ -63,39 +78,45 @@ public class BroadcastRepository {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
-        final Object[] params = new Object[]{
-                broadcast.getSenderId(),
-                broadcast.getSenderName(),
-                broadcast.getContent(),
-                broadcast.getTargetType(),
-                toJsonArray(broadcast.getTargetIds()),
-                broadcast.getPriority(),
-                broadcast.getCategory(),
-                broadcast.getScheduledAt(),
-                broadcast.getExpiresAt(),
-                broadcast.getStatus() != null ? broadcast.getStatus() : "ACTIVE"
-        };
-
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-            for (int i = 0; i < params.length; i++) {
-                ps.setObject(i + 1, params[i]);
-            }
+            ps.setString(1, broadcast.getSenderId());
+            ps.setString(2, broadcast.getSenderName());
+            ps.setString(3, broadcast.getContent());
+            ps.setString(4, broadcast.getTargetType());
+            ps.setString(5, toJsonArray(broadcast.getTargetIds()));
+            ps.setString(6, broadcast.getPriority());
+            ps.setString(7, broadcast.getCategory());
+            ps.setObject(8, broadcast.getScheduledAt());
+            ps.setObject(9, broadcast.getExpiresAt());
+            ps.setString(10, broadcast.getStatus() != null ? broadcast.getStatus() : "ACTIVE");
             return ps;
         }, keyHolder);
 
-        // Get the generated ID from the key map
-        if (!keyHolder.getKeyList().isEmpty()) {
-            broadcast.setId(((Number) keyHolder.getKeyList().get(0).get("ID")).longValue());
+        // **FIXED**: Handle multiple returned keys from H2 in PostgreSQL mode
+        if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
+            // H2 in PostgreSQL mode returns multiple generated columns (ID, CREATED_AT, etc.).
+            // We must explicitly retrieve the 'ID' column from the map of keys.
+            Map<String, Object> keys = keyHolder.getKeyList().get(0);
+            Number id = (Number) keys.get("ID");
+            if (id != null) {
+                broadcast.setId(id.longValue());
+            } else {
+                throw new RuntimeException("Generated key 'ID' not found in the returned keys.");
+            }
+        } else if (keyHolder.getKey() != null) {
+            // Fallback for drivers that might return a single key.
+            broadcast.setId(keyHolder.getKey().longValue());
         } else {
             throw new RuntimeException("Failed to retrieve generated key for broadcast.");
         }
+        
         return broadcast;
     }
 
     /**
-     * Find broadcast by ID
+     * Find broadcast by ID (original method)
      */
     public Optional<BroadcastMessage> findById(Long id) {
         String sql = "SELECT * FROM broadcast_messages WHERE id = ?";
@@ -103,40 +124,54 @@ public class BroadcastRepository {
     }
 
     /**
-     * Find all active broadcasts
+     * NEW: Find a single broadcast with its statistics using a JOIN.
      */
-    public List<BroadcastMessage> findActiveBroadcasts() {
+    public Optional<BroadcastResponse> findBroadcastWithStatsById(Long id) {
         String sql = """
-            SELECT * FROM broadcast_messages 
-            WHERE status = 'ACTIVE'
-            AND (scheduled_at IS NULL OR scheduled_at <= CURRENT_TIMESTAMP)
-            AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
-            ORDER BY created_at DESC
+            SELECT
+                b.*,
+                s.total_targeted,
+                s.total_delivered,
+                s.total_read
+            FROM
+                broadcast_messages b
+            LEFT JOIN
+                broadcast_statistics s ON b.id = s.broadcast_id
+            WHERE
+                b.id = ?
             """;
-        return jdbcTemplate.query(sql, broadcastRowMapper);
+        return jdbcTemplate.query(sql, broadcastResponseRowMapper, id).stream().findFirst();
     }
 
     /**
-     * Find broadcasts by sender
+     * NEW: Find all active broadcasts with their statistics in a single query to prevent N+1 problem.
      */
-    public List<BroadcastMessage> findBySender(String senderId) {
+    public List<BroadcastResponse> findActiveBroadcastsWithStats() {
         String sql = """
-            SELECT * FROM broadcast_messages 
-            WHERE sender_id = ? 
-            ORDER BY created_at DESC
+            SELECT
+                b.*,
+                COALESCE(s.total_targeted, 0) as total_targeted,
+                COALESCE(s.total_delivered, 0) as total_delivered,
+                COALESCE(s.total_read, 0) as total_read
+            FROM
+                broadcast_messages b
+            LEFT JOIN
+                broadcast_statistics s ON b.id = s.broadcast_id
+            WHERE
+                b.status = 'ACTIVE'
+                AND (b.scheduled_at IS NULL OR b.scheduled_at <= CURRENT_TIMESTAMP)
+                AND (b.expires_at IS NULL OR b.expires_at > CURRENT_TIMESTAMP)
+            ORDER BY
+                b.created_at DESC
             """;
-        return jdbcTemplate.query(sql, broadcastRowMapper, senderId);
+        return jdbcTemplate.query(sql, broadcastResponseRowMapper);
     }
 
     /**
      * Find scheduled broadcasts that are ready to be processed
      */
     public List<BroadcastMessage> findScheduledBroadcastsToProcess(ZonedDateTime now) {
-        String sql = """
-            SELECT * FROM broadcast_messages
-            WHERE status = 'SCHEDULED'
-            AND scheduled_at <= ?
-            """;
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'SCHEDULED' AND scheduled_at <= ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, now);
     }
 
@@ -149,51 +184,6 @@ public class BroadcastRepository {
     }
 
     /**
-     * Find broadcasts that need to be expired
-     */
-    public List<BroadcastMessage> findExpiredBroadcasts() {
-        String sql = """
-            SELECT * FROM broadcast_messages 
-            WHERE status = 'ACTIVE' 
-            AND expires_at IS NOT NULL 
-            AND expires_at <= CURRENT_TIMESTAMP
-            """;
-        return jdbcTemplate.query(sql, broadcastRowMapper);
-    }
-
-    /**
-     * Batch insert broadcasts for high-performance operations
-     */
-    public void batchInsert(List<BroadcastMessage> broadcasts) {
-        String sql = """
-            INSERT INTO broadcast_messages 
-            (sender_id, sender_name, content, target_type, target_ids, priority, category, expires_at, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """;
-        
-        jdbcTemplate.batchUpdate(sql, broadcasts, broadcasts.size(), (ps, broadcast) -> {
-            ps.setString(1, broadcast.getSenderId());
-            ps.setString(2, broadcast.getSenderName());
-            ps.setString(3, broadcast.getContent());
-            ps.setString(4, broadcast.getTargetType());
-            ps.setString(5, toJsonArray(broadcast.getTargetIds()));
-            ps.setString(6, broadcast.getPriority());
-            ps.setString(7, broadcast.getCategory());
-            ps.setTimestamp(8, broadcast.getExpiresAt() != null ?
-                    java.sql.Timestamp.from(broadcast.getExpiresAt().toInstant()) : null);
-            ps.setString(9, broadcast.getStatus() != null ? broadcast.getStatus() : "ACTIVE");
-        });
-    }
-
-    /**
-     * Count broadcasts by status
-     */
-    public long countByStatus(String status) {
-        String sql = "SELECT COUNT(*) FROM broadcast_messages WHERE status = ?";
-        return jdbcTemplate.queryForObject(sql, Long.class, status);
-    }
-
-    /**
      * Helper method to parse JSON array from database
      */
     private List<String> parseJsonArray(String json) {
@@ -201,7 +191,7 @@ public class BroadcastRepository {
             return List.of();
         }
         try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, 
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json,
                     new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
         } catch (Exception e) {
             return List.of();

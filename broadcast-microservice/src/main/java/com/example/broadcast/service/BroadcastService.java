@@ -22,11 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -43,14 +40,12 @@ public class BroadcastService {
     private final UserPreferencesRepository userPreferencesRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final ObjectMapper objectMapper;
     
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
     private String kafkaTopic;
 
     /**
      * Create a new broadcast message
-     * This is the main entry point for administrators to send broadcasts
      */
     @Transactional
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
@@ -103,216 +98,35 @@ public class BroadcastService {
                 .totalDelivered(0)
                 .totalRead(0)
                 .totalFailed(0)
-                .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC).toInstant().atZone(ZoneOffset.UTC))
+                .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
         broadcastStatisticsRepository.save(initialStats);
-        List<UserBroadcastMessage> userBroadcasts = createUserBroadcastMessages(broadcast.getId(), targetUsers);
 
+        List<UserBroadcastMessage> userBroadcasts = createUserBroadcastMessages(broadcast.getId(), targetUsers);
         if (!userBroadcasts.isEmpty()) {
             userBroadcastRepository.batchInsert(userBroadcasts);
         }
 
         sendBroadcastEvent(broadcast, targetUsers, "CREATED");
-
         log.info("Broadcast triggered successfully with ID: {}, targeting {} users", broadcast.getId(), targetUsers.size());
-
         return buildBroadcastResponse(broadcast, targetUsers.size());
     }
 
     /**
-     * Determine target users based on broadcast request
-     */
-    private List<String> determineTargetUsers(BroadcastMessage broadcast) {
-        // In a real implementation, this would query user service or database
-        // For now, we'll return sample user IDs based on target type
-        
-        if ("ALL".equals(broadcast.getTargetType())) {
-            // Return all active users (in production, this would query user service)
-            return List.of("user-001", "user-002", "user-003", "user-004", "user-005");
-        } else if ("SELECTED".equals(broadcast.getTargetType()) && broadcast.getTargetIds() != null) {
-            // Return specifically selected users
-            return broadcast.getTargetIds();
-        } else if ("ROLE".equals(broadcast.getTargetType()) && broadcast.getTargetIds() != null) {
-            // Return users with specified roles (in production, this would query user service)
-            return List.of("user-001", "user-002", "user-003");
-        }
-        
-        return List.of();
-    }
-
-    /**
-     * Create user broadcast messages for target users
-     */
-    private List<UserBroadcastMessage> createUserBroadcastMessages(Long broadcastId, List<String> targetUsers) {
-        List<UserBroadcastMessage> userBroadcasts = new ArrayList<>();
-        
-        for (String userId : targetUsers) {
-            // Check user preferences before creating message
-            UserPreferences preferences = userPreferencesRepository.findByUserId(userId).orElse(null);
-            
-            if (shouldDeliverToUser(preferences)) {
-                UserBroadcastMessage userBroadcast = UserBroadcastMessage.builder()
-                        .broadcastId(broadcastId)
-                        .userId(userId)
-                        .deliveryStatus("PENDING")
-                        .readStatus("UNREAD")
-                        .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
-                        .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                        .build();
-                
-                userBroadcasts.add(userBroadcast);
-            }
-        }
-        
-        return userBroadcasts;
-    }
-
-    /**
-     * Check if message should be delivered to user based on preferences
-     */
-    private boolean shouldDeliverToUser(UserPreferences preferences) {
-        if (preferences == null) {
-            return true; // Default to deliver if no preferences set
-        }
-        
-        if (!preferences.getNotificationEnabled()) {
-            return false;
-        }
-        
-        // Check quiet hours (simplified - in production, would consider user timezone)
-        if (preferences.getQuietHoursStart() != null && preferences.getQuietHoursEnd() != null) {
-            java.time.LocalTime now = java.time.LocalTime.now();
-            java.time.LocalTime start = preferences.getQuietHoursStart();
-            java.time.LocalTime end = preferences.getQuietHoursEnd();
-            
-            if (isInQuietHours(now, start, end)) {
-                return false;
-            }
-        }
-        
-        return true;
-    }
-
-    /**
-     * Check if current time is within quiet hours
-     */
-    private boolean isInQuietHours(java.time.LocalTime now, java.time.LocalTime start, java.time.LocalTime end) {
-        if (start.isBefore(end)) {
-            return !now.isBefore(start) && !now.isAfter(end);
-        } else {
-            // Handle overnight quiet hours (e.g., 22:00 to 06:00)
-            return !now.isBefore(start) || !now.isAfter(end);
-        }
-    }
-
-    /**
-     * Send broadcast event to Kafka
-     */
-    private void sendBroadcastEvent(BroadcastMessage broadcast, List<String> targetUsers, String eventType) {
-        try {
-            for (String userId : targetUsers) {
-                MessageDeliveryEvent event = MessageDeliveryEvent.builder()
-                        .eventId(UUID.randomUUID().toString())
-                        .broadcastId(broadcast.getId())
-                        .userId(userId)
-                        .eventType(eventType)
-                        .podId(getCurrentPodId())
-                        .timestamp(ZonedDateTime.now(ZoneOffset.UTC).toInstant().atZone(ZoneOffset.UTC))
-                        .message("Broadcast " + eventType.toLowerCase())
-                        .build();
-                
-                // Send event to Kafka with user ID as key for partitioning
-                CompletableFuture<Void> future = kafkaTemplate.send(kafkaTopic, userId, event)
-                        .thenAccept(result -> {
-                            log.debug("Event sent successfully to Kafka: {}", event.getEventId());
-                        })
-                        .exceptionally(ex -> {
-                            log.error("Failed to send event to Kafka: {}", ex.getMessage());
-                            return null;
-                        });
-                
-                // For high-priority messages, wait for send completion
-                if ("URGENT".equals(broadcast.getPriority()) || "HIGH".equals(broadcast.getPriority())) {
-                    future.join();
-                }
-            }
-        } catch (Exception e) {
-            log.error("Error sending broadcast event to Kafka: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Get current pod ID (in Kubernetes, this would be the pod name)
-     */
-    private String getCurrentPodId() {
-        // In production, this would be retrieved from environment variables
-        return System.getenv().getOrDefault("POD_NAME", "pod-local");
-    }
-
-    /**
-     * Build broadcast response
-     */
-    private BroadcastResponse buildBroadcastResponse(BroadcastMessage broadcast, int totalTargeted) {
-        return BroadcastResponse.builder()
-                .id(broadcast.getId())
-                .senderId(broadcast.getSenderId())
-                .senderName(broadcast.getSenderName())
-                .content(broadcast.getContent())
-                .targetType(broadcast.getTargetType())
-                .targetIds(broadcast.getTargetIds())
-                .priority(broadcast.getPriority())
-                .category(broadcast.getCategory())
-                .expiresAt(broadcast.getExpiresAt())
-                .createdAt(broadcast.getCreatedAt())
-                .status(broadcast.getStatus())
-                .totalTargeted(totalTargeted)
-                .totalDelivered(0) // Will be updated as messages are delivered
-                .totalRead(0) // Will be updated as messages are read
-                .build();
-    }
-
-    /**
-     * Get broadcast by ID
+     * Get broadcast by ID.
+     * OPTIMIZED: Now uses a single query with a JOIN.
      */
     public BroadcastResponse getBroadcast(Long id) {
-        BroadcastMessage broadcast = broadcastRepository.findById(id)
+        return broadcastRepository.findBroadcastWithStatsById(id)
                 .orElseThrow(() -> new RuntimeException("Broadcast not found: " + id));
-        
-        // Get statistics from dedicated repository
-        BroadcastStatistics stats = broadcastStatisticsRepository.findByBroadcastId(id)
-                .orElseGet(() -> BroadcastStatistics.builder()
-                        .broadcastId(id)
-                        .totalTargeted(0)
-                        .totalDelivered(0)
-                        .totalRead(0)
-                        .build());
-        
-        return BroadcastResponse.builder()
-                .id(broadcast.getId())
-                .senderId(broadcast.getSenderId())
-                .senderName(broadcast.getSenderName())
-                .content(broadcast.getContent())
-                .targetType(broadcast.getTargetType())
-                .targetIds(broadcast.getTargetIds())
-                .priority(broadcast.getPriority())
-                .category(broadcast.getCategory())
-                .expiresAt(broadcast.getExpiresAt())
-                .createdAt(broadcast.getCreatedAt())
-                .status(broadcast.getStatus())
-                .totalTargeted(stats.getTotalTargeted())
-                .totalDelivered(stats.getTotalDelivered())
-                .totalRead(stats.getTotalRead())
-                .build();
     }
 
     /**
-     * Get all active broadcasts
+     * Get all active broadcasts.
+     * OPTIMIZED: Now uses a single query to fetch broadcasts and stats, preventing N+1 problem.
      */
     public List<BroadcastResponse> getActiveBroadcasts() {
-        List<BroadcastMessage> broadcasts = broadcastRepository.findActiveBroadcasts();
-        return broadcasts.stream()
-                .map(broadcast -> getBroadcast(broadcast.getId())) // broadcast.getId() is already Long
-                .collect(Collectors.toList());
+        return broadcastRepository.findActiveBroadcastsWithStats();
     }
 
     /**
@@ -325,7 +139,6 @@ public class BroadcastService {
         
         broadcastRepository.updateStatus(id, "CANCELLED");
         
-        // Send cancellation event
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
         List<String> targetUsers = userBroadcasts.stream()
                 .map(UserBroadcastMessage::getUserId)
@@ -333,18 +146,15 @@ public class BroadcastService {
                 .collect(Collectors.toList());
         
         sendBroadcastEvent(broadcast, targetUsers, "CANCELLED");
-        
         log.info("Broadcast cancelled: {}", id);
     }
 
-     /**
+    /**
      * Get user messages
      */
     public List<UserBroadcastResponse> getUserMessages(String userId) {
         log.info("Getting messages for user: {}", userId);
-        
         List<UserBroadcastMessage> userMessages = userBroadcastRepository.findByUserId(userId);
-        
         return userMessages.stream()
                 .map(this::buildUserBroadcastResponse)
                 .collect(Collectors.toList());
@@ -355,9 +165,7 @@ public class BroadcastService {
      */
     public List<UserBroadcastResponse> getUnreadMessages(String userId) {
         log.info("Getting unread messages for user: {}", userId);
-        
         List<UserBroadcastMessage> unreadMessages = userBroadcastRepository.findUnreadByUserId(userId);
-        
         return unreadMessages.stream()
                 .map(this::buildUserBroadcastResponse)
                 .collect(Collectors.toList());
@@ -373,20 +181,108 @@ public class BroadcastService {
         UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
                 .orElseThrow(() -> new RuntimeException("User message not found: " + messageId));
         
-        // Verify the message belongs to the user
         if (!userId.equals(userMessage.getUserId())) {
             throw new RuntimeException("Message does not belong to user: " + userId);
         }
         
-        // Update read status and timestamp
-        userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC).toInstant().atZone(ZoneOffset.UTC));
-        
+        userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
         log.info("Message marked as read: user={}, message={}", userId, messageId);
     }
 
-    /**
-     * Build user broadcast response
-     */
+    // --- Private Helper Methods ---
+
+    private List<String> determineTargetUsers(BroadcastMessage broadcast) {
+        if ("ALL".equals(broadcast.getTargetType())) {
+            return List.of("user-001", "user-002", "user-003", "user-004", "user-005");
+        } else if ("SELECTED".equals(broadcast.getTargetType()) && broadcast.getTargetIds() != null) {
+            return broadcast.getTargetIds();
+        } else if ("ROLE".equals(broadcast.getTargetType()) && broadcast.getTargetIds() != null) {
+            return List.of("user-001", "user-002", "user-003");
+        }
+        return List.of();
+    }
+
+    private List<UserBroadcastMessage> createUserBroadcastMessages(Long broadcastId, List<String> targetUsers) {
+        return targetUsers.stream()
+            .filter(userId -> {
+                UserPreferences preferences = userPreferencesRepository.findByUserId(userId).orElse(null);
+                return shouldDeliverToUser(preferences);
+            })
+            .map(userId -> UserBroadcastMessage.builder()
+                .broadcastId(broadcastId)
+                .userId(userId)
+                .deliveryStatus("PENDING")
+                .readStatus("UNREAD")
+                .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .build())
+            .collect(Collectors.toList());
+    }
+
+    private boolean shouldDeliverToUser(UserPreferences preferences) {
+        if (preferences == null || preferences.getNotificationEnabled() == null) {
+            return true;
+        }
+        if (!preferences.getNotificationEnabled()) {
+            return false;
+        }
+        if (preferences.getQuietHoursStart() != null && preferences.getQuietHoursEnd() != null) {
+            java.time.LocalTime now = java.time.LocalTime.now();
+            return !isInQuietHours(now, preferences.getQuietHoursStart(), preferences.getQuietHoursEnd());
+        }
+        return true;
+    }
+
+    private boolean isInQuietHours(java.time.LocalTime now, java.time.LocalTime start, java.time.LocalTime end) {
+        if (start.isBefore(end)) {
+            return !now.isBefore(start) && now.isBefore(end);
+        } else {
+            return !now.isBefore(start) || now.isBefore(end);
+        }
+    }
+
+    private void sendBroadcastEvent(BroadcastMessage broadcast, List<String> targetUsers, String eventType) {
+        targetUsers.forEach(userId -> {
+            MessageDeliveryEvent event = MessageDeliveryEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .broadcastId(broadcast.getId())
+                    .userId(userId)
+                    .eventType(eventType)
+                    .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                    .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                    .message("Broadcast " + eventType.toLowerCase())
+                    .build();
+            
+            kafkaTemplate.send(kafkaTopic, userId, event)
+                .whenComplete((result, ex) -> {
+                    if (ex == null) {
+                        log.debug("Event sent successfully to Kafka: {}", event.getEventId());
+                    } else {
+                        log.error("Failed to send event to Kafka: {}", ex.getMessage());
+                    }
+                });
+        });
+    }
+
+    private BroadcastResponse buildBroadcastResponse(BroadcastMessage broadcast, int totalTargeted) {
+        return BroadcastResponse.builder()
+                .id(broadcast.getId())
+                .senderId(broadcast.getSenderId())
+                .senderName(broadcast.getSenderName())
+                .content(broadcast.getContent())
+                .targetType(broadcast.getTargetType())
+                .targetIds(broadcast.getTargetIds())
+                .priority(broadcast.getPriority())
+                .category(broadcast.getCategory())
+                .expiresAt(broadcast.getExpiresAt())
+                .createdAt(broadcast.getCreatedAt())
+                .status(broadcast.getStatus())
+                .totalTargeted(totalTargeted)
+                .totalDelivered(0)
+                .totalRead(0)
+                .build();
+    }
+
     private UserBroadcastResponse buildUserBroadcastResponse(UserBroadcastMessage userMessage) {
         BroadcastMessage broadcast = broadcastRepository.findById(userMessage.getBroadcastId())
                 .orElseThrow(() -> new RuntimeException("Broadcast not found: " + userMessage.getBroadcastId()));
