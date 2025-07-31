@@ -85,6 +85,9 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
       case 'HEARTBEAT':
         break;
       
+      case 'MESSAGE_REMOVED':
+        break;
+      
       default:
         console.log('Unhandled SSE event type:', event.type);
     }
