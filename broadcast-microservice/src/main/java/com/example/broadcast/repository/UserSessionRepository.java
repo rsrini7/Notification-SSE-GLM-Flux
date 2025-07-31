@@ -48,17 +48,27 @@ public class UserSessionRepository {
      */
     public UserSession save(UserSession session) {
         String sql = """
-            INSERT INTO user_sessions 
-            (user_id, session_id, pod_id, connection_status, connected_at, last_heartbeat)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-            connection_status = VALUES(connection_status),
-            pod_id = VALUES(pod_id),
-            last_heartbeat = VALUES(last_heartbeat),
-            disconnected_at = CASE WHEN VALUES(connection_status) = 'INACTIVE' 
-                THEN CURRENT_TIMESTAMP ELSE NULL END
+            MERGE INTO user_sessions AS t
+            USING (
+                SELECT
+                    CAST(? AS VARCHAR(255)) AS user_id,
+                    CAST(? AS VARCHAR(255)) AS session_id,
+                    CAST(? AS VARCHAR(255)) AS pod_id,
+                    CAST(? AS VARCHAR(20)) AS connection_status,
+                    CAST(? AS TIMESTAMP WITH TIME ZONE) AS connected_at,
+                    CAST(? AS TIMESTAMP WITH TIME ZONE) AS last_heartbeat
+            ) AS s ON t.user_id = s.user_id AND t.session_id = s.session_id
+            WHEN MATCHED THEN
+                UPDATE SET
+                    connection_status = s.connection_status,
+                    pod_id = s.pod_id,
+                    last_heartbeat = s.last_heartbeat,
+                    disconnected_at = CASE WHEN s.connection_status = 'INACTIVE' THEN CURRENT_TIMESTAMP ELSE NULL END
+            WHEN NOT MATCHED THEN
+                INSERT (user_id, session_id, pod_id, connection_status, connected_at, last_heartbeat)
+                VALUES (s.user_id, s.session_id, s.pod_id, s.connection_status, s.connected_at, s.last_heartbeat)
             """;
-        
+
         jdbcTemplate.update(sql,
                 session.getUserId(),
                 session.getSessionId(),

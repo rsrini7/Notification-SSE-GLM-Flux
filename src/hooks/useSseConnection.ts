@@ -44,10 +44,47 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const sessionIdRef = useRef<string | null>(null);
 
+  // Refs for callbacks to prevent re-renders
+  const onConnectRef = useRef(onConnect);
+  const onDisconnectRef = useRef(onDisconnect);
+  const onErrorRef = useRef(onError);
+  const onMessageRef = useRef(onMessage);
+
+  useEffect(() => {
+    onConnectRef.current = onConnect;
+    onDisconnectRef.current = onDisconnect;
+    onErrorRef.current = onError;
+    onMessageRef.current = onMessage;
+  }, [onConnect, onDisconnect, onError, onMessage]);
+
   // Generate session ID
   const generateSessionId = useCallback(() => {
     return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }, []);
+
+  // Start heartbeat
+  const startHeartbeat = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+    }
+
+    heartbeatRef.current = setInterval(async () => {
+      if (sessionIdRef.current) {
+        try {
+          const response = await fetch(`${baseUrl}/api/sse/heartbeat?userId=${userId}&sessionId=${sessionIdRef.current}`, {
+            method: 'POST',
+          });
+
+          if (!response.ok) {
+            throw new Error('Heartbeat failed');
+          }
+        } catch (error) {
+          console.error('Heartbeat failed:', error);
+          // Connection might be lost, will be handled by SSE error handler
+        }
+      }
+    }, heartbeatInterval);
+  }, [userId, baseUrl, heartbeatInterval]);
 
   // Connect to SSE
   const connect = useCallback(() => {
@@ -74,17 +111,17 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
           error: null
         }));
 
-        onConnect?.();
+        onConnectRef.current?.();
         startHeartbeat();
       };
 
       eventSourceRef.current.onmessage = (event) => {
         try {
           const sseEvent = JSON.parse(event.data);
-          onMessage?.(sseEvent);
+          onMessageRef.current?.(sseEvent);
         } catch (error) {
           console.error('Error parsing SSE event:', error);
-          onError?.(error);
+          onErrorRef.current?.(error);
         }
       };
 
@@ -98,8 +135,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
           error: 'Connection lost'
         }));
 
-        onDisconnect?.();
-        onError?.(error);
+        onDisconnectRef.current?.();
+        onErrorRef.current?.(error);
 
         // Attempt to reconnect after 5 seconds
         if (reconnectTimeoutRef.current) {
@@ -121,7 +158,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         error: 'Failed to connect'
       }));
 
-      onError?.(error);
+      onErrorRef.current?.(error);
 
       // Simulate connection for development if backend is not available
       setTimeout(() => {
@@ -133,35 +170,13 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
           error: null
         }));
 
-        onConnect?.();
+        onConnectRef.current?.();
         startHeartbeat();
       }, 1000);
     }
-  }, [userId, baseUrl, generateSessionId, onConnect, onMessage, onDisconnect, onError]);
+  }, [userId, baseUrl, generateSessionId, startHeartbeat]);
 
-  // Start heartbeat
-  const startHeartbeat = useCallback(() => {
-    if (heartbeatRef.current) {
-      clearInterval(heartbeatRef.current);
-    }
-
-    heartbeatRef.current = setInterval(async () => {
-      if (sessionIdRef.current) {
-        try {
-          const response = await fetch(`${baseUrl}/api/sse/heartbeat?userId=${userId}&sessionId=${sessionIdRef.current}`, {
-            method: 'POST',
-          });
-
-          if (!response.ok) {
-            throw new Error('Heartbeat failed');
-          }
-        } catch (error) {
-          console.error('Heartbeat failed:', error);
-          // Connection might be lost, will be handled by SSE error handler
-        }
-      }
-    }, heartbeatInterval);
-  }, [userId, baseUrl, heartbeatInterval]);
+  
 
   // Disconnect from SSE
   const disconnect = useCallback(() => {
@@ -201,8 +216,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
 
     sessionIdRef.current = null;
-    onDisconnect?.();
-  }, [userId, baseUrl, onDisconnect]);
+    onDisconnectRef.current?.();
+  }, [userId, baseUrl]);
 
   // Send read receipt
   const markAsRead = useCallback(async (messageId: number) => {
@@ -213,10 +228,10 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         });
       } catch (error) {
         console.error('Failed to mark message as read:', error);
-        onError?.(error);
+        onErrorRef.current?.(error);
       }
     }
-  }, [userId, baseUrl, onError]);
+  }, [userId, baseUrl]);
 
   // Check connection status
   const checkConnection = useCallback(async () => {
