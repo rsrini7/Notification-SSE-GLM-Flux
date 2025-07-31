@@ -9,6 +9,7 @@ import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserSessionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,7 +48,9 @@ public class SseService {
     private final Map<String, Sinks.Many<String>> userSinks = new ConcurrentHashMap<>();
     // Reactor sink for handling message events
     private final Sinks.Many<MessageDeliveryEvent> messageSink = Sinks.many().multicast().onBackpressureBuffer();
+    
     // Scheduled executor for heartbeat and cleanup
+    @Getter // Getter for the ShutdownManager to access it
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
     public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository, ObjectMapper objectMapper, BroadcastRepository broadcastRepository) {

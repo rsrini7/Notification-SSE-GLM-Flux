@@ -3,6 +3,7 @@ package com.example.broadcast.service;
 import com.example.broadcast.dto.MessageDeliveryEvent;
 import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.repository.UserBroadcastRepository;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -12,7 +13,6 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
-import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -32,6 +32,7 @@ public class KafkaConsumerService {
     private final CaffeineCacheService caffeineCacheService;
     
     // Thread pool for async processing
+    @Getter // Getter for the ShutdownManager to access it
     private final ExecutorService executorService = Executors.newFixedThreadPool(10);
 
     /**
