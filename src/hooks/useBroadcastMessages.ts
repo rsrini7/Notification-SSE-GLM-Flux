@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useSseConnection } from './useSseConnection';
-
-import { type UserBroadcastMessage } from '../services/api';
+import { userService, type UserBroadcastMessage } from '../services/api';
 
 interface UseBroadcastMessagesOptions {
   userId: string;
@@ -99,55 +98,8 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
-      // In a real implementation, this would call the backend API
-      // For now, we'll use mock data
-      const mockMessages: UserBroadcastMessage[] = [
-        {
-          id: 1,
-          broadcastId: 1,
-          userId: userId,
-          deliveryStatus: 'DELIVERED',
-          readStatus: 'UNREAD',
-          deliveredAt: new Date().toISOString(),
-          createdAt: new Date(Date.now() - 300000).toISOString(),
-          senderName: 'System Administrator',
-          content: 'Welcome to the broadcast messaging system! This is a system-wide announcement.',
-          priority: 'HIGH',
-          category: 'SYSTEM',
-          broadcastCreatedAt: new Date(Date.now() - 300000).toISOString()
-        },
-        {
-          id: 2,
-          broadcastId: 2,
-          userId: userId,
-          deliveryStatus: 'DELIVERED',
-          readStatus: 'READ',
-          deliveredAt: new Date(Date.now() - 600000).toISOString(),
-          readAt: new Date(Date.now() - 300000).toISOString(),
-          createdAt: new Date(Date.now() - 900000).toISOString(),
-          senderName: 'Security Team',
-          content: 'Important security update: Please review the new security policies.',
-          priority: 'URGENT',
-          category: 'SECURITY',
-          broadcastCreatedAt: new Date(Date.now() - 900000).toISOString()
-        },
-        {
-          id: 3,
-          broadcastId: 3,
-          userId: userId,
-          deliveryStatus: 'DELIVERED',
-          readStatus: 'UNREAD',
-          deliveredAt: new Date(Date.now() - 120000).toISOString(),
-          createdAt: new Date(Date.now() - 180000).toISOString(),
-          senderName: 'HR Department',
-          content: 'Monthly newsletter: Company updates and announcements.',
-          priority: 'NORMAL',
-          category: 'HR',
-          broadcastCreatedAt: new Date(Date.now() - 180000).toISOString()
-        }
-      ];
-      
-      setMessages(mockMessages);
+      const realMessages = await userService.getUserMessages(userId);
+      setMessages(realMessages);
     } catch (error) {
       toast({
         title: 'Error',
