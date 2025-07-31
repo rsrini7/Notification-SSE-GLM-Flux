@@ -67,31 +67,37 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   }, [toast]);
 
   // Setup SSE connection
+  const onConnect = useCallback(() => {
+    toast({
+      title: 'Connected',
+      description: 'Real-time updates enabled',
+    });
+  }, [toast]);
+
+  const onDisconnect = useCallback(() => {
+    toast({
+      title: 'Disconnected',
+      description: 'Real-time updates disabled',
+      variant: 'destructive',
+    });
+  }, [toast]);
+
+  const onError = useCallback(() => {
+    toast({
+      title: 'Connection Error',
+      description: 'Failed to connect to real-time updates',
+      variant: 'destructive',
+    });
+  }, [toast]);
+
   const sseConnection = useSseConnection({
     userId,
     baseUrl,
     autoConnect,
     onMessage: handleSseEvent,
-    onConnect: () => {
-      toast({
-        title: 'Connected',
-        description: 'Real-time updates enabled',
-      });
-    },
-    onDisconnect: () => {
-      toast({
-        title: 'Disconnected',
-        description: 'Real-time updates disabled',
-        variant: 'destructive',
-      });
-    },
-    onError: () => {
-      toast({
-        title: 'Connection Error',
-        description: 'Failed to connect to real-time updates',
-        variant: 'destructive',
-      });
-    }
+    onConnect,
+    onDisconnect,
+    onError,
   });
 
   // Fetch existing messages
