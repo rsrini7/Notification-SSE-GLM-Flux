@@ -68,7 +68,7 @@ public class BroadcastService {
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(LocalDateTime.now())) {
+        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(LocalDateTime.now(java.time.ZoneOffset.UTC))) {
             broadcast.setStatus("SCHEDULED");
             broadcast = broadcastRepository.save(broadcast);
             log.info("Broadcast with ID: {} is scheduled for: {}", broadcast.getId(), broadcast.getScheduledAt());

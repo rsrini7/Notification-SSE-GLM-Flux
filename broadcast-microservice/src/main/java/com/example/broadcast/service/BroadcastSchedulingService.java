@@ -23,7 +23,7 @@ public class BroadcastSchedulingService {
     @Transactional
     public void processScheduledBroadcasts() {
         log.info("Checking for scheduled broadcasts to process...");
-        List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findScheduledBroadcastsToProcess(LocalDateTime.now());
+        List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findScheduledBroadcastsToProcess(LocalDateTime.now(java.time.ZoneOffset.UTC));
 
         if (broadcastsToProcess.isEmpty()) {
             log.info("No scheduled broadcasts to process at this time.");
