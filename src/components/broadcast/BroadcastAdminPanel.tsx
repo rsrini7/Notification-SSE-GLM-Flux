@@ -227,23 +227,23 @@ const BroadcastAdminPanel: React.FC = () => {
             <CardContent>
               <form onSubmit={createBroadcast} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
+                  <div className="grid gap-1.5">
                     <Label htmlFor="senderId">Sender ID</Label>
                     <Input id="senderId" value={formData.senderId} onChange={(e) => setFormData(prev => ({ ...prev, senderId: e.target.value }))} required />
                   </div>
-                  <div>
+                  <div className="grid gap-1.5">
                     <Label htmlFor="senderName">Sender Name</Label>
                     <Input id="senderName" value={formData.senderName} onChange={(e) => setFormData(prev => ({ ...prev, senderName: e.target.value }))} required />
                   </div>
                 </div>
 
-                <div>
+                <div className="grid gap-1.5">
                   <Label htmlFor="content">Message Content</Label>
                   <Textarea id="content" placeholder="Enter your broadcast message..." value={formData.content} onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))} rows={4} required />
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 overflow-visible">
-                  <div>
+                  <div className="grid gap-1.5">
                     <Label htmlFor="targetType">Target Type</Label>
                     <Select value={formData.targetType} onValueChange={(value) => setFormData(prev => ({ ...prev, targetType: value }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
@@ -254,7 +254,7 @@ const BroadcastAdminPanel: React.FC = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
+                  <div className="grid gap-1.5">
                     <Label htmlFor="priority">Priority</Label>
                     <Select value={formData.priority} onValueChange={(value) => setFormData(prev => ({ ...prev, priority: value }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
@@ -266,21 +266,21 @@ const BroadcastAdminPanel: React.FC = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
+                  <div className="grid gap-1.5">
                     <Label htmlFor="category">Category</Label>
                     <Input id="category" value={formData.category} onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))} />
                   </div>
                 </div>
 
                 {(formData.targetType === 'SELECTED' || formData.targetType === 'ROLE') && (
-                  <div>
+                  <div className="grid gap-1.5">
                     <Label htmlFor="targetIds">{formData.targetType === 'SELECTED' ? 'User IDs (comma-separated)' : 'Role IDs (comma-separated)'}</Label>
                     <Input id="targetIds" placeholder={formData.targetType === 'SELECTED' ? 'user-001, user-002' : 'admin, moderator'} value={formData.targetIds} onChange={(e) => setFormData(prev => ({ ...prev, targetIds: e.target.value }))} required />
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-4">
-                    <div>
+                    <div className="grid gap-1.5">
                         <Label htmlFor="scheduleType">Schedule Type</Label>
                         <Select value={formData.isImmediate ? 'immediate' : 'scheduled'} onValueChange={(value) => setFormData(prev => ({ ...prev, isImmediate: value === 'immediate' }))}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -290,14 +290,14 @@ const BroadcastAdminPanel: React.FC = () => {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div>
+                    <div className="grid gap-1.5">
                         <Label htmlFor="expiresAt">Expires At (optional)</Label>
                         <Input id="expiresAt" type="datetime-local" value={formData.expiresAt} onChange={(e) => setFormData(prev => ({ ...prev, expiresAt: e.target.value }))} />
                     </div>
                 </div>
 
                 {!formData.isImmediate && (
-                  <div>
+                  <div className="grid gap-1.5">
                     <Label htmlFor="scheduledAt">Start Date & Time</Label>
                     <Input id="scheduledAt" type="datetime-local" value={formData.scheduledAt} onChange={(e) => setFormData(prev => ({ ...prev, scheduledAt: e.target.value }))} required={!formData.isImmediate} />
                   </div>
@@ -368,7 +368,6 @@ const BroadcastAdminPanel: React.FC = () => {
                             <BarChart3 className="h-4 w-4" />
                         </Button>
                         {broadcast.status !== 'CANCELLED' && broadcast.status !== 'EXPIRED' && (
-                            // **FIX:** Changed `size` to `variant` to apply the correct destructive style.
                             <Button variant="destructive" size="sm" onClick={() => cancelBroadcast(broadcast.id)}>Cancel</Button>
                         )}
                       </div>
@@ -399,7 +398,7 @@ const BroadcastAdminPanel: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
-                <div>
+                <div className="grid gap-1.5">
                   <Label htmlFor="broadcastSelect">Select Broadcast</Label>
                   <Select value={selectedBroadcast?.id || ''} onValueChange={(value) => {
                     const broadcast = broadcasts.find(b => b.id === value);

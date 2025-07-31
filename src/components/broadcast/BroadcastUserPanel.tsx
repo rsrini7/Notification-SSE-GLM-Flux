@@ -5,7 +5,7 @@ import { useToast } from '../../hooks/use-toast';
 import { UserPlus } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import UserConnectionPanel from './UserConnectionPanel'; // Import the new component
+import UserConnectionPanel from './UserConnectionPanel';
 
 // Main component to manage multiple user panels
 const BroadcastUserPanel: React.FC = () => {
@@ -44,7 +44,7 @@ const BroadcastUserPanel: React.FC = () => {
         </CardHeader>
         <CardContent>
             <form onSubmit={addUser} className="flex items-end gap-4">
-                <div className="flex-grow">
+                <div className="flex-grow grid gap-1.5">
                     <Label htmlFor="newUserId">User ID</Label>
                     <Input 
                         id="newUserId"
