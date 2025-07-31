@@ -9,7 +9,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Alert, AlertDescription } from '../ui/alert';
 import { useToast } from '../../hooks/use-toast';
-import { Send, CheckCircle, AlertCircle } from 'lucide-react';
+import { Send, CheckCircle, AlertCircle, CalendarClock, Ban } from 'lucide-react';
 import {
   broadcastService,
   type BroadcastMessage,
@@ -85,11 +85,16 @@ const BroadcastAdminPanel: React.FC = () => {
 
     try {
       const payload: BroadcastRequest = {
-        ...formData,
+        senderId: formData.senderId,
+        senderName: formData.senderName,
+        content: formData.content,
+        targetType: formData.targetType,
         targetIds: formData.targetType === 'ALL' ? [] : formData.targetIds.split(',').map(id => id.trim()),
+        priority: formData.priority,
+        category: formData.category,
         scheduledAt: formData.isImmediate ? undefined : new Date(formData.scheduledAt).toISOString(),
         expiresAt: formData.expiresAt ? new Date(formData.expiresAt).toISOString() : undefined,
-        isImmediate: formData.isImmediate, // Pass isImmediate flag
+        isImmediate: formData.isImmediate,
       };
 
       await broadcastService.createBroadcast(payload);
@@ -113,7 +118,7 @@ const BroadcastAdminPanel: React.FC = () => {
         title: 'Success',
         description: 'Broadcast created successfully',
       });
-      setActiveTab('manage'); // Switch to manage tab after creation
+      setActiveTab('manage');
     } catch {
       toast({
         title: 'Error',
@@ -150,6 +155,9 @@ const BroadcastAdminPanel: React.FC = () => {
     if (selectedBroadcast) {
       fetchBroadcastStats(selectedBroadcast.id);
       fetchDeliveryDetails(selectedBroadcast.id);
+    } else {
+      setStats(null);
+      setDeliveryDetails([]);
     }
   }, [selectedBroadcast, fetchBroadcastStats, fetchDeliveryDetails]);
 
@@ -208,43 +216,24 @@ const BroadcastAdminPanel: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="senderId">Sender ID</Label>
-                    <Input
-                      id="senderId"
-                      value={formData.senderId}
-                      onChange={(e) => setFormData(prev => ({ ...prev, senderId: e.target.value }))}
-                      required
-                    />
+                    <Input id="senderId" value={formData.senderId} onChange={(e) => setFormData(prev => ({ ...prev, senderId: e.target.value }))} required />
                   </div>
                   <div>
                     <Label htmlFor="senderName">Sender Name</Label>
-                    <Input
-                      id="senderName"
-                      value={formData.senderName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, senderName: e.target.value }))}
-                      required
-                    />
+                    <Input id="senderName" value={formData.senderName} onChange={(e) => setFormData(prev => ({ ...prev, senderName: e.target.value }))} required />
                   </div>
                 </div>
 
                 <div>
                   <Label htmlFor="content">Message Content</Label>
-                  <Textarea
-                    id="content"
-                    placeholder="Enter your broadcast message..."
-                    value={formData.content}
-                    onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
-                    rows={4}
-                    required
-                  />
+                  <Textarea id="content" placeholder="Enter your broadcast message..." value={formData.content} onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))} rows={4} required />
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 overflow-visible">
                   <div>
                     <Label htmlFor="targetType">Target Type</Label>
                     <Select value={formData.targetType} onValueChange={(value) => setFormData(prev => ({ ...prev, targetType: value }))}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent position="popper" sideOffset={20}>
                         <SelectItem value="ALL">All Users</SelectItem>
                         <SelectItem value="SELECTED">Selected Users</SelectItem>
@@ -255,9 +244,7 @@ const BroadcastAdminPanel: React.FC = () => {
                   <div>
                     <Label htmlFor="priority">Priority</Label>
                     <Select value={formData.priority} onValueChange={(value) => setFormData(prev => ({ ...prev, priority: value }))}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent position="popper" sideOffset={20}>
                         <SelectItem value="LOW">Low</SelectItem>
                         <SelectItem value="NORMAL">Normal</SelectItem>
@@ -268,63 +255,39 @@ const BroadcastAdminPanel: React.FC = () => {
                   </div>
                   <div>
                     <Label htmlFor="category">Category</Label>
-                    <Input
-                      id="category"
-                      value={formData.category}
-                      onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                    />
+                    <Input id="category" value={formData.category} onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))} />
                   </div>
                 </div>
 
                 {(formData.targetType === 'SELECTED' || formData.targetType === 'ROLE') && (
                   <div>
-                    <Label htmlFor="targetIds">
-                      {formData.targetType === 'SELECTED' ? 'User IDs (comma-separated)' : 'Role IDs (comma-separated)'}
-                    </Label>
-                    <Input
-                      id="targetIds"
-                      placeholder={formData.targetType === 'SELECTED' ? 'user-001, user-002, user-003' : 'admin, user, moderator'}
-                      value={formData.targetIds}
-                      onChange={(e) => setFormData(prev => ({ ...prev, targetIds: e.target.value }))}
-                      required
-                    />
+                    <Label htmlFor="targetIds">{formData.targetType === 'SELECTED' ? 'User IDs (comma-separated)' : 'Role IDs (comma-separated)'}</Label>
+                    <Input id="targetIds" placeholder={formData.targetType === 'SELECTED' ? 'user-001, user-002' : 'admin, moderator'} value={formData.targetIds} onChange={(e) => setFormData(prev => ({ ...prev, targetIds: e.target.value }))} required />
                   </div>
                 )}
 
-                <div>
-                  <Label htmlFor="scheduleType">Schedule Type</Label>
-                  <Select value={formData.isImmediate ? 'immediate' : 'scheduled'} onValueChange={(value) => setFormData(prev => ({ ...prev, isImmediate: value === 'immediate' }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper" sideOffset={20}>
-                      <SelectItem value="immediate">Publish Immediately</SelectItem>
-                      <SelectItem value="scheduled">Schedule for Later</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <Label htmlFor="scheduleType">Schedule Type</Label>
+                        <Select value={formData.isImmediate ? 'immediate' : 'scheduled'} onValueChange={(value) => setFormData(prev => ({ ...prev, isImmediate: value === 'immediate' }))}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent position="popper" sideOffset={20}>
+                            <SelectItem value="immediate">Publish Immediately</SelectItem>
+                            <SelectItem value="scheduled">Schedule for Later</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    {/* **FIX:** 'Expires At' is now always visible but optional */}
+                    <div>
+                        <Label htmlFor="expiresAt">Expires At (optional)</Label>
+                        <Input id="expiresAt" type="datetime-local" value={formData.expiresAt} onChange={(e) => setFormData(prev => ({ ...prev, expiresAt: e.target.value }))} />
+                    </div>
                 </div>
 
                 {!formData.isImmediate && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="scheduledAt">Start Date & Time</Label>
-                      <Input
-                        id="scheduledAt"
-                        type="datetime-local"
-                        value={formData.scheduledAt}
-                        onChange={(e) => setFormData(prev => ({ ...prev, scheduledAt: e.target.value }))}
-                        required={!formData.isImmediate}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="expiresAt">End Date & Time (optional)</Label>
-                      <Input
-                        id="expiresAt"
-                        type="datetime-local"
-                        value={formData.expiresAt}
-                        onChange={(e) => setFormData(prev => ({ ...prev, expiresAt: e.target.value }))}
-                      />
-                    </div>
+                  <div>
+                    <Label htmlFor="scheduledAt">Start Date & Time</Label>
+                    <Input id="scheduledAt" type="datetime-local" value={formData.scheduledAt} onChange={(e) => setFormData(prev => ({ ...prev, scheduledAt: e.target.value }))} required={!formData.isImmediate} />
                   </div>
                 )}
 
@@ -340,9 +303,7 @@ const BroadcastAdminPanel: React.FC = () => {
           <Card className="border">
             <CardHeader>
               <CardTitle>Manage Broadcasts</CardTitle>
-              <CardDescription>
-                View and manage existing broadcast messages
-              </CardDescription>
+              <CardDescription>View and manage existing broadcast messages</CardDescription>
               <Tabs value={manageFilter} onValueChange={setManageFilter} className="w-full">
                 <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="all">All</TabsTrigger>
@@ -357,43 +318,39 @@ const BroadcastAdminPanel: React.FC = () => {
                   <div key={broadcast.id} className="border rounded-lg p-4 space-y-2">
                     <div className="flex items-start justify-between">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <Badge className={getPriorityColor(broadcast.priority)}>
-                            {broadcast.priority}
-                          </Badge>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge className={getPriorityColor(broadcast.priority)}>{broadcast.priority}</Badge>
                           <Badge variant="outline">{broadcast.category}</Badge>
-                          <Badge className={getStatusColor(broadcast.status)}>
-                            {broadcast.status}
-                          </Badge>
+                          <Badge className={getStatusColor(broadcast.status)}>{broadcast.status}</Badge>
                         </div>
-                        <p className="text-sm text-gray-800">{broadcast.content}</p>
+                        <p className="text-sm text-gray-800 pt-1">{broadcast.content}</p>
                         <p className="text-xs text-gray-500">
-                          From {broadcast.senderName} • {new Date(broadcast.createdAt).toLocaleString()}
+                          From {broadcast.senderName} • Created: {new Date(broadcast.createdAt).toLocaleString()}
                         </p>
+                        {/* **FIX:** Display scheduled and expiration times */}
+                        <div className="flex items-center gap-4 text-xs text-gray-500 mt-1 flex-wrap">
+                          {broadcast.scheduledAt && (
+                            <div className="flex items-center gap-1">
+                              <CalendarClock className="h-3 w-3" />
+                              <span>Starts: {new Date(broadcast.scheduledAt).toLocaleString()}</span>
+                            </div>
+                          )}
+                          {broadcast.expiresAt && (
+                            <div className="flex items-center gap-1">
+                              <Ban className="h-3 w-3" />
+                              <span>Expires: {new Date(broadcast.expiresAt).toLocaleString()}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       {broadcast.status !== 'CANCELLED' && broadcast.status !== 'EXPIRED' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => cancelBroadcast(broadcast.id)}
-                        >
-                          Cancel
-                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => cancelBroadcast(broadcast.id)}>Cancel</Button>
                       )}
                     </div>
-                    <div className="grid grid-cols-3 gap-4 text-xs">
-                      <div>
-                        <span className="text-gray-500">Targeted:</span>
-                        <span className="ml-1 font-medium">{broadcast.totalTargeted}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Delivered:</span>
-                        <span className="ml-1 font-medium">{broadcast.totalDelivered}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Read:</span>
-                        <span className="ml-1 font-medium">{broadcast.totalRead}</span>
-                      </div>
+                    <div className="grid grid-cols-3 gap-4 text-xs pt-2 border-t border-gray-100">
+                      <div><span className="text-gray-500">Targeted:</span><span className="ml-1 font-medium">{broadcast.totalTargeted}</span></div>
+                      <div><span className="text-gray-500">Delivered:</span><span className="ml-1 font-medium">{broadcast.totalDelivered}</span></div>
+                      <div><span className="text-gray-500">Read:</span><span className="ml-1 font-medium">{broadcast.totalRead}</span></div>
                     </div>
                   </div>
                 ))}
@@ -406,9 +363,7 @@ const BroadcastAdminPanel: React.FC = () => {
           <Card className="border">
             <CardHeader>
               <CardTitle>Broadcast Statistics</CardTitle>
-              <CardDescription>
-                View detailed statistics and delivery information
-              </CardDescription>
+              <CardDescription>View detailed statistics and delivery information</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
@@ -418,9 +373,7 @@ const BroadcastAdminPanel: React.FC = () => {
                     const broadcast = broadcasts.find(b => b.id === value);
                     setSelectedBroadcast(broadcast || null);
                   }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a broadcast to view statistics" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Choose a broadcast to view statistics" /></SelectTrigger>
                     <SelectContent>
                       {broadcasts.map((broadcast) => (
                         <SelectItem key={broadcast.id} value={broadcast.id}>
@@ -434,56 +387,22 @@ const BroadcastAdminPanel: React.FC = () => {
                 {selectedBroadcast && stats && (
                   <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm">Total Targeted</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold">{stats.totalTargeted}</div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm">Total Delivered</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold">{stats.totalDelivered}</div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm">Total Read</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold">{stats.totalRead}</div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm">Delivery Rate</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold">{(stats.deliveryRate * 100).toFixed(1)}%</div>
-                        </CardContent>
-                      </Card>
+                      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Total Targeted</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{stats.totalTargeted}</div></CardContent></Card>
+                      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Total Delivered</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{stats.totalDelivered}</div></CardContent></Card>
+                      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Total Read</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{stats.totalRead}</div></CardContent></Card>
+                      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Delivery Rate</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{(stats.deliveryRate * 100).toFixed(1)}%</div></CardContent></Card>
                     </div>
 
                     <Card>
-                      <CardHeader>
-                        <CardTitle>Delivery Details</CardTitle>
-                      </CardHeader>
+                      <CardHeader><CardTitle>Delivery Details</CardTitle></CardHeader>
                       <CardContent>
                         <div className="space-y-2 max-h-64 overflow-y-auto">
                           {deliveryDetails.map((detail, index) => (
                             <div key={index} className="flex justify-between items-center p-2 border-b">
                               <span className="text-sm">{detail.userId}</span>
                               <div className="flex items-center gap-2">
-                                <Badge variant={detail.deliveryStatus === 'DELIVERED' ? 'default' : 'secondary'}>
-                                  {detail.deliveryStatus}
-                                </Badge>
-                                {detail.readStatus === 'READ' && (
-                                  <CheckCircle className="h-4 w-4 text-green-600" />
-                                )}
+                                <Badge variant={detail.deliveryStatus === 'DELIVERED' ? 'default' : 'secondary'}>{detail.deliveryStatus}</Badge>
+                                {detail.readStatus === 'READ' && (<CheckCircle className="h-4 w-4 text-green-600" />)}
                               </div>
                             </div>
                           ))}
@@ -496,9 +415,7 @@ const BroadcastAdminPanel: React.FC = () => {
                 {!selectedBroadcast && (
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Select a broadcast to view its statistics and delivery details.
-                    </AlertDescription>
+                    <AlertDescription>Select a broadcast to view its statistics and delivery details.</AlertDescription>
                   </Alert>
                 )}
               </div>
