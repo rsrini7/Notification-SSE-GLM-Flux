@@ -37,6 +37,7 @@ public class BroadcastRequest {
     
     private String category;
     
+    // This field correctly matches the updated frontend payload
     private java.time.ZonedDateTime scheduledAt;
 
     private java.time.ZonedDateTime expiresAt;

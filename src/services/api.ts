@@ -49,8 +49,9 @@ export interface BroadcastMessage {
   totalTargeted: number;
   totalDelivered: number;
   totalRead: number;
-  startTime: string;
-  endTime?: string;
+  // **FIX:** Changed `startTime` to `scheduledAt` and `endTime` to `expiresAt`
+  scheduledAt: string;
+  expiresAt?: string;
   isImmediate: boolean;
 }
 
@@ -96,8 +97,9 @@ export interface BroadcastRequest {
   targetIds: string[];
   priority: string;
   category: string;
-  startTime: string;
-  endTime?: string;
+  // **FIX:** Changed `startTime` to `scheduledAt` and `endTime` to `expiresAt`
+  scheduledAt?: string;
+  expiresAt?: string;
   isImmediate: boolean;
 }
 

@@ -10,11 +10,11 @@ import { Label } from '../ui/label';
 import { Alert, AlertDescription } from '../ui/alert';
 import { useToast } from '../../hooks/use-toast';
 import { Send, CheckCircle, AlertCircle } from 'lucide-react';
-import { 
-  broadcastService, 
-  type BroadcastMessage, 
-  type BroadcastStats, 
-  type BroadcastRequest 
+import {
+  broadcastService,
+  type BroadcastMessage,
+  type BroadcastStats,
+  type BroadcastRequest
 } from '../../services/api';
 
 const BroadcastAdminPanel: React.FC = () => {
@@ -37,8 +37,8 @@ const BroadcastAdminPanel: React.FC = () => {
     priority: 'NORMAL',
     category: 'GENERAL',
     isImmediate: true,
-    startTime: '',
-    endTime: ''
+    scheduledAt: '',
+    expiresAt: ''
   });
 
   // Fetch broadcasts
@@ -86,19 +86,20 @@ const BroadcastAdminPanel: React.FC = () => {
     setLoading(true);
 
     try {
+      // **FIX:** Changed `startTime` to `scheduledAt` and `endTime` to `expiresAt`
       const payload: BroadcastRequest = {
         ...formData,
         targetIds: formData.targetType === 'ALL' ? [] : formData.targetIds.split(',').map(id => id.trim()),
-        startTime: formData.isImmediate ? new Date().toISOString() : new Date(formData.startTime).toISOString(),
-        endTime: formData.endTime ? new Date(formData.endTime).toISOString() : undefined
+        scheduledAt: formData.isImmediate ? undefined : new Date(formData.scheduledAt).toISOString(),
+        expiresAt: formData.expiresAt ? new Date(formData.expiresAt).toISOString() : undefined
       };
 
       const newBroadcast = await broadcastService.createBroadcast(payload);
       setBroadcasts(prev => [newBroadcast, ...prev]);
-      
+
       // Refresh the broadcast list to ensure we have the latest data
       await fetchBroadcasts(manageFilter);
-      
+
       // Reset form
       setFormData({
         senderId: 'admin-001',
@@ -109,8 +110,8 @@ const BroadcastAdminPanel: React.FC = () => {
         priority: 'NORMAL',
         category: 'GENERAL',
         isImmediate: true,
-        startTime: '',
-        endTime: ''
+        scheduledAt: '',
+        expiresAt: ''
       });
 
       toast({
@@ -132,13 +133,13 @@ const BroadcastAdminPanel: React.FC = () => {
   const cancelBroadcast = async (broadcastId: string) => {
     try {
       await broadcastService.cancelBroadcast(broadcastId);
-      setBroadcasts(prev => prev.map(b => 
+      setBroadcasts(prev => prev.map(b =>
         b.id === broadcastId ? { ...b, status: 'CANCELLED' } : b
       ));
-      
+
       // Refresh the broadcast list to ensure we have the latest data
       await fetchBroadcasts(manageFilter);
-      
+
       toast({
         title: 'Success',
         description: 'Broadcast cancelled successfully',
@@ -185,9 +186,10 @@ const BroadcastAdminPanel: React.FC = () => {
 
   const getBroadcastStatus = (broadcast: BroadcastMessage) => {
     const now = new Date();
-    const startTime = new Date(broadcast.startTime);
-    const endTime = broadcast.endTime ? new Date(broadcast.endTime) : null;
-    
+    // **FIX:** Changed `startTime` to `scheduledAt`
+    const startTime = new Date(broadcast.scheduledAt);
+    const endTime = broadcast.expiresAt ? new Date(broadcast.expiresAt) : null;
+
     if (broadcast.status === 'CANCELLED') return 'CANCELLED';
     if (endTime && now > endTime) return 'EXPIRED';
     if (now >= startTime) return 'ACTIVE';
@@ -328,22 +330,24 @@ const BroadcastAdminPanel: React.FC = () => {
                 {!formData.isImmediate && (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="startTime">Start Date & Time</Label>
+                      {/* **FIX:** Changed label and input id/value to `scheduledAt` */}
+                      <Label htmlFor="scheduledAt">Start Date & Time</Label>
                       <Input
-                        id="startTime"
+                        id="scheduledAt"
                         type="datetime-local"
-                        value={formData.startTime}
-                        onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
+                        value={formData.scheduledAt}
+                        onChange={(e) => setFormData(prev => ({ ...prev, scheduledAt: e.target.value }))}
                         required={!formData.isImmediate}
                       />
                     </div>
                     <div>
-                      <Label htmlFor="endTime">End Date & Time (optional)</Label>
+                      {/* **FIX:** Changed label and input id/value to `expiresAt` */}
+                      <Label htmlFor="expiresAt">End Date & Time (optional)</Label>
                       <Input
-                        id="endTime"
+                        id="expiresAt"
                         type="datetime-local"
-                        value={formData.endTime}
-                        onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
+                        value={formData.expiresAt}
+                        onChange={(e) => setFormData(prev => ({ ...prev, expiresAt: e.target.value }))}
                       />
                     </div>
                   </div>
