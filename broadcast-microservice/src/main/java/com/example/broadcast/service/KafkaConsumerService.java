@@ -1,7 +1,7 @@
+// broadcast-microservice/src/main/java/com/example/broadcast/service/KafkaConsumerService.java
 package com.example.broadcast.service;
 
 import com.example.broadcast.dto.MessageDeliveryEvent;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -10,10 +10,8 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
-
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Service
 @RequiredArgsConstructor
@@ -22,9 +20,6 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CaffeineCacheService caffeineCacheService;
-    
-    @Getter
-    private final ExecutorService executorService = Executors.newFixedThreadPool(10);
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}",
@@ -37,20 +32,18 @@ public class KafkaConsumerService {
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
-        
-        log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}", 
+
+        log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                 event.getEventId(), topic, partition, offset);
-        
-        CompletableFuture.runAsync(() -> {
-            try {
-                handleEvent(event);
+
+        Mono.fromRunnable(() -> handleEvent(event))
+            .subscribeOn(Schedulers.boundedElastic())
+            .doOnSuccess(v -> {
                 acknowledgment.acknowledge();
                 log.debug("Event processed and acknowledged: {}", event.getEventId());
-            } catch (Exception e) {
-                log.error("Error processing event {}: {}", event.getEventId(), e.getMessage());
-                throw new RuntimeException("Event processing failed", e);
-            }
-        }, executorService);
+            })
+            .doOnError(e -> log.error("Error processing event {}, will not acknowledge: {}", event.getEventId(), e.getMessage()))
+            .subscribe();
     }
 
     private void handleEvent(MessageDeliveryEvent event) {
@@ -73,13 +66,11 @@ public class KafkaConsumerService {
     }
 
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
-        log.info("Handling broadcast created event for user: {}, broadcast: {}", 
+        log.info("Handling broadcast created event for user: {}, broadcast: {}",
                 event.getUserId(), event.getBroadcastId());
-        
         try {
-            boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) || 
+            boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) ||
                               sseService.isUserConnected(event.getUserId());
-            
             if (isOnline) {
                 // Delegate delivery and status updates entirely to the SseService
                 sseService.handleMessageEvent(event);
@@ -90,12 +81,13 @@ public class KafkaConsumerService {
             }
         } catch (Exception e) {
             log.error("Error handling broadcast created event: {}", e.getMessage());
+            // We rethrow to ensure the Mono's doOnError captures it.
             throw new RuntimeException("Failed to handle broadcast created event", e);
         }
     }
 
     private void handleMessageRead(MessageDeliveryEvent event) {
-        log.info("Handling message read event for user: {}, broadcast: {}", 
+        log.info("Handling message read event for user: {}, broadcast: {}",
                 event.getUserId(), event.getBroadcastId());
         try {
             // Forward to SSE service to notify other potential client sessions
@@ -109,7 +101,7 @@ public class KafkaConsumerService {
     }
 
     private void handleBroadcastCancelled(MessageDeliveryEvent event) {
-        log.info("Handling broadcast cancelled event for user: {}, broadcast: {}", 
+        log.info("Handling broadcast cancelled event for user: {}, broadcast: {}",
                 event.getUserId(), event.getBroadcastId());
         try {
             // Remove from pending cache if it exists

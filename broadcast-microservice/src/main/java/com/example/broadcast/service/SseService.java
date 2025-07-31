@@ -1,3 +1,4 @@
+// broadcast-microservice/src/main/java/com/example/broadcast/service/SseService.java
 package com.example.broadcast.service;
 
 import com.example.broadcast.dto.MessageDeliveryEvent;
@@ -10,21 +11,22 @@ import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserSessionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Schedulers;
+import reactor.core.Disposable;
 
+import java.time.Duration;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -39,11 +41,10 @@ public class SseService {
     
     @Value("${broadcast.sse.heartbeat-interval:30000}")
     private long heartbeatInterval;
-    
     private final Map<String, Sinks.Many<String>> userSinks = new ConcurrentHashMap<>();
     
-    @Getter
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+    private Disposable heartbeatSubscription;
+    private Disposable cleanupSubscription;
 
     public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository, ObjectMapper objectMapper, BroadcastRepository broadcastRepository, BroadcastStatisticsRepository broadcastStatisticsRepository) {
         this.userBroadcastRepository = userBroadcastRepository;
@@ -57,6 +58,17 @@ public class SseService {
     public void init() {
         startHeartbeat();
         startCleanup();
+    }
+
+    @PreDestroy
+    public void cleanup() {
+        if (heartbeatSubscription != null && !heartbeatSubscription.isDisposed()) {
+            heartbeatSubscription.dispose();
+        }
+        if (cleanupSubscription != null && !cleanupSubscription.isDisposed()) {
+            cleanupSubscription.dispose();
+        }
+        log.info("Disposed of SSE scheduled tasks.");
     }
 
     public Flux<String> createEventStream(String userId) {
@@ -103,7 +115,6 @@ public class SseService {
     private void sendPendingMessages(String userId, Sinks.Many<String> sink) {
         try {
             List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
-            
             for (UserBroadcastMessage message : pendingMessages) {
                 UserBroadcastResponse response = buildUserBroadcastResponse(message);
                 sendEventToSink(sink, Map.of(
@@ -146,7 +157,6 @@ public class SseService {
     private void deliverMessageToUser(String userId, Long broadcastId) {
         try {
             List<UserBroadcastMessage> messages = userBroadcastRepository.findPendingMessagesByBroadcastId(userId, broadcastId);
-            
             if (!messages.isEmpty()) {
                 UserBroadcastMessage message = messages.get(0); // Should only be one
                 UserBroadcastResponse response = buildUserBroadcastResponse(message);
@@ -155,7 +165,6 @@ public class SseService {
                         "data", response,
                         "timestamp", ZonedDateTime.now()
                 ));
-                
                 userBroadcastRepository.updateDeliveryStatus(message.getId(), "DELIVERED");
                 broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
                 log.info("Message delivered to online user: {}, broadcast: {}", userId, broadcastId);
@@ -189,60 +198,61 @@ public class SseService {
     }
 
     private void startHeartbeat() {
-        scheduler.scheduleAtFixedRate(() -> {
-            try {
-                Map<String, Object> heartbeat = Map.of(
-                        "type", "HEARTBEAT",
-                        "timestamp", ZonedDateTime.now(),
-                        "message", "Connection alive"
-                );
-                
-                userSinks.forEach((userId, sink) -> {
-                    try {
-                        sendEventToSink(sink, heartbeat);
-                    } catch (Exception e) {
-                        log.warn("Failed to send heartbeat to user {}: {}", userId, e.getMessage());
-                    }
-                });
-                
-                log.debug("Heartbeat sent to {} connected users", userSinks.size());
-                
-            } catch (Exception e) {
-                log.error("Error in heartbeat task: {}", e.getMessage());
-            }
-        }, heartbeatInterval, heartbeatInterval, TimeUnit.MILLISECONDS);
+        heartbeatSubscription = Flux.interval(Duration.ofMillis(heartbeatInterval), Schedulers.parallel())
+            .doOnNext(tick -> {
+                try {
+                    Map<String, Object> heartbeat = Map.of(
+                            "type", "HEARTBEAT",
+                            "timestamp", ZonedDateTime.now(),
+                            "message", "Connection alive"
+                    );
+
+                    userSinks.forEach((userId, sink) -> {
+                        try {
+                            sendEventToSink(sink, heartbeat);
+                        } catch (Exception e) {
+                            log.warn("Failed to send heartbeat to user {}: {}", userId, e.getMessage());
+                        }
+                    });
+                    
+                    log.debug("Heartbeat sent to {} connected users", userSinks.size());
+                } catch (Exception e) {
+                    log.error("Error in heartbeat task: {}", e.getMessage());
+                }
+            })
+            .subscribe();
     }
 
     private void startCleanup() {
-        scheduler.scheduleAtFixedRate(() -> {
-            try {
-                int cleanedSessions = userSessionRepository.cleanupExpiredSessions();
-                if (cleanedSessions > 0) {
-                    log.info("Cleaned up {} expired user sessions from the database.", cleanedSessions);
+        cleanupSubscription = Flux.interval(Duration.ofSeconds(60), Schedulers.parallel())
+            .doOnNext(tick -> {
+                 try {
+                    int cleanedSessions = userSessionRepository.cleanupExpiredSessions();
+                    if (cleanedSessions > 0) {
+                        log.info("Cleaned up {} expired user sessions from the database.", cleanedSessions);
+                    }
+
+                    List<String> activeDbUsers = userSessionRepository.findAllActiveUserIds();
+                    List<String> zombieSinks = userSinks.keySet().stream()
+                        .filter(userId -> !activeDbUsers.contains(userId))
+                        .collect(Collectors.toList());
+
+                    if (!zombieSinks.isEmpty()) {
+                        log.warn("Found {} zombie SSE sinks to clean up: {}", zombieSinks.size(), zombieSinks);
+                        zombieSinks.forEach(userId -> {
+                            Sinks.Many<String> sink = userSinks.remove(userId);
+                            if (sink != null) {
+                                sink.tryEmitComplete();
+                            }
+                        });
+                    }
+                    
+                    log.debug("Cleanup completed. Active sinks: {}", userSinks.size());
+                } catch (Exception e) {
+                    log.error("Error in cleanup task: {}", e.getMessage());
                 }
-
-                List<String> activeDbUsers = userSessionRepository.findAllActiveUserIds();
-
-                List<String> zombieSinks = userSinks.keySet().stream()
-                    .filter(userId -> !activeDbUsers.contains(userId))
-                    .collect(Collectors.toList());
-
-                if (!zombieSinks.isEmpty()) {
-                    log.warn("Found {} zombie SSE sinks to clean up: {}", zombieSinks.size(), zombieSinks);
-                    zombieSinks.forEach(userId -> {
-                        Sinks.Many<String> sink = userSinks.remove(userId);
-                        if (sink != null) {
-                            sink.tryEmitComplete();
-                        }
-                    });
-                }
-                
-                log.debug("Cleanup completed. Active sinks: {}", userSinks.size());
-                
-            } catch (Exception e) {
-                log.error("Error in cleanup task: {}", e.getMessage());
-            }
-        }, 60000, 60000, TimeUnit.MILLISECONDS);
+            })
+            .subscribe();
     }
 
     public int getConnectedUserCount() {
