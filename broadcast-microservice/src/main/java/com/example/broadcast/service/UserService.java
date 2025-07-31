@@ -3,9 +3,8 @@ package com.example.broadcast.service;
 
 import org.springframework.stereotype.Service;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
-import com.example.broadcast.exception.UserServiceUnavailableException;
-
+// import java.util.concurrent.ThreadLocalRandom;
+// import com.example.broadcast.exception.UserServiceUnavailableException;
 /**
  * A simulated service to represent an external dependency for fetching user data.
  * This service is designed to fail intermittently to test resilience patterns.
@@ -19,9 +18,9 @@ public class UserService {
      * @return A list of user IDs.
      */
     public List<String> getAllUserIds() {
-        if (ThreadLocalRandom.current().nextInt(10) < 5) {
-            throw new UserServiceUnavailableException("External User Service is unavailable");
-        }
+        // if (ThreadLocalRandom.current().nextInt(10) < 5) {
+        //     throw new UserServiceUnavailableException("External User Service is unavailable");
+        // }
         // In a real application, this would make a network call to a user management service.
         return List.of("user-001", "user-002", "user-003", "user-004", "user-005", "user-006", "user-007", "user-008", "user-009", "user-010");
     }
@@ -33,9 +32,9 @@ public class UserService {
      * @return A list of user IDs belonging to the specified role.
      */
     public List<String> getUserIdsByRole(String role) {
-         if (ThreadLocalRandom.current().nextInt(10) < 5) {
-            throw new UserServiceUnavailableException("External User Service is unavailable for role: " + role);
-        }
+        //  if (ThreadLocalRandom.current().nextInt(10) < 5) {
+        //     throw new UserServiceUnavailableException("External User Service is unavailable for role: " + role);
+        // }
         // Mock response for users in a role.
         return List.of("user-001", "user-003", "user-005");
     }

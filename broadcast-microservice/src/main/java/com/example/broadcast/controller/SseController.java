@@ -1,8 +1,10 @@
+// broadcast-microservice/src/main/java/com/example/broadcast/controller/SseController.java
 package com.example.broadcast.controller;
 
 import com.example.broadcast.model.UserSession;
 import com.example.broadcast.repository.UserSessionRepository;
 import com.example.broadcast.service.SseService;
+import com.example.broadcast.service.CaffeineCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,7 +18,6 @@ import java.time.ZonedDateTime;
 import java.util.UUID;
 import com.example.broadcast.service.BroadcastService;
 import org.springframework.http.HttpStatus;
-
 /**
  * REST Controller for Server-Sent Events (SSE)
  * Provides real-time message delivery to connected users
@@ -30,10 +31,10 @@ public class SseController {
     private final SseService sseService;
     private final UserSessionRepository userSessionRepository;
     private final BroadcastService broadcastService;
+    private final CaffeineCacheService caffeineCacheService;
     
     @Value("${broadcast.pod.id:pod-local}")
     private String podId;
-
     /**
      * Establish SSE connection for a user
      * GET /api/sse/connect?userId={userId}
@@ -46,7 +47,6 @@ public class SseController {
         
         log.info("SSE connection request from user: {}, session: {}, IP: {}", 
                 userId, sessionId, exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
-        
         // Generate session ID if not provided
         if (sessionId == null || sessionId.trim().isEmpty()) {
             sessionId = UUID.randomUUID().toString();
@@ -61,12 +61,11 @@ public class SseController {
                 .connectedAt(ZonedDateTime.now())
                 .lastHeartbeat(ZonedDateTime.now())
                 .build();
-        
         userSessionRepository.save(session);
+        caffeineCacheService.registerUserConnection(userId, sessionId, podId);
         
         // Create reactive SSE connection
         Flux<String> eventStream = sseService.createEventStream(userId);
-        
         log.info("SSE connection established for user: {}, session: {}", userId, sessionId);
         
         return eventStream;
@@ -82,10 +81,8 @@ public class SseController {
             @RequestParam String sessionId) {
         
         log.debug("Heartbeat received from user: {}, session: {}", userId, sessionId);
-        
         // Update session heartbeat
         int updated = userSessionRepository.updateHeartbeat(sessionId, podId);
-        
         if (updated > 0) {
             return ResponseEntity.ok("Heartbeat updated");
         } else {
@@ -104,11 +101,10 @@ public class SseController {
             @RequestParam String sessionId) {
         
         log.info("Disconnect request from user: {}, session: {}", userId, sessionId);
-        
         // Mark session as inactive
         int updated = userSessionRepository.markSessionInactive(sessionId, podId);
-        
         if (updated > 0) {
+            caffeineCacheService.unregisterUserConnection(userId, sessionId);
             return ResponseEntity.ok("Disconnected successfully");
         } else {
             log.warn("Session not found for disconnect: user={}, session={}", userId, sessionId);
@@ -123,26 +119,20 @@ public class SseController {
     @GetMapping("/stats")
     public ResponseEntity<java.util.Map<String, Object>> getStats() {
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
-        
         // Get total active users
         long totalActiveUsers = userSessionRepository.getTotalActiveUserCount();
         stats.put("totalActiveUsers", totalActiveUsers);
-        
         // Get active users for this pod
         long podActiveUsers = userSessionRepository.getActiveUserCountByPod(podId);
         stats.put("podActiveUsers", podActiveUsers);
-        
         // Get SSE connected users
         int sseConnectedUsers = sseService.getConnectedUserCount();
         stats.put("sseConnectedUsers", sseConnectedUsers);
-        
         // Get pod information
         stats.put("podId", podId);
         stats.put("timestamp", ZonedDateTime.now());
-        
         log.info("SSE stats: total={}, pod={}, sse={}", 
                 totalActiveUsers, podActiveUsers, sseConnectedUsers);
-        
         return ResponseEntity.ok(stats);
     }
 
@@ -172,7 +162,6 @@ public class SseController {
         }
         
         log.info("Marking message as read: user={}, message={}", userId, messageId);
-        
         // In a real implementation, this would update the message status
         // and send a read receipt event via Kafka
         // For now, we'll just return a success response
