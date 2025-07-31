@@ -53,7 +53,7 @@ const BroadcastUserPanel: React.FC = () => {
                         onChange={(e) => setNewUserId(e.target.value)}
                     />
                 </div>
-                <Button type="submit">Add User</Button>
+                <Button variant="outline" type="submit">Add User</Button>
             </form>
         </CardContent>
       </Card>
