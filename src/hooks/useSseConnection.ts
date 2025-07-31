@@ -18,6 +18,7 @@ interface SseConnectionState {
   connecting: boolean;
   sessionId: string | null;
   error: string | null;
+
 }
 
 export const useSseConnection = (options: UseSseConnectionOptions) => {
@@ -38,6 +39,9 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     sessionId: null,
     error: null
   });
+
+  const MAX_RECONNECT_ATTEMPTS = 5; // Define a maximum number of reconnection attempts
+  const reconnectAttemptsRef = useRef(0);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
@@ -92,8 +96,11 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       eventSourceRef.current.close();
     }
 
+    console.log('SSE Connection: Disconnected');
     setState(prev => ({ ...prev, connecting: true, error: null }));
+    reconnectAttemptsRef.current++;
 
+    console.log('SSE Connection: Attempting to connect...');
     const newSessionId = generateSessionId();
     sessionIdRef.current = newSessionId;
 
@@ -113,6 +120,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
 
         onConnectRef.current?.();
         startHeartbeat();
+        console.log('SSE Connection: Connected');
+        reconnectAttemptsRef.current = 0; // Reset attempts on successful connection
       };
 
       eventSourceRef.current.onmessage = (event) => {
@@ -127,8 +136,15 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         }
       };
 
-      eventSourceRef.current.onerror = (error) => {
-        console.error('SSE connection error:', error);
+      eventSourceRef.current.onerror = (event: Event) => {
+        console.error('SSE connection error event:', event);
+        // Log specific error details if available
+        if ('message' in event) {
+          console.error('SSE Error Message:', (event as any).message);
+        }
+        if ('error' in event) {
+          console.error('SSE Error Object:', (event as any).error);
+        }
         
         setState(prev => ({
           ...prev,
@@ -138,16 +154,22 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         }));
 
         onDisconnectRef.current?.();
-        onErrorRef.current?.(error);
+        onErrorRef.current?.(event);
+        console.error('SSE Connection: Error and attempting reconnect');
 
         // Attempt to reconnect after 5 seconds
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
         }
         
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, 5000);
+        if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connect();
+          }, 5000);
+        } else {
+          console.error('SSE Connection: Max reconnection attempts reached. Stopping reconnects.');
+          setState(prev => ({ ...prev, error: 'Max reconnection attempts reached' }));
+        }
       };
 
     } catch (error) {
@@ -162,19 +184,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
 
       onErrorRef.current?.(error);
 
-      // Simulate connection for development if backend is not available
-      setTimeout(() => {
-        setState(prev => ({
-          ...prev,
-          connected: true,
-          connecting: false,
-          sessionId: newSessionId,
-          error: null
-        }));
 
-        onConnectRef.current?.();
-        startHeartbeat();
-      }, 1000);
     }
   }, [userId, baseUrl, generateSessionId, startHeartbeat]);
 

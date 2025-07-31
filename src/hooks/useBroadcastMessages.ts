@@ -22,6 +22,24 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  // Fetch existing messages
+  const fetchMessages = useCallback(async () => {
+    setLoading(true);
+    console.log('Fetching messages for userId:', userId); // Add this line
+    try {
+      const realMessages = await userService.getUserMessages(userId);
+      setMessages(realMessages);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch messages',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, toast]);
+
   // Handle SSE events
   const handleSseEvent = useCallback((event: any) => {
     switch (event.type) {
@@ -53,8 +71,8 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
       
       case 'CONNECTED':
-        // Connection established, fetch any pending messages
-        fetchMessages();
+        // Connection established, fetch any pending messages (handled by onConnect callback)
+        break;
         break;
 
       case 'HEARTBEAT':
@@ -64,7 +82,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
       default:
         console.log('Unhandled SSE event type:', event.type);
     }
-  }, [toast]);
+  }, [toast, fetchMessages]);
 
   // Setup SSE connection
   const onConnect = useCallback(() => {
@@ -72,7 +90,8 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
       title: 'Connected',
       description: 'Real-time updates enabled',
     });
-  }, [toast]);
+    fetchMessages(); // Call fetchMessages only when connection is successfully established
+  }, [toast, fetchMessages]);
 
   const onDisconnect = useCallback(() => {
     toast({
@@ -99,23 +118,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     onDisconnect,
     onError,
   });
-
-  // Fetch existing messages
-  const fetchMessages = useCallback(async () => {
-    setLoading(true);
-    try {
-      const realMessages = await userService.getUserMessages(userId);
-      setMessages(realMessages);
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch messages',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [userId, toast]);
 
   // Mark message as read
   const markAsRead = useCallback(async (messageId: number) => {
@@ -209,12 +211,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     );
   }, [messages]);
 
-  // Fetch messages on mount and when connection is established
-  useEffect(() => {
-    if (sseConnection.connected) {
-      fetchMessages();
-    }
-  }, [sseConnection.connected, fetchMessages]);
+
 
   return {
     messages,

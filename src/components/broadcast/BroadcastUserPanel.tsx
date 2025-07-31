@@ -49,9 +49,6 @@ const BroadcastUserPanel: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    actions.refresh();
-  }, [actions]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
