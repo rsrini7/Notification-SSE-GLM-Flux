@@ -69,11 +69,11 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         ));
         break;
       
-      case 'MESSAGE_EXPIRED':
+      case 'MESSAGE_REMOVED':
         if (event.data && event.data.broadcastId) {
             setMessages(prev => prev.filter(msg => msg.broadcastId !== event.data.broadcastId));
             toast({
-                title: 'Message Expired',
+                title: 'Message Removed',
                 description: 'A broadcast message has been removed.',
             });
         }
@@ -83,9 +83,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
 
       case 'HEARTBEAT':
-        break;
-      
-      case 'MESSAGE_REMOVED':
         break;
       
       default:
