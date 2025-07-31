@@ -10,8 +10,6 @@ import java.sql.Statement;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -111,11 +109,17 @@ public class UserBroadcastRepository {
     }
 
     /**
-     * **NEW:** Finds all user broadcast messages for a given broadcast ID.
-     * This is used to populate the delivery details in the admin panel.
+     * **NEW:** Finds a specific pending message for a user and broadcast.
+     * This is a more targeted query to ensure the correct message is delivered.
+     * @param userId The ID of the user.
      * @param broadcastId The ID of the broadcast.
-     * @return A list of user broadcast messages.
+     * @return A list containing the pending message, if it exists.
      */
+    public List<UserBroadcastMessage> findPendingMessagesByBroadcastId(String userId, Long broadcastId) {
+        String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND broadcast_id = ? AND delivery_status = 'PENDING'";
+        return jdbcTemplate.query(sql, userBroadcastRowMapper, userId, broadcastId);
+    }
+
     public List<UserBroadcastMessage> findByBroadcastId(Long broadcastId) {
         String sql = "SELECT * FROM user_broadcast_messages WHERE broadcast_id = ? ORDER BY user_id";
         return jdbcTemplate.query(sql, userBroadcastRowMapper, broadcastId);

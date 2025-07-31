@@ -90,4 +90,15 @@ public class UserController {
         
         return ResponseEntity.ok(stats);
     }
+    
+    /**
+     * **NEW:** Get all unique user IDs
+     * GET /api/user/all
+     */
+    @GetMapping("/all")
+    public ResponseEntity<List<String>> getAllUserIds() {
+        log.info("Retrieving all unique user IDs.");
+        List<String> userIds = broadcastService.getAllUserIds();
+        return ResponseEntity.ok(userIds);
+    }
 }

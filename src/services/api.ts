@@ -10,7 +10,6 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
 // Request interceptor for logging
 /* api.interceptors.request.use(
   (config) => {
@@ -77,7 +76,6 @@ export interface UserBroadcastMessage {
   priority: string;
   category: string;
   broadcastCreatedAt: string;
-  // **NEW:** Added expiresAt to the user message interface
   expiresAt?: string;
 }
 
@@ -94,7 +92,7 @@ export interface BroadcastRequest {
   isImmediate: boolean;
 }
 
-// Services (implementations remain the same)
+// Services
 export const broadcastService = {
   getBroadcasts: async (filter = 'all'): Promise<BroadcastMessage[]> => {
     const response = await api.get(`/api/broadcasts?filter=${filter}`);
@@ -128,6 +126,13 @@ export const userService = {
   },
   markMessageAsRead: async (userId: string, messageId: string): Promise<void> => {
     await api.post(`/api/sse/read?userId=${userId}&messageId=${messageId}`);
+  },
+  /**
+   * **NEW:** Get all user IDs from the database
+   */
+  getAllUsers: async (): Promise<string[]> => {
+    const response = await api.get('/api/user/all');
+    return response.data;
   },
 };
 

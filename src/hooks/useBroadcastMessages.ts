@@ -50,13 +50,13 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
           setMessages(prev => {
             const exists = prev.some(msg => msg.id === event.data.id);
             if (!exists) {
+              toast({
+                title: 'New Message',
+                description: `From ${event.data.senderName}: ${event.data.content.substring(0, 30)}...`,
+              });
               return [event.data, ...prev];
             }
             return prev;
-          });
-          toast({
-            title: 'New Message',
-            description: event.data.content.substring(0, 50) + '...',
           });
         }
         break;
