@@ -181,12 +181,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
 
     // Notify backend about disconnection
-    if (sessionIdRef.current) {
-      fetch(`${baseUrl}/api/sse/disconnect?userId=${userId}&sessionId=${sessionIdRef.current}`, {
-        method: 'POST',
-      }).catch(console.error);
-    }
-
+    // Optimistically update state to disconnected
     setState(prev => ({
       ...prev,
       connected: false,
@@ -194,6 +189,16 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       sessionId: null,
       error: null
     }));
+
+    if (sessionIdRef.current) {
+      fetch(`${baseUrl}/api/sse/disconnect?userId=${userId}&sessionId=${sessionIdRef.current}`, {
+        method: 'POST',
+      }).catch(error => {
+        console.error('Error sending disconnect signal to backend:', error);
+        // Optionally, you could revert state here if the disconnect truly failed and you want to retry
+        // For now, we assume the UI should reflect disconnected state immediately.
+      });
+    }
 
     sessionIdRef.current = null;
     onDisconnect?.();

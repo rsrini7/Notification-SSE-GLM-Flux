@@ -63,8 +63,8 @@ export interface BroadcastStats {
 }
 
 export interface UserBroadcastMessage {
-  id: string;
-  broadcastId: string;
+  id: number;
+  broadcastId: number;
   userId: string;
   deliveryStatus: string;
   readStatus: string;
@@ -78,9 +78,14 @@ export interface UserBroadcastMessage {
   broadcastCreatedAt: string;
 }
 
-export interface PollResponse {
-  messages: any[];
-  timestamp: string;
+export interface SseMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  priority: string;
+  category: string;
+  createdAt: string;
 }
 
 export interface BroadcastRequest {
@@ -137,12 +142,6 @@ export const userService = {
   // Get user messages
   getUserMessages: async (userId: string): Promise<UserBroadcastMessage[]> => {
     const response = await api.get(`/api/user/messages?userId=${userId}`);
-    return response.data;
-  },
-
-  // Poll for new messages
-  pollForMessages: async (userId: string, lastTimestamp: string): Promise<PollResponse> => {
-    const response = await api.get(`/api/sse/poll?userId=${userId}&lastTimestamp=${lastTimestamp}`);
     return response.data;
   },
 

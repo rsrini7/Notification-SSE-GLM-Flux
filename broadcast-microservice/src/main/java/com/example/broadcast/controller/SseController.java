@@ -14,6 +14,8 @@ import reactor.core.publisher.Flux;
 import org.springframework.web.server.ServerWebExchange;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import com.example.broadcast.service.BroadcastService;
+import org.springframework.http.HttpStatus;
 
 /**
  * REST Controller for Server-Sent Events (SSE)
@@ -27,6 +29,7 @@ public class SseController {
 
     private final SseService sseService;
     private final UserSessionRepository userSessionRepository;
+    private final BroadcastService broadcastService;
     
     @Value("${broadcast.pod.id:pod-local}")
     private String podId;
@@ -161,32 +164,18 @@ public class SseController {
     public ResponseEntity<String> markMessageAsRead(
             @RequestParam String userId,
             @RequestParam Long messageId) {
+        try {
+            broadcastService.markMessageAsRead(userId, messageId);
+        } catch (Exception e) {
+            log.error("Error marking message as read: user={}, message={}", userId, messageId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error marking message as read");
+        }
         
         log.info("Marking message as read: user={}, message={}", userId, messageId);
         
         // In a real implementation, this would update the message status
         // and send a read receipt event via Kafka
-        
+        // For now, we'll just return a success response
         return ResponseEntity.ok("Message marked as read");
     }
-
-    /**
-   * Poll for new messages
-   * GET /api/sse/poll?userId={userId}&lastTimestamp={lastTimestamp}
-   */
-  @GetMapping("/poll")
-  public ResponseEntity<java.util.Map<String, Object>> pollForMessages(
-          @RequestParam String userId,
-          @RequestParam(defaultValue = "0") String lastTimestamp) {
-      
-      log.debug("Polling for messages: user={}, lastTimestamp={}", userId, lastTimestamp);
-      
-      // In a real implementation, this would query for new messages since lastTimestamp
-      // For now, return empty response
-      java.util.Map<String, Object> response = new java.util.HashMap<>();
-      response.put("messages", java.util.List.of());
-      response.put("timestamp", java.time.LocalDateTime.now().toString());
-      
-      return ResponseEntity.ok(response);
-  }
 }

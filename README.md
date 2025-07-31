@@ -4,7 +4,7 @@ A modern React frontend for the Broadcast Messaging System, built with Vite, Typ
 
 ## Features
 
-- **Real-time Messaging**: Connects to Java backend via HTTP polling for real-time message delivery
+- **Real-time Messaging**: Connects to Java backend via HTTP SSE and EventSource for real-time message delivery
 - **Admin Panel**: Create, manage, and monitor broadcast messages
 - **User Panel**: Receive and manage broadcast messages with read/unread status
 - **Modern UI**: Built with shadcn/ui components and Tailwind CSS
@@ -76,7 +76,6 @@ The frontend is configured to connect to a Java backend:
 - `DELETE /api/broadcasts/{id}` - Cancel broadcast
 - `GET /api/broadcasts/{id}/stats` - Get broadcast statistics
 - `GET /api/user/messages` - Get user messages
-- `GET /api/sse/poll` - Poll for new messages
 - `POST /api/sse/read` - Mark message as read
 
 ## Components

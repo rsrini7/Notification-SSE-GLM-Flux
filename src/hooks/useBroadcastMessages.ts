@@ -4,21 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useSseConnection } from './useSseConnection';
 
-interface BroadcastMessage {
-  id: number;
-  broadcastId: number;
-  userId: string;
-  deliveryStatus: string;
-  readStatus: string;
-  deliveredAt?: string;
-  readAt?: string;
-  createdAt: string;
-  senderName: string;
-  content: string;
-  priority: string;
-  category: string;
-  broadcastCreatedAt: string;
-}
+import { type UserBroadcastMessage } from '../services/api';
 
 interface UseBroadcastMessagesOptions {
   userId: string;
@@ -33,7 +19,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     autoConnect = true
   } = options;
 
-  const [messages, setMessages] = useState<BroadcastMessage[]>([]);
+  const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -111,7 +97,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     try {
       // In a real implementation, this would call the backend API
       // For now, we'll use mock data
-      const mockMessages: BroadcastMessage[] = [
+      const mockMessages: UserBroadcastMessage[] = [
         {
           id: 1,
           broadcastId: 1,
@@ -173,8 +159,8 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const markAsRead = useCallback(async (messageId: number) => {
     try {
       // Update local state
-      setMessages(prev => prev.map(msg => 
-        msg.id === messageId 
+      setMessages(prev => prev.map(msg =>
+        msg.id === messageId
           ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() }
           : msg
       ));
