@@ -9,7 +9,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Alert, AlertDescription } from '../ui/alert';
 import { useToast } from '../../hooks/use-toast';
-import { Send, CheckCircle, AlertCircle, CalendarClock, Ban, RefreshCw } from 'lucide-react';
+import { Send, CheckCircle, AlertCircle, CalendarClock, Ban, RefreshCw, BarChart3 } from 'lucide-react';
 import {
   broadcastService,
   type BroadcastMessage,
@@ -360,9 +360,18 @@ const BroadcastAdminPanel: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      {broadcast.status !== 'CANCELLED' && broadcast.status !== 'EXPIRED' && (
-                        <Button variant="outline" size="sm" onClick={() => cancelBroadcast(broadcast.id)}>Cancel</Button>
-                      )}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Button variant="outline" size="sm" onClick={() => {
+                            setSelectedBroadcast(broadcast);
+                            setActiveTab('stats');
+                        }}>
+                            <BarChart3 className="h-4 w-4" />
+                        </Button>
+                        {broadcast.status !== 'CANCELLED' && broadcast.status !== 'EXPIRED' && (
+                            // **FIX:** Changed `size` to `variant` to apply the correct destructive style.
+                            <Button variant="destructive" size="sm" onClick={() => cancelBroadcast(broadcast.id)}>Cancel</Button>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-3 gap-4 text-xs pt-2 border-t border-gray-100">
                       <div><span className="text-gray-500">Targeted:</span><span className="ml-1 font-medium">{broadcast.totalTargeted}</span></div>
