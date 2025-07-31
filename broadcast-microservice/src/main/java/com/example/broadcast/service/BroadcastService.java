@@ -23,11 +23,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * Service for managing broadcast messages.
- * This service orchestrates the creation, scheduling, and cancellation of broadcasts.
- * It delegates user targeting and preference checks to the BroadcastTargetingService.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -37,16 +32,11 @@ public class BroadcastService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    
-    // The new service for handling targeting logic
     private final BroadcastTargetingService broadcastTargetingService;
     
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
     private String kafkaTopic;
 
-    /**
-     * Create a new broadcast message.
-     */
     @Transactional
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
@@ -90,7 +80,6 @@ public class BroadcastService {
     }
 
     private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
-        // Delegate user targeting and preference filtering to the new service
         List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
         int totalTargeted = userBroadcasts.size();
 
@@ -108,7 +97,6 @@ public class BroadcastService {
             userBroadcastRepository.batchInsert(userBroadcasts);
         }
 
-        // Extract user IDs for the Kafka event
         List<String> targetUserIds = userBroadcasts.stream()
             .map(UserBroadcastMessage::getUserId)
             .collect(Collectors.toList());
@@ -118,24 +106,15 @@ public class BroadcastService {
         return buildBroadcastResponse(broadcast, totalTargeted);
     }
 
-    /**
-     * Get broadcast by ID.
-     */
     public BroadcastResponse getBroadcast(Long id) {
         return broadcastRepository.findBroadcastWithStatsById(id)
                 .orElseThrow(() -> new RuntimeException("Broadcast not found: " + id));
     }
 
-    /**
-     * Get all active broadcasts.
-     */
     public List<BroadcastResponse> getActiveBroadcasts() {
         return broadcastRepository.findActiveBroadcastsWithStats();
     }
 
-    /**
-     * Cancel a broadcast
-     */
     @Transactional
     public void cancelBroadcast(Long id) {
         BroadcastMessage broadcast = broadcastRepository.findById(id)
@@ -154,8 +133,27 @@ public class BroadcastService {
     }
 
     /**
-     * Get user messages
+     * **NEW:** Marks a broadcast as EXPIRED and notifies users.
      */
+    @Transactional
+    public void expireBroadcast(Long broadcastId) {
+        BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
+                .orElseThrow(() -> new RuntimeException("Broadcast not found: " + broadcastId));
+
+        if ("ACTIVE".equals(broadcast.getStatus())) {
+            broadcastRepository.updateStatus(broadcastId, "EXPIRED");
+            log.info("Broadcast expired: {}", broadcastId);
+
+            List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);
+            List<String> targetUsers = userBroadcasts.stream()
+                    .map(UserBroadcastMessage::getUserId)
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            sendBroadcastEvent(broadcast, targetUsers, "EXPIRED");
+        }
+    }
+
     public List<UserBroadcastResponse> getUserMessages(String userId) {
         log.info("Getting messages for user: {}", userId);
         List<UserBroadcastMessage> userMessages = userBroadcastRepository.findByUserId(userId);
@@ -164,9 +162,6 @@ public class BroadcastService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Get unread messages for user
-     */
     public List<UserBroadcastResponse> getUnreadMessages(String userId) {
         log.info("Getting unread messages for user: {}", userId);
         List<UserBroadcastMessage> unreadMessages = userBroadcastRepository.findUnreadByUserId(userId);
@@ -175,9 +170,6 @@ public class BroadcastService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Mark message as read
-     */
     @Transactional
     public void markMessageAsRead(String userId, Long messageId) {
         log.info("Marking message as read: user={}, message={}", userId, messageId);
@@ -192,8 +184,6 @@ public class BroadcastService {
         userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
         log.info("Message marked as read: user={}, message={}", userId, messageId);
     }
-
-    // --- Private Helper Methods ---
 
     private void sendBroadcastEvent(BroadcastMessage broadcast, List<String> targetUsers, String eventType) {
         targetUsers.forEach(userId -> {
@@ -255,6 +245,7 @@ public class BroadcastService {
                 .priority(broadcast.getPriority())
                 .category(broadcast.getCategory())
                 .broadcastCreatedAt(broadcast.getCreatedAt())
+                .expiresAt(broadcast.getExpiresAt())
                 .build();
     }
 }

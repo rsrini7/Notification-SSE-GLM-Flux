@@ -18,10 +18,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Kafka consumer service for processing broadcast events
- * Handles message delivery, read receipts, and other events with at-least-once semantics
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -31,14 +27,9 @@ public class KafkaConsumerService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final CaffeineCacheService caffeineCacheService;
     
-    // Thread pool for async processing
-    @Getter // Getter for the ShutdownManager to access it
+    @Getter
     private final ExecutorService executorService = Executors.newFixedThreadPool(10);
 
-    /**
-     * Process broadcast events from Kafka
-     * This listener handles all types of broadcast events with proper error handling
-     */
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}",
             groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}",
@@ -49,35 +40,23 @@ public class KafkaConsumerService {
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
-            @Header(KafkaHeaders.RECEIVED_TIMESTAMP) long timestamp,
             Acknowledgment acknowledgment) {
         
         log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}", 
                 event.getEventId(), topic, partition, offset);
         
-        try {
-            // Process event asynchronously to avoid blocking the consumer
-            CompletableFuture.runAsync(() -> {
-                try {
-                    handleEvent(event);
-                    acknowledgment.acknowledge();
-                    log.debug("Event processed and acknowledged: {}", event.getEventId());
-                } catch (Exception e) {
-                    log.error("Error processing event {}: {}", event.getEventId(), e.getMessage());
-                    // Don't acknowledge - let Kafka retry
-                    throw new RuntimeException("Event processing failed", e);
-                }
-            }, executorService);
-            
-        } catch (Exception e) {
-            log.error("Error submitting event for processing: {}", e.getMessage());
-            // Don't acknowledge - let Kafka retry
-        }
+        CompletableFuture.runAsync(() -> {
+            try {
+                handleEvent(event);
+                acknowledgment.acknowledge();
+                log.debug("Event processed and acknowledged: {}", event.getEventId());
+            } catch (Exception e) {
+                log.error("Error processing event {}: {}", event.getEventId(), e.getMessage());
+                throw new RuntimeException("Event processing failed", e);
+            }
+        }, executorService);
     }
 
-    /**
-     * Handle different types of broadcast events
-     */
     private void handleEvent(MessageDeliveryEvent event) {
         switch (event.getEventType()) {
             case "CREATED":
@@ -95,49 +74,51 @@ public class KafkaConsumerService {
             case "CANCELLED":
                 handleBroadcastCancelled(event);
                 break;
+            case "EXPIRED":
+                handleBroadcastExpired(event);
+                break;
             default:
                 log.warn("Unknown event type: {}", event.getEventType());
         }
     }
 
     /**
-     * Handle broadcast creation event
-     * This ensures messages are delivered to online users immediately
+     * **NEW:** Handles the broadcast expired event.
      */
+    private void handleBroadcastExpired(MessageDeliveryEvent event) {
+        log.info("Handling broadcast expired event for user: {}, broadcast: {}",
+                event.getUserId(), event.getBroadcastId());
+        try {
+            // Notify user via SSE to remove the message from their UI
+            sseService.handleMessageEvent(event);
+        } catch (Exception e) {
+            log.error("Error handling broadcast expired event: {}", e.getMessage());
+            throw new RuntimeException("Failed to handle broadcast expired event", e);
+        }
+    }
+
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}", 
                 event.getUserId(), event.getBroadcastId());
         
         try {
-            // Check if user is online (via cache or SSE service)
             boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) || 
                               sseService.isUserConnected(event.getUserId());
             
             if (isOnline) {
-                // Deliver message immediately via SSE
                 sseService.handleMessageEvent(event);
-                
-                // Update delivery status in database
                 updateDeliveryStatus(event.getBroadcastId(), event.getUserId(), "DELIVERED");
-                
                 log.info("Broadcast delivered to online user: {}", event.getUserId());
             } else {
-                // User is offline - message remains pending
                 log.info("User {} is offline, message remains pending", event.getUserId());
-                
-                // Cache the event for when user comes online
                 caffeineCacheService.cachePendingEvent(event);
             }
-            
         } catch (Exception e) {
             log.error("Error handling broadcast created event: {}", e.getMessage());
             throw new RuntimeException("Failed to handle broadcast created event", e);
         }
     }
 
-    /**
-     * Handle message delivery event
-     */
     private void handleMessageDelivered(MessageDeliveryEvent event) {
         log.debug("Handling message delivered event for user: {}, broadcast: {}", 
                 event.getUserId(), event.getBroadcastId());
@@ -158,9 +139,6 @@ public class KafkaConsumerService {
         }
     }
 
-    /**
-     * Handle message read event
-     */
     private void handleMessageRead(MessageDeliveryEvent event) {
         log.info("Handling message read event for user: {}, broadcast: {}", 
                 event.getUserId(), event.getBroadcastId());
@@ -181,9 +159,6 @@ public class KafkaConsumerService {
         }
     }
 
-    /**
-     * Handle delivery failed event
-     */
     private void handleDeliveryFailed(MessageDeliveryEvent event) {
         log.warn("Handling delivery failed event for user: {}, broadcast: {}, error: {}", 
                 event.getUserId(), event.getBroadcastId(), event.getErrorDetails());
@@ -205,9 +180,6 @@ public class KafkaConsumerService {
         }
     }
 
-    /**
-     * Handle broadcast cancelled event
-     */
     private void handleBroadcastCancelled(MessageDeliveryEvent event) {
         log.info("Handling broadcast cancelled event for user: {}, broadcast: {}", 
                 event.getUserId(), event.getBroadcastId());
@@ -236,9 +208,6 @@ public class KafkaConsumerService {
         }
     }
 
-    /**
-     * Update delivery status in database
-     */
     private void updateDeliveryStatus(Long broadcastId, String userId, String status) {
         try {
             List<UserBroadcastMessage> messages = userBroadcastRepository.findByUserIdAndStatus(
@@ -257,9 +226,6 @@ public class KafkaConsumerService {
         }
     }
 
-    /**
-     * Update read status in database
-     */
     private void updateReadStatus(Long broadcastId, String userId, String status) {
         try {
             List<UserBroadcastMessage> messages = userBroadcastRepository.findByUserIdAndStatus(
@@ -278,10 +244,6 @@ public class KafkaConsumerService {
         }
     }
 
-    /**
-     * Process pending events for a user when they come online
-     * This is called when a user reconnects or logs in
-     */
     public void processPendingEvents(String userId) {
         log.info("Processing pending events for user: {}", userId);
         

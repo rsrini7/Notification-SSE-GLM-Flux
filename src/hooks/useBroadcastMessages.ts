@@ -22,13 +22,16 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  // Fetch existing messages
   const fetchMessages = useCallback(async () => {
     setLoading(true);
-    console.log('Fetching messages for userId:', userId);
     try {
-      const realMessages = await userService.getUserMessages(userId);
-      setMessages(realMessages);
+      const serverMessages = await userService.getUserMessages(userId);
+      // Filter out already expired messages on initial fetch
+      const now = new Date().getTime();
+      const validMessages = serverMessages.filter(msg => 
+        !msg.expiresAt || new Date(msg.expiresAt).getTime() > now
+      );
+      setMessages(validMessages);
     } catch (error) {
       toast({
         title: 'Error',
@@ -40,20 +43,17 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [userId, toast]);
 
-  // Handle SSE events
   const handleSseEvent = useCallback((event: any) => {
     switch (event.type) {
       case 'MESSAGE':
         if (event.data) {
           setMessages(prev => {
-            // Avoid duplicates
             const exists = prev.some(msg => msg.id === event.data.id);
             if (!exists) {
               return [event.data, ...prev];
             }
             return prev;
           });
-
           toast({
             title: 'New Message',
             description: event.data.content.substring(0, 50) + '...',
@@ -62,7 +62,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
       
       case 'READ_RECEIPT':
-        // Update message read status
         setMessages(prev => prev.map(msg => 
           msg.broadcastId === event.data.broadcastId 
             ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() }
@@ -70,12 +69,20 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         ));
         break;
       
+      case 'MESSAGE_EXPIRED':
+        if (event.data && event.data.broadcastId) {
+            setMessages(prev => prev.filter(msg => msg.broadcastId !== event.data.broadcastId));
+            toast({
+                title: 'Message Expired',
+                description: 'A broadcast message has been removed.',
+            });
+        }
+        break;
+
       case 'CONNECTED':
-        // Connection established, fetch any pending messages (handled by onConnect callback)
         break;
 
       case 'HEARTBEAT':
-        // Ignore heartbeat events
         break;
       
       default:
@@ -83,29 +90,31 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [toast]);
 
-  // Setup SSE connection
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+        const now = new Date().getTime();
+        setMessages(prevMessages =>
+            prevMessages.filter(message => {
+                if (!message.expiresAt) return true;
+                return new Date(message.expiresAt).getTime() > now;
+            })
+        );
+    }, 60000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
   const onConnect = useCallback(() => {
-    toast({
-      title: 'Connected',
-      description: 'Real-time updates enabled',
-    });
+    toast({ title: 'Connected', description: 'Real-time updates enabled' });
     fetchMessages();
   }, [toast, fetchMessages]);
 
   const onDisconnect = useCallback(() => {
-    toast({
-      title: 'Disconnected',
-      description: 'Real-time updates disabled',
-      variant: 'destructive',
-    });
+    toast({ title: 'Disconnected', description: 'Real-time updates disabled', variant: 'destructive' });
   }, [toast]);
 
   const onError = useCallback(() => {
-    toast({
-      title: 'Connection Error',
-      description: 'Failed to connect to real-time updates',
-      variant: 'destructive',
-    });
+    toast({ title: 'Connection Error', description: 'Failed to connect to real-time updates', variant: 'destructive' });
   }, [toast]);
 
   const sseConnection = useSseConnection({
@@ -118,48 +127,30 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     onError,
   });
 
-  // Mark message as read
   const markAsRead = useCallback(async (messageId: number) => {
     try {
-      // 1. Make the API call to the backend first.
       await sseConnection.markAsRead(messageId);
-      
-      // 2. If the API call is successful, then update the local state.
       setMessages(prev => prev.map(msg =>
         msg.id === messageId
           ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() }
           : msg
       ));
-
-      toast({
-        title: 'Message Read',
-        description: 'Message marked as read',
-      });
+      toast({ title: 'Message Read', description: 'Message marked as read' });
     } catch (error) {
-      // 3. If the API call fails, the local state is not changed, and an error is shown.
-      toast({
-        title: 'Error',
-        description: 'Failed to mark message as read. Please try again.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to mark message as read. Please try again.', variant: 'destructive' });
     }
   }, [sseConnection, toast]);
 
   // Mark all messages as read
   const markAllAsRead = useCallback(async () => {
     const unreadMessages = messages.filter(msg => msg.readStatus === 'UNREAD');
-    
-    // Use Promise.all to handle multiple requests concurrently
     try {
         await Promise.all(unreadMessages.map(message => sseConnection.markAsRead(message.id)));
-        
-        // If all API calls are successful, update the entire state at once
         setMessages(prev => prev.map(msg => 
             msg.readStatus === 'UNREAD' 
             ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() } 
             : msg
         ));
-
         toast({
             title: 'All Messages Read',
             description: 'All unread messages have been marked as read.',
@@ -173,13 +164,10 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [messages, sseConnection, toast]);
 
-  // Delete message (archive)
+  // Delete message (local/archive)
   const deleteMessage = useCallback(async (messageId: number) => {
-    // Note: This is a local-only delete for now.
-    // For a real implementation, an API call to archive/delete would be needed here.
     try {
       setMessages(prev => prev.filter(msg => msg.id !== messageId));
-      
       toast({
         title: 'Message Archived',
         description: 'Message has been removed from your view.',
@@ -193,22 +181,15 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [toast]);
 
-  // Get message statistics
   const getMessageStats = useCallback(() => {
     const total = messages.length;
     const unread = messages.filter(msg => msg.readStatus === 'UNREAD').length;
-    const read = messages.filter(msg => msg.readStatus === 'READ').length;
-    
-    return {
-      total,
-      unread,
-      read,
-      readRate: total > 0 ? (read / total) * 100 : 0
-    };
+    const read = total - unread;
+    return { total, unread, read, readRate: total > 0 ? (read / total) * 100 : 0 };
   }, [messages]);
 
   // Filter messages by status
-  const getMessagesByStatus = useCallback((status: string) => {
+  const getMessagesByStatus = useCallback((status: 'READ' | 'UNREAD') => {
     return messages.filter(msg => msg.readStatus === status);
   }, [messages]);
 

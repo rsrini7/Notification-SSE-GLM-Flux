@@ -26,10 +26,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-/**
- * Service for managing Server-Sent Events (SSE) connections
- * Handles real-time message delivery to online users with sub-second latency
- */
 @Service
 @Slf4j
 public class SseService {
@@ -39,18 +35,12 @@ public class SseService {
     private final ObjectMapper objectMapper;
     private final BroadcastRepository broadcastRepository;
     
-    @Value("${broadcast.sse.timeout:300000}")
-    private long sseTimeout;
     @Value("${broadcast.sse.heartbeat-interval:30000}")
     private long heartbeatInterval;
     
-    // Store active SSE sinks by user ID
     private final Map<String, Sinks.Many<String>> userSinks = new ConcurrentHashMap<>();
-    // Reactor sink for handling message events
-    private final Sinks.Many<MessageDeliveryEvent> messageSink = Sinks.many().multicast().onBackpressureBuffer();
     
-    // Scheduled executor for heartbeat and cleanup
-    @Getter // Getter for the ShutdownManager to access it
+    @Getter
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
     public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository, ObjectMapper objectMapper, BroadcastRepository broadcastRepository) {
@@ -62,31 +52,21 @@ public class SseService {
 
     @PostConstruct
     public void init() {
-        // Start heartbeat task
         startHeartbeat();
-        // Start cleanup task
         startCleanup();
     }
 
-    /**
-     * Create reactive SSE event stream for a user
-     * This establishes a real-time connection for message delivery
-     */
     public Flux<String> createEventStream(String userId) {
         log.debug("Creating SSE event stream for user: {}", userId);
-        // Create a new sink for this user
         Sinks.Many<String> sink = Sinks.many().multicast().onBackpressureBuffer();
         userSinks.put(userId, sink);
         
-        // Send pending messages immediately
         sendPendingMessages(userId, sink);
-        // Send initial connection event
         sendEvent(userId, Map.of(
                 "type", "CONNECTED",
                 "timestamp", ZonedDateTime.now(),
                 "message", "SSE connection established"
         ));
-        // Return the flux as a hot stream
         return sink.asFlux()
                 .doOnCancel(() -> {
                     log.debug("SSE stream cancelled for user: {}", userId);
@@ -98,9 +78,26 @@ public class SseService {
                 });
     }
 
-    /**
-     * Send pending messages to a newly connected user
-     */
+    public void handleMessageEvent(MessageDeliveryEvent event) {
+        log.debug("Handling message event: {} for user: {}", event.getEventType(), event.getUserId());
+        if ("CREATED".equals(event.getEventType()) || "DELIVERED".equals(event.getEventType())) {
+            deliverMessageToUser(event.getUserId(), event.getBroadcastId());
+        } else if ("READ".equals(event.getEventType())) {
+            sendEvent(event.getUserId(), Map.of(
+                    "type", "READ_RECEIPT",
+                    "data", Map.of("broadcastId", event.getBroadcastId()),
+                    "timestamp", event.getTimestamp()
+            ));
+        // **NEW:** Send a message expiration event to the client
+        } else if ("EXPIRED".equals(event.getEventType())) {
+            sendEvent(event.getUserId(), Map.of(
+                    "type", "MESSAGE_EXPIRED",
+                    "data", Map.of("broadcastId", event.getBroadcastId()),
+                    "timestamp", event.getTimestamp()
+            ));
+        }
+    }
+
     private void sendPendingMessages(String userId, Sinks.Many<String> sink) {
         try {
             List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
@@ -138,9 +135,6 @@ public class SseService {
         }
     }
 
-    /**
-     * Send event to a specific user
-     */
     public void sendEvent(String userId, Map<String, Object> event) {
         Sinks.Many<String> sink = userSinks.get(userId);
         if (sink != null) {
@@ -150,9 +144,6 @@ public class SseService {
         }
     }
 
-    /**
-     * Send event to specific sink
-     */
     private void sendEventToSink(Sinks.Many<String> sink, Map<String, Object> event) {
         try {
             String jsonEvent = objectMapper.writeValueAsString(event);
@@ -163,28 +154,6 @@ public class SseService {
         }
     }
 
-    /**
-     * Handle message delivery event from Kafka
-     */
-    public void handleMessageEvent(MessageDeliveryEvent event) {
-        log.debug("Handling message event: {} for user: {}", event.getEventType(), event.getUserId());
-        // Try to deliver via SSE if user is online
-        if ("CREATED".equals(event.getEventType()) || "DELIVERED".equals(event.getEventType())) {
-            // For message creation, try to deliver immediately
-            deliverMessageToUser(event.getUserId(), event.getBroadcastId());
-        } else if ("READ".equals(event.getEventType())) {
-            // For read events, update client state
-            sendEvent(event.getUserId(), Map.of(
-                    "type", "READ_RECEIPT",
-                    "broadcastId", event.getBroadcastId(),
-                    "timestamp", event.getTimestamp()
-            ));
-        }
-    }
-
-    /**
-     * Deliver message to specific user
-     */
     private void deliverMessageToUser(String userId, Long broadcastId) {
         try {
             List<UserBroadcastMessage> messages = userBroadcastRepository.findByUserIdAndStatus(
@@ -209,9 +178,6 @@ public class SseService {
         }
     }
 
-    /**
-     * Build user broadcast response
-     */
     private UserBroadcastResponse buildUserBroadcastResponse(UserBroadcastMessage message) {
         BroadcastMessage broadcast = broadcastRepository.findById(message.getBroadcastId())
                 .orElseThrow(() -> new RuntimeException("Broadcast not found: " + message.getBroadcastId()));
@@ -229,12 +195,10 @@ public class SseService {
                 .priority(broadcast.getPriority())
                 .category(broadcast.getCategory())
                 .broadcastCreatedAt(broadcast.getCreatedAt())
+                .expiresAt(broadcast.getExpiresAt())
                 .build();
     }
 
-    /**
-     * Start heartbeat task to keep connections alive
-     */
     private void startHeartbeat() {
         scheduler.scheduleAtFixedRate(() -> {
             try {
@@ -244,13 +208,11 @@ public class SseService {
                         "message", "Connection alive"
                 );
                 
-                // Send heartbeat to all connected users
                 userSinks.forEach((userId, sink) -> {
                     try {
                         sendEventToSink(sink, heartbeat);
                     } catch (Exception e) {
                         log.warn("Failed to send heartbeat to user {}: {}", userId, e.getMessage());
-                        // The cleanup task will handle the removal of the stale sink
                     }
                 });
                 
@@ -262,22 +224,16 @@ public class SseService {
         }, heartbeatInterval, heartbeatInterval, TimeUnit.MILLISECONDS);
     }
 
-    /**
-     * Start cleanup task for expired connections to prevent memory leaks.
-     */
     private void startCleanup() {
         scheduler.scheduleAtFixedRate(() -> {
             try {
-                // 1. Clean up expired user sessions in the database
                 int cleanedSessions = userSessionRepository.cleanupExpiredSessions();
                 if (cleanedSessions > 0) {
                     log.info("Cleaned up {} expired user sessions from the database.", cleanedSessions);
                 }
 
-                // 2. Get all user IDs that are currently active in the database
                 List<String> activeDbUsers = userSessionRepository.findAllActiveUserIds();
 
-                // 3. Identify and remove zombie sinks from the in-memory map
                 List<String> zombieSinks = userSinks.keySet().stream()
                     .filter(userId -> !activeDbUsers.contains(userId))
                     .collect(Collectors.toList());
@@ -287,7 +243,7 @@ public class SseService {
                     zombieSinks.forEach(userId -> {
                         Sinks.Many<String> sink = userSinks.remove(userId);
                         if (sink != null) {
-                            sink.tryEmitComplete(); // Gracefully complete the sink
+                            sink.tryEmitComplete();
                         }
                     });
                 }
@@ -297,35 +253,14 @@ public class SseService {
             } catch (Exception e) {
                 log.error("Error in cleanup task: {}", e.getMessage());
             }
-        }, 60000, 60000, TimeUnit.MILLISECONDS); // Run every minute
+        }, 60000, 60000, TimeUnit.MILLISECONDS);
     }
 
-
-    /**
-     * Get number of connected users
-     */
     public int getConnectedUserCount() {
         return userSinks.size();
     }
 
-    /**
-     * Check if user is connected
-     */
     public boolean isUserConnected(String userId) {
         return userSinks.containsKey(userId);
-    }
-
-    /**
-     * Get message sink for reactive processing
-     */
-    public Sinks.Many<MessageDeliveryEvent> getMessageSink() {
-        return messageSink;
-    }
-
-    /**
-     * Get flux of message events
-     */
-    public Flux<MessageDeliveryEvent> getMessageEvents() {
-        return messageSink.asFlux();
     }
 }

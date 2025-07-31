@@ -94,10 +94,7 @@ public class BroadcastRepository {
             return ps;
         }, keyHolder);
 
-        // **FIXED**: Handle multiple returned keys from H2 in PostgreSQL mode
         if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
-            // H2 in PostgreSQL mode returns multiple generated columns (ID, CREATED_AT, etc.).
-            // We must explicitly retrieve the 'ID' column from the map of keys.
             Map<String, Object> keys = keyHolder.getKeyList().get(0);
             Number id = (Number) keys.get("ID");
             if (id != null) {
@@ -106,7 +103,6 @@ public class BroadcastRepository {
                 throw new RuntimeException("Generated key 'ID' not found in the returned keys.");
             }
         } else if (keyHolder.getKey() != null) {
-            // Fallback for drivers that might return a single key.
             broadcast.setId(keyHolder.getKey().longValue());
         } else {
             throw new RuntimeException("Failed to retrieve generated key for broadcast.");
@@ -124,7 +120,7 @@ public class BroadcastRepository {
     }
 
     /**
-     * NEW: Find a single broadcast with its statistics using a JOIN.
+     * Find a single broadcast with its statistics using a JOIN.
      */
     public Optional<BroadcastResponse> findBroadcastWithStatsById(Long id) {
         String sql = """
@@ -144,7 +140,7 @@ public class BroadcastRepository {
     }
 
     /**
-     * NEW: Find all active broadcasts with their statistics in a single query to prevent N+1 problem.
+     * Find all active broadcasts with their statistics in a single query to prevent N+1 problem.
      */
     public List<BroadcastResponse> findActiveBroadcastsWithStats() {
         String sql = """
@@ -172,6 +168,14 @@ public class BroadcastRepository {
      */
     public List<BroadcastMessage> findScheduledBroadcastsToProcess(ZonedDateTime now) {
         String sql = "SELECT * FROM broadcast_messages WHERE status = 'SCHEDULED' AND scheduled_at <= ?";
+        return jdbcTemplate.query(sql, broadcastRowMapper, now);
+    }
+    
+    /**
+     * **NEW:** Find active broadcasts that have passed their expiration time.
+     */
+    public List<BroadcastMessage> findExpiredBroadcasts(ZonedDateTime now) {
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at <= ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, now);
     }
 

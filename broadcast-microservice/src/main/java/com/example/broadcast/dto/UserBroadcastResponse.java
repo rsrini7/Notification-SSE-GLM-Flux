@@ -30,4 +30,6 @@ public class UserBroadcastResponse {
     private String priority;
     private String category;
     private ZonedDateTime broadcastCreatedAt;
+    private ZonedDateTime scheduledAt;    
+    private ZonedDateTime expiresAt;
 }
