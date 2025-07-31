@@ -2,7 +2,9 @@ package com.example.broadcast.service;
 
 import com.example.broadcast.dto.MessageDeliveryEvent;
 import com.example.broadcast.dto.UserBroadcastResponse;
+import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.UserBroadcastMessage;
+import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserSessionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +35,7 @@ public class SseService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final UserSessionRepository userSessionRepository;
     private final ObjectMapper objectMapper;
+    private final BroadcastRepository broadcastRepository;
     
     @Value("${broadcast.sse.timeout:300000}")
     private long sseTimeout;
@@ -49,10 +52,11 @@ public class SseService {
     // Scheduled executor for heartbeat and cleanup
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
-    public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository, ObjectMapper objectMapper) {
+    public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository, ObjectMapper objectMapper, BroadcastRepository broadcastRepository) {
         this.userBroadcastRepository = userBroadcastRepository;
         this.userSessionRepository = userSessionRepository;
         this.objectMapper = objectMapper;
+        this.broadcastRepository = broadcastRepository;
     }
 
     @PostConstruct
@@ -215,6 +219,9 @@ public class SseService {
      * Build user broadcast response
      */
     private UserBroadcastResponse buildUserBroadcastResponse(UserBroadcastMessage message) {
+        BroadcastMessage broadcast = broadcastRepository.findById(message.getBroadcastId())
+                .orElseThrow(() -> new RuntimeException("Broadcast not found: " + message.getBroadcastId()));
+
         return UserBroadcastResponse.builder()
                 .id(message.getId())
                 .broadcastId(message.getBroadcastId())
@@ -224,12 +231,11 @@ public class SseService {
                 .deliveredAt(message.getDeliveredAt())
                 .readAt(message.getReadAt())
                 .createdAt(message.getCreatedAt())
-                // In a real implementation, these would be fetched from broadcast repository
-                .senderName("System")
-                .content("Sample message content")
-                .priority("NORMAL")
-                .category("GENERAL")
-                .broadcastCreatedAt(LocalDateTime.now())
+                .senderName(broadcast.getSenderName())
+                .content(broadcast.getContent())
+                .priority(broadcast.getPriority())
+                .category(broadcast.getCategory())
+                .broadcastCreatedAt(broadcast.getCreatedAt())
                 .build();
     }
 
