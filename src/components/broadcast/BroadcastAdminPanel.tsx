@@ -213,8 +213,8 @@ const BroadcastAdminPanel: React.FC = () => {
           <TabsTrigger value="stats">Statistics</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="create">
-          <Card className="border z-50">
+        <TabsContent value="create" className="overflow-visible">
+          <Card className="border z-50 overflow-visible">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Send className="h-5 w-5" />
@@ -259,14 +259,14 @@ const BroadcastAdminPanel: React.FC = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-4 overflow-visible">
                   <div>
                     <Label htmlFor="targetType">Target Type</Label>
                     <Select value={formData.targetType} onValueChange={(value) => setFormData(prev => ({ ...prev, targetType: value }))}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent position="popper" sideOffset={8}>
+                      <SelectContent position="popper" sideOffset={20}>
                         <SelectItem value="ALL">All Users</SelectItem>
                         <SelectItem value="SELECTED">Selected Users</SelectItem>
                         <SelectItem value="ROLE">By Role</SelectItem>
@@ -279,7 +279,7 @@ const BroadcastAdminPanel: React.FC = () => {
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent position="popper" sideOffset={8}>
+                      <SelectContent position="popper" sideOffset={20}>
                         <SelectItem value="LOW">Low</SelectItem>
                         <SelectItem value="NORMAL">Normal</SelectItem>
                         <SelectItem value="HIGH">High</SelectItem>
@@ -318,7 +318,7 @@ const BroadcastAdminPanel: React.FC = () => {
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent position="popper" sideOffset={8}>
+                    <SelectContent position="popper" sideOffset={20}>
                       <SelectItem value="immediate">Publish Immediately</SelectItem>
                       <SelectItem value="scheduled">Schedule for Later</SelectItem>
                     </SelectContent>
