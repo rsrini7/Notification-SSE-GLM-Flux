@@ -44,6 +44,8 @@ public class BroadcastRepository {
                     .targetIds(parseJsonArray(rs.getString("target_ids")))
                     .priority(rs.getString("priority"))
                     .category(rs.getString("category"))
+                    .scheduledAt(rs.getTimestamp("scheduled_at") != null ?
+                            rs.getTimestamp("scheduled_at").toLocalDateTime() : null)
                     .expiresAt(rs.getTimestamp("expires_at") != null ? 
                             rs.getTimestamp("expires_at").toLocalDateTime() : null)
                     .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
@@ -59,10 +61,10 @@ public class BroadcastRepository {
     public BroadcastMessage save(BroadcastMessage broadcast) {
         String sql = """
             INSERT INTO broadcast_messages 
-            (sender_id, sender_name, content, target_type, target_ids, priority, category, expires_at, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (sender_id, sender_name, content, target_type, target_ids, priority, category, scheduled_at, expires_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
-        
+
         final Object[] params = new Object[]{
                 broadcast.getSenderId(),
                 broadcast.getSenderName(),
@@ -71,6 +73,7 @@ public class BroadcastRepository {
                 toJsonArray(broadcast.getTargetIds()),
                 broadcast.getPriority(),
                 broadcast.getCategory(),
+                broadcast.getScheduledAt(),
                 broadcast.getExpiresAt(),
                 broadcast.getStatus() != null ? broadcast.getStatus() : "ACTIVE"
         };
@@ -107,7 +110,8 @@ public class BroadcastRepository {
     public List<BroadcastMessage> findActiveBroadcasts() {
         String sql = """
             SELECT * FROM broadcast_messages 
-            WHERE status = 'ACTIVE' 
+            WHERE status = 'ACTIVE'
+            AND (scheduled_at IS NULL OR scheduled_at <= CURRENT_TIMESTAMP)
             AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
             ORDER BY created_at DESC
             """;
@@ -124,6 +128,18 @@ public class BroadcastRepository {
             ORDER BY created_at DESC
             """;
         return jdbcTemplate.query(sql, broadcastRowMapper, senderId);
+    }
+
+    /**
+     * Find scheduled broadcasts that are ready to be processed
+     */
+    public List<BroadcastMessage> findScheduledBroadcastsToProcess(LocalDateTime now) {
+        String sql = """
+            SELECT * FROM broadcast_messages
+            WHERE status = 'SCHEDULED'
+            AND scheduled_at <= ?
+            """;
+        return jdbcTemplate.query(sql, broadcastRowMapper, now);
     }
 
     /**

@@ -115,11 +115,15 @@ public class UserBroadcastRepository {
      */
     public List<UserBroadcastMessage> findUnreadMessages(String userId) {
         String sql = """
-            SELECT * FROM user_broadcast_messages 
-            WHERE user_id = ? 
-            AND read_status = 'UNREAD'
-            AND delivery_status = 'DELIVERED'
-            ORDER BY created_at DESC
+            SELECT ubm.* FROM user_broadcast_messages ubm
+            JOIN broadcast_messages bm ON ubm.broadcast_id = bm.id
+            WHERE ubm.user_id = ? 
+            AND ubm.read_status = 'UNREAD'
+            AND ubm.delivery_status = 'DELIVERED'
+            AND bm.status = 'ACTIVE'
+            AND (bm.scheduled_at IS NULL OR bm.scheduled_at <= CURRENT_TIMESTAMP)
+            AND (bm.expires_at IS NULL OR bm.expires_at > CURRENT_TIMESTAMP)
+            ORDER BY ubm.created_at DESC
             """;
         return jdbcTemplate.query(sql, userBroadcastRowMapper, userId);
     }
@@ -248,9 +252,13 @@ public class UserBroadcastRepository {
      */
     public List<UserBroadcastMessage> findByUserId(String userId) {
         String sql = """
-            SELECT * FROM user_broadcast_messages 
-            WHERE user_id = ? 
-            ORDER BY created_at DESC
+            SELECT ubm.* FROM user_broadcast_messages ubm
+            JOIN broadcast_messages bm ON ubm.broadcast_id = bm.id
+            WHERE ubm.user_id = ?
+            AND bm.status = 'ACTIVE'
+            AND (bm.scheduled_at IS NULL OR bm.scheduled_at <= CURRENT_TIMESTAMP)
+            AND (bm.expires_at IS NULL OR bm.expires_at > CURRENT_TIMESTAMP)
+            ORDER BY ubm.created_at DESC
             """;
         return jdbcTemplate.query(sql, userBroadcastRowMapper, userId);
     }

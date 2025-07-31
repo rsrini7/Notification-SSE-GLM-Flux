@@ -14,10 +14,11 @@ CREATE TABLE IF NOT EXISTS broadcast_messages (
     target_ids TEXT, -- JSON array of user IDs or role IDs for targeted broadcasts
     priority VARCHAR(20) DEFAULT 'NORMAL' CHECK (priority IN ('LOW', 'NORMAL', 'HIGH', 'URGENT')),
     category VARCHAR(100),
+    scheduled_at TIMESTAMP WITH TIME ZONE,
     expires_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'EXPIRED', 'CANCELLED'))
+    status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'SCHEDULED', 'EXPIRED', 'CANCELLED'))
 );
 
 -- User Broadcast Messages Table (User-side records)

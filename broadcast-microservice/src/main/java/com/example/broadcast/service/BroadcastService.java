@@ -53,8 +53,7 @@ public class BroadcastService {
     @Transactional
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
-        
-        // Create broadcast message
+
         BroadcastMessage broadcast = BroadcastMessage.builder()
                 .senderId(request.getSenderId())
                 .senderName(request.getSenderName())
@@ -63,19 +62,39 @@ public class BroadcastService {
                 .targetIds(request.getTargetIds())
                 .priority(request.getPriority())
                 .category(request.getCategory())
+                .scheduledAt(request.getScheduledAt())
                 .expiresAt(request.getExpiresAt())
-                .status("ACTIVE")
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        // Save broadcast to database
-        broadcast = broadcastRepository.save(broadcast);
+        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(LocalDateTime.now())) {
+            broadcast.setStatus("SCHEDULED");
+            broadcast = broadcastRepository.save(broadcast);
+            log.info("Broadcast with ID: {} is scheduled for: {}", broadcast.getId(), broadcast.getScheduledAt());
+            return buildBroadcastResponse(broadcast, 0);
+        } else {
+            broadcast.setStatus("ACTIVE");
+            broadcast = broadcastRepository.save(broadcast);
+            return triggerBroadcast(broadcast);
+        }
+    }
 
-        // Determine target users and create user broadcast records
-        List<String> targetUsers = determineTargetUsers(request);
+    @Transactional
+    public void processScheduledBroadcast(Long broadcastId) {
+        BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
+                .orElseThrow(() -> new RuntimeException("Broadcast not found: " + broadcastId));
+        
+        broadcast.setStatus("ACTIVE");
+        broadcast.setUpdatedAt(LocalDateTime.now());
+        broadcastRepository.updateStatus(broadcast.getId(), "ACTIVE");
 
-        // Save initial broadcast statistics
+        triggerBroadcast(broadcast);
+    }
+
+    private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
+        List<String> targetUsers = determineTargetUsers(broadcast);
+
         BroadcastStatistics initialStats = BroadcastStatistics.builder()
                 .broadcastId(broadcast.getId())
                 .totalTargeted(targetUsers.size())
@@ -86,34 +105,32 @@ public class BroadcastService {
                 .build();
         broadcastStatisticsRepository.save(initialStats);
         List<UserBroadcastMessage> userBroadcasts = createUserBroadcastMessages(broadcast.getId(), targetUsers);
-        
-        // Batch insert user broadcast messages for performance
+
         if (!userBroadcasts.isEmpty()) {
             userBroadcastRepository.batchInsert(userBroadcasts);
         }
-        
-        // Send creation event to Kafka for fan-out
+
         sendBroadcastEvent(broadcast, targetUsers, "CREATED");
-        
-        log.info("Broadcast created successfully with ID: {}, targeting {} users", broadcast.getId(), targetUsers.size());
-        
+
+        log.info("Broadcast triggered successfully with ID: {}, targeting {} users", broadcast.getId(), targetUsers.size());
+
         return buildBroadcastResponse(broadcast, targetUsers.size());
     }
 
     /**
      * Determine target users based on broadcast request
      */
-    private List<String> determineTargetUsers(BroadcastRequest request) {
+    private List<String> determineTargetUsers(BroadcastMessage broadcast) {
         // In a real implementation, this would query user service or database
         // For now, we'll return sample user IDs based on target type
         
-        if ("ALL".equals(request.getTargetType())) {
+        if ("ALL".equals(broadcast.getTargetType())) {
             // Return all active users (in production, this would query user service)
             return List.of("user-001", "user-002", "user-003", "user-004", "user-005");
-        } else if ("SELECTED".equals(request.getTargetType()) && request.getTargetIds() != null) {
+        } else if ("SELECTED".equals(broadcast.getTargetType()) && broadcast.getTargetIds() != null) {
             // Return specifically selected users
-            return request.getTargetIds();
-        } else if ("ROLE".equals(request.getTargetType()) && request.getTargetIds() != null) {
+            return broadcast.getTargetIds();
+        } else if ("ROLE".equals(broadcast.getTargetType()) && broadcast.getTargetIds() != null) {
             // Return users with specified roles (in production, this would query user service)
             return List.of("user-001", "user-002", "user-003");
         }
