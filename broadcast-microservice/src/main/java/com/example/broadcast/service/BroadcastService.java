@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.broadcast.exception.UserServiceUnavailableException;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -39,7 +40,7 @@ public class BroadcastService {
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
     private String broadcastTopicName;
 
-    @Transactional
+    @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
 
@@ -57,7 +58,7 @@ public class BroadcastService {
                 .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
 
-        // **FIX:** Check for immediate expiration on creation
+        // Check for immediate expiration on creation
         if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
             log.warn("Broadcast creation request for an already expired message from sender: {}. Expiration: {}", broadcast.getSenderId(), broadcast.getExpiresAt());
             broadcast.setStatus("EXPIRED");
@@ -77,7 +78,7 @@ public class BroadcastService {
         }
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public void processScheduledBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new RuntimeException("Broadcast not found: " + broadcastId));
