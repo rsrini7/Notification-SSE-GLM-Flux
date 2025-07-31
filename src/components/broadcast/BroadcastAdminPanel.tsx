@@ -9,7 +9,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Alert, AlertDescription } from '../ui/alert';
 import { useToast } from '../../hooks/use-toast';
-import { Send, CheckCircle, AlertCircle, CalendarClock, Ban } from 'lucide-react';
+import { Send, CheckCircle, AlertCircle, CalendarClock, Ban, RefreshCw } from 'lucide-react';
 import {
   broadcastService,
   type BroadcastMessage,
@@ -181,6 +181,19 @@ const BroadcastAdminPanel: React.FC = () => {
     }
   };
 
+  const refreshStats = useCallback(() => {
+    fetchBroadcasts('all');
+    if (selectedBroadcast) {
+        fetchBroadcastStats(selectedBroadcast.id);
+        fetchDeliveryDetails(selectedBroadcast.id);
+    }
+    toast({
+        title: "Refreshed",
+        description: "Statistics and broadcast data have been updated.",
+    });
+  }, [selectedBroadcast, fetchBroadcasts, fetchBroadcastStats, fetchDeliveryDetails, toast]);
+
+
   return (
     <div className="container mx-auto p-6 space-y-8">
       <div className="flex items-center justify-between">
@@ -277,7 +290,6 @@ const BroadcastAdminPanel: React.FC = () => {
                             </SelectContent>
                         </Select>
                     </div>
-                    {/* **FIX:** 'Expires At' is now always visible but optional */}
                     <div>
                         <Label htmlFor="expiresAt">Expires At (optional)</Label>
                         <Input id="expiresAt" type="datetime-local" value={formData.expiresAt} onChange={(e) => setFormData(prev => ({ ...prev, expiresAt: e.target.value }))} />
@@ -302,7 +314,13 @@ const BroadcastAdminPanel: React.FC = () => {
         <TabsContent value="manage">
           <Card className="border">
             <CardHeader>
-              <CardTitle>Manage Broadcasts</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Manage Broadcasts</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => fetchBroadcasts(manageFilter)}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                </Button>
+              </div>
               <CardDescription>View and manage existing broadcast messages</CardDescription>
               <Tabs value={manageFilter} onValueChange={setManageFilter} className="w-full">
                 <TabsList className="grid w-full grid-cols-3">
@@ -327,7 +345,6 @@ const BroadcastAdminPanel: React.FC = () => {
                         <p className="text-xs text-gray-500">
                           From {broadcast.senderName} • Created: {new Date(broadcast.createdAt).toLocaleString()}
                         </p>
-                        {/* **FIX:** Display scheduled and expiration times */}
                         <div className="flex items-center gap-4 text-xs text-gray-500 mt-1 flex-wrap">
                           {broadcast.scheduledAt && (
                             <div className="flex items-center gap-1">
@@ -362,7 +379,13 @@ const BroadcastAdminPanel: React.FC = () => {
         <TabsContent value="stats">
           <Card className="border">
             <CardHeader>
-              <CardTitle>Broadcast Statistics</CardTitle>
+                <div className="flex items-center justify-between">
+                    <CardTitle>Broadcast Statistics</CardTitle>
+                    <Button variant="outline" size="sm" onClick={refreshStats}>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh
+                    </Button>
+                </div>
               <CardDescription>View detailed statistics and delivery information</CardDescription>
             </CardHeader>
             <CardContent>
