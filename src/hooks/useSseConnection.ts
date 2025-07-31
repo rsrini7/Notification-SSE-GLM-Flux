@@ -117,13 +117,20 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
 
       eventSourceRef.current.onmessage = (event) => {
         try {
-          const sseEvent = JSON.parse(event.data);
-          onMessageRef.current?.(sseEvent);
+          if (event.data) {
+            const sseEvent = JSON.parse(event.data);
+            onMessageRef.current?.(sseEvent);
+          }
         } catch (error) {
           console.error('Error parsing SSE event:', error);
           onErrorRef.current?.(error);
         }
       };
+
+      // Handle named 'HEARTBEAT' events to prevent them from being processed by onmessage
+      eventSourceRef.current.addEventListener('HEARTBEAT', () => {
+        // Do nothing, this is just a keep-alive message
+      });
 
       eventSourceRef.current.onerror = (error) => {
         console.error('SSE connection error:', error);
@@ -176,8 +183,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
   }, [userId, baseUrl, generateSessionId, startHeartbeat]);
 
-  
-
   // Disconnect from SSE
   const disconnect = useCallback(() => {
     if (eventSourceRef.current) {
@@ -205,7 +210,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       error: null
     }));
 
-    if (sessionIdRef.current) {
+    if (sessionIdRef.current && state.connected) {
       fetch(`${baseUrl}/api/sse/disconnect?userId=${userId}&sessionId=${sessionIdRef.current}`, {
         method: 'POST',
       }).catch(error => {
