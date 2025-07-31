@@ -4,6 +4,8 @@ import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.model.UserPreferences;
 import com.example.broadcast.repository.UserPreferencesRepository;
+import io.github.resilience4j.bulkhead.annotation.Bulkhead;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -11,13 +13,14 @@ import org.springframework.stereotype.Service;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
  * A service dedicated to handling the logic of targeting users for broadcasts.
  * It determines which users should receive a message and filters them based on
- * their notification preferences.
+ * their notification preferences. This service is now protected by a Circuit Breaker and Bulkhead.
  */
 @Service
 @RequiredArgsConstructor
@@ -25,6 +28,7 @@ import java.util.stream.Collectors;
 public class BroadcastTargetingService {
 
     private final UserPreferencesRepository userPreferencesRepository;
+    private final UserService userService; // Inject the new mock user service
 
     /**
      * Creates a list of UserBroadcastMessage entities for all targeted users of a broadcast.
@@ -63,30 +67,44 @@ public class BroadcastTargetingService {
     }
 
     /**
-     * Determines the initial list of target user IDs based on the broadcast's targeting type.
-     * In a real-world application, this would involve calls to a dedicated User Service
-     * to resolve roles or fetch all active users.
+     * Determines the initial list of target user IDs by calling the external UserService.
+     * This method is protected by a Circuit Breaker and a Bulkhead. If the call to the
+     * UserService fails, the circuit breaker will open, and the fallback method will be invoked.
      *
      * @param broadcast The broadcast message.
      * @return A list of user IDs.
      */
-    private List<String> determineTargetUsers(BroadcastMessage broadcast) {
-        // In a real implementation, this would query a user service or database.
-        // For this example, we return sample user IDs based on the target type.
-        log.info("Broadcast ID {}: Target type is {}", broadcast.getId(), broadcast.getTargetType());
+    @CircuitBreaker(name = "userService", fallbackMethod = "fallbackDetermineTargetUsers")
+    @Bulkhead(name = "userService")
+    protected List<String> determineTargetUsers(BroadcastMessage broadcast) {
+        log.info("Broadcast ID {}: Calling UserService to determine target users. Target type is {}", broadcast.getId(), broadcast.getTargetType());
         switch (broadcast.getTargetType()) {
             case "ALL":
-                // In production, this would query a user service for all active users.
-                return List.of("user-001", "user-002", "user-003", "user-004", "user-005");
+                return userService.getAllUserIds();
             case "SELECTED":
-                // Return specifically selected users.
                 return broadcast.getTargetIds() != null ? broadcast.getTargetIds() : List.of();
             case "ROLE":
-                // In production, this would query a user service for users with the specified roles.
-                return List.of("user-001", "user-002", "user-003"); // Mock response for users in a role
+                // Assuming targetIds contains the role name for simplicity
+                String role = broadcast.getTargetIds() != null && !broadcast.getTargetIds().isEmpty() ? broadcast.getTargetIds().get(0) : "default";
+                return userService.getUserIdsByRole(role);
             default:
                 return List.of();
         }
+    }
+
+    /**
+     * Fallback method for determineTargetUsers. This method is executed when the
+     * circuit breaker for the 'userService' is open.
+     *
+     * @param broadcast The original broadcast message.
+     * @param t The exception that caused the fallback.
+     * @return An empty list of users to prevent the broadcast from being sent.
+     */
+    protected List<String> fallbackDetermineTargetUsers(BroadcastMessage broadcast, Throwable t) {
+        log.error("Circuit breaker opened for user service. Falling back for broadcast ID {}. Error: {}", broadcast.getId(), t.getMessage());
+        // Fallback logic: return an empty list to prevent sending the broadcast.
+        // In a real-world scenario, you might return a cached list of users or trigger an alert.
+        return Collections.emptyList();
     }
 
     /**
@@ -96,7 +114,6 @@ public class BroadcastTargetingService {
      * @return true if the message should be delivered, false otherwise.
      */
     private boolean shouldDeliverToUser(UserPreferences preferences) {
-        log.info("User ID {}: Notification preferences are {}", preferences.getUserId(), preferences);
         if (preferences == null || preferences.getNotificationEnabled() == null) {
             return true; // Default to deliver if no preferences are set.
         }
@@ -120,7 +137,6 @@ public class BroadcastTargetingService {
      * @return true if it is currently quiet hours, false otherwise.
      */
     private boolean isInQuietHours(LocalTime now, LocalTime start, LocalTime end) {
-        log.info("Current time: {}, Quiet hours: {} to {}", now, start, end);
         // Handles overnight quiet hours (e.g., 22:00 to 06:00)
         if (start.isAfter(end)) {
             return now.isAfter(start) || now.isBefore(end);

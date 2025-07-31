@@ -303,7 +303,7 @@ const BroadcastAdminPanel: React.FC = () => {
                   </div>
                 )}
 
-                <Button type="submit" disabled={loading || !formData.content.trim()}>
+                <Button variant="outline" type="submit" disabled={loading || !formData.content.trim()}>
                   {loading ? 'Creating...' : 'Create Broadcast'}
                 </Button>
               </form>

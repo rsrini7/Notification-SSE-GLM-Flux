@@ -61,20 +61,18 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,info,metrics,prometheus,circuitbreakers,bulkheads
   endpoint:
     health:
       show-details: always
-    prometheus:
-      enabled: true
-  metrics:
-    tags:
-      application: broadcast-microservice
-    distribution:
-      percentiles-histogram:
-        http.server.requests: true
-      percentiles:
-        http.server.requests: 0.5,0.95,0.99
+      probes:
+        enabled: true
+      validate-group-membership: false # Allows the app to start even if Kafka isn't available
+      group:
+        readiness:
+          include: db,kafka
+        liveness:
+          include: ping
 
 # Logging Configuration
 logging:
@@ -83,11 +81,30 @@ logging:
     org.springframework.kafka: WARN
     org.springframework.web: WARN
     org.springframework.jdbc: DEBUG
+    io.github.resilience4j: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: logs/broadcast-microservice.log
+
+# Resilience4j Configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      userService:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+  bulkhead:
+    instances:
+      userService:
+        maxConcurrentCalls: 10
+        maxWaitDuration: 10ms
 
 # Custom Configuration
 broadcast:
@@ -119,12 +136,3 @@ broadcast:
     retry:
       max-attempts: 3
       backoff-delay: 1000
-
-# Health Check Configuration
-health:
-  config:
-    enabled: true
-  db:
-    enabled: true
-  kafka:
-    enabled: true
