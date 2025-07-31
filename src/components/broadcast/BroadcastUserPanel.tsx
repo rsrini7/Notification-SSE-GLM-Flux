@@ -52,11 +52,11 @@ const BroadcastUserPanel: React.FC = () => {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'URGENT': return 'bg-red-100 text-red-800 border-red-200';
-      case 'HIGH': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'NORMAL': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'LOW': return 'bg-gray-100 text-gray-800 border-gray-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'URGENT': return 'bg-red-200 text-red-900 border-red-300';
+      case 'HIGH': return 'bg-orange-200 text-orange-900 border-orange-300';
+      case 'NORMAL': return 'bg-blue-200 text-blue-900 border-blue-300';
+      case 'LOW': return 'bg-gray-200 text-gray-900 border-gray-300';
+      default: return 'bg-gray-200 text-gray-900 border-gray-300';
     }
   };
 
@@ -74,7 +74,7 @@ const BroadcastUserPanel: React.FC = () => {
   const unreadCount = stats.unread;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Broadcast Messages</h1>
@@ -109,7 +109,7 @@ const BroadcastUserPanel: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3">
-          <Card>
+          <Card className="border">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Bell className="h-5 w-5" />
@@ -184,7 +184,7 @@ const BroadcastUserPanel: React.FC = () => {
         </div>
 
         <div className="space-y-6">
-          <Card>
+          <Card className="border">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5" />
@@ -213,7 +213,7 @@ const BroadcastUserPanel: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border">
             <CardHeader>
               <CardTitle>Message Statistics</CardTitle>
             </CardHeader>
@@ -233,7 +233,7 @@ const BroadcastUserPanel: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border">
             <CardHeader>
               <CardTitle>System Status</CardTitle>
             </CardHeader>

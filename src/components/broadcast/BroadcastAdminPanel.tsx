@@ -165,21 +165,21 @@ const BroadcastAdminPanel: React.FC = () => {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'URGENT': return 'bg-red-100 text-red-800';
-      case 'HIGH': return 'bg-orange-100 text-orange-800';
-      case 'NORMAL': return 'bg-blue-100 text-blue-800';
-      case 'LOW': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'URGENT': return 'bg-red-200 text-red-900';
+      case 'HIGH': return 'bg-orange-200 text-orange-900';
+      case 'NORMAL': return 'bg-blue-200 text-blue-900';
+      case 'LOW': return 'bg-gray-200 text-gray-900';
+      default: return 'bg-gray-200 text-gray-900';
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'ACTIVE': return 'bg-green-100 text-green-800';
-      case 'EXPIRED': return 'bg-yellow-100 text-yellow-800';
-      case 'CANCELLED': return 'bg-red-100 text-red-800';
-      case 'SCHEDULED': return 'bg-purple-100 text-purple-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'ACTIVE': return 'bg-green-200 text-green-900';
+      case 'EXPIRED': return 'bg-yellow-200 text-yellow-900';
+      case 'CANCELLED': return 'bg-red-200 text-red-900';
+      case 'SCHEDULED': return 'bg-purple-200 text-purple-900';
+      default: return 'bg-gray-200 text-gray-900';
     }
   };
 
@@ -195,7 +195,7 @@ const BroadcastAdminPanel: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Broadcast Admin Panel</h1>
@@ -206,7 +206,7 @@ const BroadcastAdminPanel: React.FC = () => {
         </Badge>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="create">Create Broadcast</TabsTrigger>
           <TabsTrigger value="manage">Manage Broadcasts</TabsTrigger>
@@ -214,7 +214,7 @@ const BroadcastAdminPanel: React.FC = () => {
         </TabsList>
 
         <TabsContent value="create">
-          <Card>
+          <Card className="border z-50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Send className="h-5 w-5" />
@@ -266,7 +266,7 @@ const BroadcastAdminPanel: React.FC = () => {
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" sideOffset={8}>
                         <SelectItem value="ALL">All Users</SelectItem>
                         <SelectItem value="SELECTED">Selected Users</SelectItem>
                         <SelectItem value="ROLE">By Role</SelectItem>
@@ -279,7 +279,7 @@ const BroadcastAdminPanel: React.FC = () => {
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" sideOffset={8}>
                         <SelectItem value="LOW">Low</SelectItem>
                         <SelectItem value="NORMAL">Normal</SelectItem>
                         <SelectItem value="HIGH">High</SelectItem>
@@ -318,7 +318,7 @@ const BroadcastAdminPanel: React.FC = () => {
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" sideOffset={8}>
                       <SelectItem value="immediate">Publish Immediately</SelectItem>
                       <SelectItem value="scheduled">Schedule for Later</SelectItem>
                     </SelectContent>
@@ -358,7 +358,7 @@ const BroadcastAdminPanel: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="manage">
-          <Card>
+          <Card className="border">
             <CardHeader>
               <CardTitle>Manage Broadcasts</CardTitle>
               <CardDescription>
@@ -424,7 +424,7 @@ const BroadcastAdminPanel: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="stats">
-          <Card>
+          <Card className="border">
             <CardHeader>
               <CardTitle>Broadcast Statistics</CardTitle>
               <CardDescription>
@@ -454,7 +454,7 @@ const BroadcastAdminPanel: React.FC = () => {
 
                 {selectedBroadcast && stats && (
                   <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                       <Card>
                         <CardHeader className="pb-2">
                           <CardTitle className="text-sm">Total Targeted</CardTitle>
