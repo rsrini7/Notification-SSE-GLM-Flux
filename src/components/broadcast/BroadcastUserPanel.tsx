@@ -91,7 +91,7 @@ const BroadcastUserPanel: React.FC = () => {
             )}
           </div>
           {unreadCount > 0 && (
-            <Badge variant="destructive" className="flex items-center gap-1">
+            <Badge variant="secondary" className="flex items-center gap-1">
               <Bell className="h-3 w-3" />
               {unreadCount} unread
             </Badge>
