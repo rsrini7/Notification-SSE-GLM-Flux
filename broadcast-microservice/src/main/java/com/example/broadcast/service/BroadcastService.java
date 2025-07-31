@@ -7,12 +7,9 @@ import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.model.BroadcastStatistics;
 import com.example.broadcast.dto.UserBroadcastResponse;
-import com.example.broadcast.model.UserPreferences;
 import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
-import com.example.broadcast.repository.UserPreferencesRepository;
 import com.example.broadcast.repository.BroadcastStatisticsRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,8 +24,9 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Service for managing broadcast messages
- * Handles creation, delivery, and tracking of broadcast messages
+ * Service for managing broadcast messages.
+ * This service orchestrates the creation, scheduling, and cancellation of broadcasts.
+ * It delegates user targeting and preference checks to the BroadcastTargetingService.
  */
 @Service
 @RequiredArgsConstructor
@@ -37,15 +35,17 @@ public class BroadcastService {
 
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastRepository userBroadcastRepository;
-    private final UserPreferencesRepository userPreferencesRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    
+    // The new service for handling targeting logic
+    private final BroadcastTargetingService broadcastTargetingService;
     
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
     private String kafkaTopic;
 
     /**
-     * Create a new broadcast message
+     * Create a new broadcast message.
      */
     @Transactional
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
@@ -90,11 +90,13 @@ public class BroadcastService {
     }
 
     private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
-        List<String> targetUsers = determineTargetUsers(broadcast);
+        // Delegate user targeting and preference filtering to the new service
+        List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
+        int totalTargeted = userBroadcasts.size();
 
         BroadcastStatistics initialStats = BroadcastStatistics.builder()
                 .broadcastId(broadcast.getId())
-                .totalTargeted(targetUsers.size())
+                .totalTargeted(totalTargeted)
                 .totalDelivered(0)
                 .totalRead(0)
                 .totalFailed(0)
@@ -102,19 +104,22 @@ public class BroadcastService {
                 .build();
         broadcastStatisticsRepository.save(initialStats);
 
-        List<UserBroadcastMessage> userBroadcasts = createUserBroadcastMessages(broadcast.getId(), targetUsers);
         if (!userBroadcasts.isEmpty()) {
             userBroadcastRepository.batchInsert(userBroadcasts);
         }
 
-        sendBroadcastEvent(broadcast, targetUsers, "CREATED");
-        log.info("Broadcast triggered successfully with ID: {}, targeting {} users", broadcast.getId(), targetUsers.size());
-        return buildBroadcastResponse(broadcast, targetUsers.size());
+        // Extract user IDs for the Kafka event
+        List<String> targetUserIds = userBroadcasts.stream()
+            .map(UserBroadcastMessage::getUserId)
+            .collect(Collectors.toList());
+
+        sendBroadcastEvent(broadcast, targetUserIds, "CREATED");
+        log.info("Broadcast triggered successfully with ID: {}, targeting {} users", broadcast.getId(), totalTargeted);
+        return buildBroadcastResponse(broadcast, totalTargeted);
     }
 
     /**
      * Get broadcast by ID.
-     * OPTIMIZED: Now uses a single query with a JOIN.
      */
     public BroadcastResponse getBroadcast(Long id) {
         return broadcastRepository.findBroadcastWithStatsById(id)
@@ -123,7 +128,6 @@ public class BroadcastService {
 
     /**
      * Get all active broadcasts.
-     * OPTIMIZED: Now uses a single query to fetch broadcasts and stats, preventing N+1 problem.
      */
     public List<BroadcastResponse> getActiveBroadcasts() {
         return broadcastRepository.findActiveBroadcastsWithStats();
@@ -190,56 +194,6 @@ public class BroadcastService {
     }
 
     // --- Private Helper Methods ---
-
-    private List<String> determineTargetUsers(BroadcastMessage broadcast) {
-        if ("ALL".equals(broadcast.getTargetType())) {
-            return List.of("user-001", "user-002", "user-003", "user-004", "user-005");
-        } else if ("SELECTED".equals(broadcast.getTargetType()) && broadcast.getTargetIds() != null) {
-            return broadcast.getTargetIds();
-        } else if ("ROLE".equals(broadcast.getTargetType()) && broadcast.getTargetIds() != null) {
-            return List.of("user-001", "user-002", "user-003");
-        }
-        return List.of();
-    }
-
-    private List<UserBroadcastMessage> createUserBroadcastMessages(Long broadcastId, List<String> targetUsers) {
-        return targetUsers.stream()
-            .filter(userId -> {
-                UserPreferences preferences = userPreferencesRepository.findByUserId(userId).orElse(null);
-                return shouldDeliverToUser(preferences);
-            })
-            .map(userId -> UserBroadcastMessage.builder()
-                .broadcastId(broadcastId)
-                .userId(userId)
-                .deliveryStatus("PENDING")
-                .readStatus("UNREAD")
-                .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .build())
-            .collect(Collectors.toList());
-    }
-
-    private boolean shouldDeliverToUser(UserPreferences preferences) {
-        if (preferences == null || preferences.getNotificationEnabled() == null) {
-            return true;
-        }
-        if (!preferences.getNotificationEnabled()) {
-            return false;
-        }
-        if (preferences.getQuietHoursStart() != null && preferences.getQuietHoursEnd() != null) {
-            java.time.LocalTime now = java.time.LocalTime.now();
-            return !isInQuietHours(now, preferences.getQuietHoursStart(), preferences.getQuietHoursEnd());
-        }
-        return true;
-    }
-
-    private boolean isInQuietHours(java.time.LocalTime now, java.time.LocalTime start, java.time.LocalTime end) {
-        if (start.isBefore(end)) {
-            return !now.isBefore(start) && now.isBefore(end);
-        } else {
-            return !now.isBefore(start) || now.isBefore(end);
-        }
-    }
 
     private void sendBroadcastEvent(BroadcastMessage broadcast, List<String> targetUsers, String eventType) {
         targetUsers.forEach(userId -> {
