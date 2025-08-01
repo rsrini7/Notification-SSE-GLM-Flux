@@ -19,6 +19,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.broadcast.exception.UserServiceUnavailableException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -40,6 +41,9 @@ public class BroadcastService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final BroadcastTargetingService broadcastTargetingService;
     private final UserPreferencesRepository userPreferencesRepository;
+    // --- START OF CHANGES ---
+    private final UserService userService; // Injected the authoritative UserService
+    // --- END OF CHANGES ---
 
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
     private String broadcastTopicName;
@@ -209,10 +213,35 @@ public class BroadcastService {
         log.info("Message marked as read and statistics updated for broadcast ID: {}", userMessage.getBroadcastId());
     }
 
+    // --- START OF CHANGES ---
+    /**
+     * Retrieves all unique user IDs from the authoritative UserService.
+     * This method is protected by a circuit breaker. If the UserService is unavailable,
+     * it gracefully falls back to retrieving user IDs from the local user preferences,
+     * ensuring the UI remains functional.
+     *
+     * @return A list of unique user IDs.
+     */
+    @CircuitBreaker(name = "userService", fallbackMethod = "fallbackGetAllUserIds")
     public List<String> getAllUserIds() {
-        log.info("Retrieving all unique user IDs from the system.");
+        log.info("Retrieving all unique user IDs from the authoritative user service.");
+        return userService.getAllUserIds();
+    }
+
+    /**
+     * Fallback method for getAllUserIds.
+     * Invoked by the circuit breaker when the primary UserService is unavailable.
+     *
+     * @param t The throwable that caused the fallback.
+     * @return A list of user IDs from the user_preferences table as a fallback.
+     */
+    public List<String> fallbackGetAllUserIds(Throwable t) {
+        log.warn("UserService is unavailable, falling back to user preferences for the user list. Error: {}", t.getMessage());
+        // As a fallback, we can return the list from preferences, which is the old behavior.
+        // This provides graceful degradation for the UI.
         return userPreferencesRepository.findAllUserIds();
     }
+    // --- END OF CHANGES ---
 
     private void sendBroadcastEvent(BroadcastMessage broadcast, List<String> targetUsers, String eventType) {
         targetUsers.forEach(userId -> {
