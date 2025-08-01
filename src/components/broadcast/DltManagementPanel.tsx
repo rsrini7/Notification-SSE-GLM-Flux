@@ -108,7 +108,7 @@ const DltManagementPanel: React.FC = () => {
                                                     Failed at: {new Date(msg.failedAt).toLocaleString()}
                                                 </span>
                                             </div>
-                                            <Badge variant="destructive">Failed</Badge>
+                                            <Badge variant="secondary">Failed</Badge>
                                         </div>
                                     </AccordionTrigger>
                                     <AccordionContent>

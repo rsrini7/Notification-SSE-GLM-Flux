@@ -1,8 +1,6 @@
 package com.example.broadcast.service;
 
 import com.example.broadcast.dto.MessageDeliveryEvent;
-import com.example.broadcast.model.BroadcastMessage;
-import com.example.broadcast.repository.BroadcastRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +18,6 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CaffeineCacheService caffeineCacheService;
-    private final BroadcastRepository broadcastRepository;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(
@@ -29,28 +26,20 @@ public class KafkaConsumerService {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void processBroadcastEvent(
-            @Payload byte[] payload, // <-- We now receive raw bytes
+            @Payload Object payload,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
 
-        try {
-            // Manually deserialize the payload. If this fails, the DLT will catch the original byte array.
-            MessageDeliveryEvent event = objectMapper.readValue(payload, MessageDeliveryEvent.class);
+        MessageDeliveryEvent event = objectMapper.convertValue(payload, MessageDeliveryEvent.class);
 
-            log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
-                    event.getEventId(), topic, partition, offset);
-            
-            handleEvent(event);
+        log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
+                event.getEventId(), topic, partition, offset);
+        
+        handleEvent(event);
 
-            acknowledgment.acknowledge();
-
-        } catch (Exception e) {
-            log.error("Failed to process message from topic {}. Root cause: {}", topic, e.getMessage());
-            // Re-throw to trigger the DefaultErrorHandler, which will send the original byte[] payload to the DLT.
-            throw new RuntimeException("Failed to process message", e);
-        }
+        acknowledgment.acknowledge();
     }
 
     private void handleEvent(MessageDeliveryEvent event) {
@@ -75,9 +64,9 @@ public class KafkaConsumerService {
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
         
+        // The "FAIL_ME" poison pill logic has been COMMENTED OUT to allow normal processing.                
         // BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
         //         .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
-
         // if (broadcastMessage.getContent() != null && broadcastMessage.getContent().contains("FAIL_ME")) {
         //     log.warn("Poison pill 'FAIL_ME' detected in broadcast message content. Simulating processing failure.");
         //     throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");

@@ -125,6 +125,20 @@ CREATE INDEX idx_stats_calculated_at ON broadcast_statistics (calculated_at);
 -- Index for user preference lookups
 CREATE INDEX idx_user_preferences_user_id ON user_preferences (user_id);
 
+
+CREATE TABLE IF NOT EXISTS dlt_messages (
+    id VARCHAR(255) PRIMARY KEY,
+    original_topic VARCHAR(255) NOT NULL,
+    original_partition INT NOT NULL,
+    original_offset BIGINT NOT NULL,
+    exception_message TEXT,
+    failed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    original_message_payload TEXT
+);
+
+-- Index for fast lookups
+CREATE INDEX IF NOT EXISTS idx_dlt_failed_at ON dlt_messages (failed_at);
+
 -- Create sequence for ID generation
 CREATE SEQUENCE IF NOT EXISTS broadcast_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS user_broadcast_seq START WITH 1 INCREMENT BY 1;
