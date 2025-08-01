@@ -12,27 +12,28 @@ import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserPreferencesRepository;
+import com.example.broadcast.exception.UserServiceUnavailableException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.example.broadcast.exception.UserServiceUnavailableException;
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+// --- START OF NEW IMPORTS ---
+import org.springframework.transaction.support.TransactionTemplate;
+// --- END OF NEW IMPORTS ---
+
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
-
 import com.example.broadcast.util.Constants.BroadcastStatus;
 import com.example.broadcast.util.Constants.EventType;
-
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-
 
 @Service
 @RequiredArgsConstructor
@@ -45,48 +46,57 @@ public class BroadcastService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final BroadcastTargetingService broadcastTargetingService;
     private final UserPreferencesRepository userPreferencesRepository;
-    // --- START OF CHANGES ---
-    private final UserService userService; // Injected the authoritative UserService
-    // --- END OF CHANGES ---
+    private final UserService userService;
+    // --- START OF NEW INJECTION ---
+    private final TransactionTemplate transactionTemplate;
+    // --- END OF NEW INJECTION ---
+
 
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
     private String broadcastTopicName;
 
-    @Transactional(noRollbackFor = UserServiceUnavailableException.class)
+    // --- START OF MODIFIED createBroadcast METHOD ---
+    // The @Transactional annotation is removed from here
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
-        BroadcastMessage broadcast = BroadcastMessage.builder()
-                .senderId(request.getSenderId())
-                .senderName(request.getSenderName())
-                .content(request.getContent())
-                .targetType(request.getTargetType())
-                .targetIds(request.getTargetIds())
-                .priority(request.getPriority())
-                .category(request.getCategory())
-                .scheduledAt(request.getScheduledAt())
-                .expiresAt(request.getExpiresAt())
-                .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .build();
-        // Check for immediate expiration on creation
-        if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
-            log.warn("Broadcast creation request for an already expired message from sender: {}. Expiration: {}", broadcast.getSenderId(), broadcast.getExpiresAt());
-            broadcast.setStatus(BroadcastStatus.EXPIRED.name());
-            broadcast = broadcastRepository.save(broadcast);
-            return buildBroadcastResponse(broadcast, 0); // No users will be targeted
-        }
 
-        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
-            broadcast.setStatus(BroadcastStatus.SCHEDULED.name());
-            broadcast = broadcastRepository.save(broadcast);
-            log.info("Broadcast with ID: {} is scheduled for: {}", broadcast.getId(), broadcast.getScheduledAt());
-            return buildBroadcastResponse(broadcast, 0);
-        } else {
-            broadcast.setStatus(BroadcastStatus.ACTIVE.name());
-            broadcast = broadcastRepository.save(broadcast);
-            return triggerBroadcast(broadcast);
-        }
+        // Use TransactionTemplate to explicitly manage the transaction
+        return transactionTemplate.execute(status -> {
+            BroadcastMessage broadcast = BroadcastMessage.builder()
+                    .senderId(request.getSenderId())
+                    .senderName(request.getSenderName())
+                    .content(request.getContent())
+                    .targetType(request.getTargetType())
+                    .targetIds(request.getTargetIds())
+                    .priority(request.getPriority())
+                    .category(request.getCategory())
+                    .scheduledAt(request.getScheduledAt())
+                    .expiresAt(request.getExpiresAt())
+                    .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
+                    .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                    .build();
+
+            if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
+                log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());
+                broadcast.setStatus(BroadcastStatus.EXPIRED.name());
+                broadcast = broadcastRepository.save(broadcast);
+                return buildBroadcastResponse(broadcast, 0);
+            }
+
+            if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
+                broadcast.setStatus(BroadcastStatus.SCHEDULED.name());
+                broadcast = broadcastRepository.save(broadcast);
+                log.info("Broadcast with ID: {} is scheduled for: {}", broadcast.getId(), broadcast.getScheduledAt());
+                return buildBroadcastResponse(broadcast, 0);
+            } else {
+                broadcast.setStatus(BroadcastStatus.ACTIVE.name());
+                broadcast = broadcastRepository.save(broadcast);
+                return triggerBroadcast(broadcast);
+            }
+        });
     }
+    // --- END OF MODIFIED createBroadcast METHOD ---
+
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public void processScheduledBroadcast(Long broadcastId) {
@@ -192,17 +202,12 @@ public class BroadcastService {
                 .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
         
         if (!userId.equals(userMessage.getUserId())) {
-            // In a real app with security, this would be an AccessDeniedException (403)
             throw new ResourceNotFoundException("Message does not belong to user: " + userId);
         }
         
-        // Update the user-specific message status
         userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
-        
-        // **FIX**: Atomically increment the total_read count in the statistics table.
         broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
 
-        // **FIX**: Send a Kafka event to notify other systems of the read receipt.
         MessageDeliveryEvent event = MessageDeliveryEvent.builder()
             .eventId(UUID.randomUUID().toString())
             .broadcastId(userMessage.getBroadcastId())
@@ -212,74 +217,52 @@ public class BroadcastService {
             .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
             .message("User marked message as read")
             .build();
-        kafkaTemplate.send(broadcastTopicName, userId, event);
-
-        log.info("Message marked as read and statistics updated for broadcast ID: {}", userMessage.getBroadcastId());
+        sendBroadcastEventAfterCommit(event);
     }
 
-    // --- START OF CHANGES ---
-    /**
-     * Retrieves all unique user IDs from the authoritative UserService.
-     * This method is protected by a circuit breaker. If the UserService is unavailable,
-     * it gracefully falls back to retrieving user IDs from the local user preferences,
-     * ensuring the UI remains functional.
-     *
-     * @return A list of unique user IDs.
-     */
     @CircuitBreaker(name = "userService", fallbackMethod = "fallbackGetAllUserIds")
     public List<String> getAllUserIds() {
         log.info("Retrieving all unique user IDs from the authoritative user service.");
         return userService.getAllUserIds();
     }
 
-    /**
-     * Fallback method for getAllUserIds.
-     * Invoked by the circuit breaker when the primary UserService is unavailable.
-     *
-     * @param t The throwable that caused the fallback.
-     * @return A list of user IDs from the user_preferences table as a fallback.
-     */
     public List<String> fallbackGetAllUserIds(Throwable t) {
         log.warn("UserService is unavailable, falling back to user preferences for the user list. Error: {}", t.getMessage());
-        // As a fallback, we can return the list from preferences, which is the old behavior.
-        // This provides graceful degradation for the UI.
         return userPreferencesRepository.findAllUserIds();
     }
-    // --- END OF CHANGES ---
 
     private void sendBroadcastEvent(BroadcastMessage broadcast, List<String> targetUsers, String eventType) {
-
-        // This synchronization manager ensures that the code inside 'afterCommit'
-        // only runs AFTER the database transaction for creating the broadcast has
-        // successfully completed. This prevents the race condition we observed.
+        targetUsers.forEach(userId -> {
+            MessageDeliveryEvent event = MessageDeliveryEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .broadcastId(broadcast.getId())
+                    .userId(userId)
+                    .eventType(eventType)
+                    .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                    .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                    .message("Broadcast " + eventType.toLowerCase())
+                    .build();
+            sendBroadcastEventAfterCommit(event);
+        });
+    }
+    
+    // --- START OF NEW HELPER METHOD ---
+    private void sendBroadcastEventAfterCommit(MessageDeliveryEvent event) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                // The existing forEach loop is now safely inside the afterCommit block.
-                targetUsers.forEach(userId -> {
-                    MessageDeliveryEvent event = MessageDeliveryEvent.builder()
-                            .eventId(UUID.randomUUID().toString())
-                            .broadcastId(broadcast.getId())
-                            .userId(userId)
-                            .eventType(eventType)
-                            .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
-                            .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-                            .message("Broadcast " + eventType.toLowerCase())
-                            .build();
-
-                    kafkaTemplate.send(broadcastTopicName, userId, event)
-                        .whenComplete((result, ex) -> {
-                            if (ex == null) {
-                                // Added the topic name to the log for better clarity
-                                log.debug("Event sent successfully to Kafka topic '{}' after commit: {}", broadcastTopicName, event.getEventId());
-                            } else {
-                                log.error("Failed to send event to Kafka after commit: {}", ex.getMessage());
-                            }
-                        });
-                });
+                kafkaTemplate.send(broadcastTopicName, event.getUserId(), event)
+                    .whenComplete((result, ex) -> {
+                        if (ex == null) {
+                            log.debug("Event sent successfully to Kafka after commit: {}", event.getEventId());
+                        } else {
+                            log.error("Failed to send event to Kafka after commit: {}", ex.getMessage());
+                        }
+                    });
             }
         });
     }
+    // --- END OF NEW HELPER METHOD ---
 
     private BroadcastResponse buildBroadcastResponse(BroadcastMessage broadcast, int totalTargeted) {
         return BroadcastResponse.builder()
