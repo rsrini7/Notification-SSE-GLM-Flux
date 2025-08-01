@@ -8,7 +8,7 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
 
-import java.util.Arrays;
+// import java.util.Arrays;
 
 /**
  * Aspect for monitoring method execution and collecting metrics
@@ -209,17 +209,17 @@ public class MonitoringAspect {
     /**
      * Log method parameters for debugging (only at DEBUG level)
      */
-    private void logMethodParameters(ProceedingJoinPoint joinPoint) {
-        if (log.isDebugEnabled()) {
-            String methodName = joinPoint.getSignature().getName();
-            Object[] args = joinPoint.getArgs();
+    // private void logMethodParameters(ProceedingJoinPoint joinPoint) {
+    //     if (log.isDebugEnabled()) {
+    //         String methodName = joinPoint.getSignature().getName();
+    //         Object[] args = joinPoint.getArgs();
             
-            if (args.length > 0) {
-                log.debug("{}.{} called with parameters: {}", 
-                        joinPoint.getTarget().getClass().getSimpleName(),
-                        methodName,
-                        Arrays.toString(args));
-            }
-        }
-    }
+    //         if (args.length > 0) {
+    //             log.debug("{}.{} called with parameters: {}", 
+    //                     joinPoint.getTarget().getClass().getSimpleName(),
+    //                     methodName,
+    //                     Arrays.toString(args));
+    //         }
+    //     }
+    // }
 }

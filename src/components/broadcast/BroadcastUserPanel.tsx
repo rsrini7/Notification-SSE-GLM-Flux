@@ -24,7 +24,7 @@ const BroadcastUserPanel: React.FC = () => {
       } catch (error) {
         toast({
           title: 'Error Fetching Users',
-          description: 'Could not retrieve the list of all users from the database.',
+          description: `Could not retrieve the list of all users from the database. ${error}`,
           variant: 'destructive',
         });
       }
