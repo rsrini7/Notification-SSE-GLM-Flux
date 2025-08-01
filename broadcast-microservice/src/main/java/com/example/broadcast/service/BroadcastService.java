@@ -1,3 +1,4 @@
+
 package com.example.broadcast.service;
 
 import com.example.broadcast.dto.BroadcastRequest;
@@ -22,7 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -44,17 +44,14 @@ public class BroadcastService {
     private final BroadcastTargetingService broadcastTargetingService;
     private final UserPreferencesRepository userPreferencesRepository;
     private final UserService userService;
-    private final TransactionTemplate transactionTemplate;
 
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
     private String broadcastTopicName;
 
-    // --- START OF MODIFIED createBroadcast METHOD ---
-    // The @Transactional annotation is removed from here
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
-        
+
         BroadcastMessage broadcast = BroadcastMessage.builder()
                 .senderId(request.getSenderId())
                 .senderName(request.getSenderName())
@@ -222,34 +219,20 @@ public class BroadcastService {
     }
 
     private void sendBroadcastEvent(BroadcastMessage broadcast, List<String> targetUsers, String eventType) {
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                targetUsers.forEach(userId -> {
-                    MessageDeliveryEvent event = MessageDeliveryEvent.builder()
-                            .eventId(UUID.randomUUID().toString())
-                            .broadcastId(broadcast.getId())
-                            .userId(userId)
-                            .eventType(eventType)
-                            .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
-                            .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-                            .message("Broadcast " + eventType.toLowerCase())
-                            .build();
-
-                    kafkaTemplate.send(broadcastTopicName, userId, event)
-                        .whenComplete((result, ex) -> {
-                            if (ex == null) {
-                                log.debug("Event sent successfully to Kafka topic '{}' after commit: {}", broadcastTopicName, event.getEventId());
-                            } else {
-                                log.error("Failed to send event to Kafka after commit: {}", ex.getMessage());
-                            }
-                        });
-                });
-            }
+        targetUsers.forEach(userId -> {
+            MessageDeliveryEvent event = MessageDeliveryEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .broadcastId(broadcast.getId())
+                    .userId(userId)
+                    .eventType(eventType)
+                    .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                    .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                    .message("Broadcast " + eventType.toLowerCase())
+                    .build();
+            sendBroadcastEventAfterCommit(event);
         });
     }
-    
-    // --- START OF NEW HELPER METHOD ---
+
     private void sendBroadcastEventAfterCommit(MessageDeliveryEvent event) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -257,7 +240,7 @@ public class BroadcastService {
                 kafkaTemplate.send(broadcastTopicName, event.getUserId(), event)
                     .whenComplete((result, ex) -> {
                         if (ex == null) {
-                            log.debug("Event sent successfully to Kafka after commit: {}", event.getEventId());
+                            log.debug("Event sent successfully to Kafka topic '{}' after commit: {}", broadcastTopicName, event.getEventId());
                         } else {
                             log.error("Failed to send event to Kafka after commit: {}", ex.getMessage());
                         }
@@ -265,7 +248,6 @@ public class BroadcastService {
             }
         });
     }
-    // --- END OF NEW HELPER METHOD ---
 
     private BroadcastResponse buildBroadcastResponse(BroadcastMessage broadcast, int totalTargeted) {
         return BroadcastResponse.builder()
