@@ -4,6 +4,7 @@ package com.example.broadcast.service;
 import com.example.broadcast.dto.MessageDeliveryEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
@@ -35,7 +36,7 @@ public class KafkaConsumerService {
 
         log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                 event.getEventId(), topic, partition, offset);
-
+        
         Mono.fromRunnable(() -> handleEvent(event))
             .subscribeOn(Schedulers.boundedElastic())
             .doOnSuccess(v -> {
@@ -79,9 +80,15 @@ public class KafkaConsumerService {
                 log.info("User {} is offline, message remains pending", event.getUserId());
                 caffeineCacheService.cachePendingEvent(event);
             }
+        } catch (DataAccessException dae) {
+            // Granular handling for potentially recoverable database errors.
+            log.warn("A recoverable data access error occurred while processing event {}: {}. Will allow container error handler to retry.", event.getEventId(), dae.getMessage());
+            // We rethrow to ensure the Mono's doOnError captures it, triggering the DefaultErrorHandler
+            throw new RuntimeException("Failed to handle broadcast created event due to a database issue.", dae);
         } catch (Exception e) {
-            log.error("Error handling broadcast created event: {}", e.getMessage());
-            // We rethrow to ensure the Mono's doOnError captures it.
+            // Granular handling for other, likely non-recoverable, errors.
+            log.error("An unexpected error occurred while processing event {}: {}", event.getEventId(), e.getMessage());
+            // We rethrow to ensure the Mono's doOnError captures it, triggering the DefaultErrorHandler
             throw new RuntimeException("Failed to handle broadcast created event", e);
         }
     }
