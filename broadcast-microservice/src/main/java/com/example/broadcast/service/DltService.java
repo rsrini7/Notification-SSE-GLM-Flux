@@ -37,12 +37,12 @@ public class DltService {
     private final ObjectMapper objectMapper;
     private final DltRepository dltRepository;
     private final UserBroadcastRepository userBroadcastRepository;
-    // NEW: Inject BroadcastRepository to check for the parent broadcast's existence.
     private final BroadcastRepository broadcastRepository;
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}.DLT",
-            groupId = "broadcast-dlt-group"
+            groupId = "broadcast-dlt-group",
+            containerFactory = "kafkaListenerContainerFactory"
     )
     @Transactional
     public void listenToDlt(
@@ -97,11 +97,9 @@ public class DltService {
     }
 
     private void prepareDatabaseForRedrive(MessageDeliveryEvent payload) {
-        // FIX: First, verify that the parent broadcast message still exists.
         Optional<BroadcastMessage> parentBroadcast = broadcastRepository.findById(payload.getBroadcastId());
         if (parentBroadcast.isEmpty()) {
             log.error("Cannot redrive message for broadcast ID {}. The original broadcast has been deleted.", payload.getBroadcastId());
-            // This exception will be caught and shown to the user in the UI.
             throw new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") has been deleted.");
         }
 
@@ -125,5 +123,24 @@ public class DltService {
             userBroadcastRepository.save(newMessage);
             log.info("Created new UserBroadcastMessage for redrive for user {} and broadcast {}.", payload.getUserId(), payload.getBroadcastId());
         }
+    }
+    
+    // NEW: Implements the purge logic.
+    @Transactional
+    public void purgeMessage(String id) throws JsonProcessingException {
+        DltMessage dltMessage = dltRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
+
+        // Delete from the database first.
+        dltRepository.deleteById(id);
+        log.info("Deleted DLT message with ID: {} from the database.", id);
+
+        // Send a tombstone message to the DLT to purge it from Kafka's log.
+        // We need a key for compaction to work. Let's use the DB message ID as the key.
+        String messageKey = dltMessage.getId();
+        String dltTopicName = dltMessage.getOriginalTopic() + ".DLT";
+        
+        kafkaTemplate.send(dltTopicName, messageKey, null);
+        log.info("Sent tombstone message to Kafka topic {} with key {} to purge the message.", dltTopicName, messageKey);
     }
 }

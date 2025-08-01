@@ -54,4 +54,5 @@ spec:
   replicas: 3
   config:
     retention.ms: 1209600000 # 14 days retention for analysis
-    cleanup.policy: delete
+    # FIX: Change cleanup.policy to 'compact' to allow for purging.
+    cleanup.policy: compact

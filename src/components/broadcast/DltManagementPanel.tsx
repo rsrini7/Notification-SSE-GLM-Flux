@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from '../ui/alert';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
 import { useToast } from '../../hooks/use-toast';
 import { dltService, type DltMessage } from '../../services/api';
-import { AlertCircle, ArchiveRestore, Trash2, RefreshCw, ServerCrash } from 'lucide-react';
+import { AlertCircle, ArchiveRestore, Trash2, RefreshCw, ServerCrash, Flame } from 'lucide-react'; // Added Flame icon for Purge
 
 const DltManagementPanel: React.FC = () => {
     const [dltMessages, setDltMessages] = useState<DltMessage[]>([]);
@@ -40,9 +40,8 @@ const DltManagementPanel: React.FC = () => {
                 title: "Success",
                 description: "Message has been sent for reprocessing.",
             });
-            fetchDltMessages(); // Refresh list
+            fetchDltMessages();
         } catch (error: any) {
-            // FIX: Display a more specific error message from the backend if available.
             const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred.';
             toast({
                 title: "Error",
@@ -57,11 +56,10 @@ const DltManagementPanel: React.FC = () => {
             await dltService.deleteDltMessage(id);
             toast({
                 title: "Success",
-                description: "Message has been deleted.",
+                description: "Message has been deleted from the database.",
             });
-            fetchDltMessages(); // Refresh list
+            fetchDltMessages();
         } catch (error: any) {
-            // FIX: Display a more specific error message from the backend if available.
             const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred.';
             toast({
                 title: "Error",
@@ -71,13 +69,34 @@ const DltManagementPanel: React.FC = () => {
         }
     };
 
-    // Helper to format JSON for display
+    // NEW: Handler for the Purge action
+    const handlePurge = async (id: string) => {
+        if (!window.confirm("Are you sure you want to permanently purge this message from both the database and Kafka? This action cannot be undone.")) {
+            return;
+        }
+        try {
+            await dltService.purgeDltMessage(id);
+            toast({
+                title: "Success",
+                description: "Message has been purged from the database and Kafka.",
+            });
+            fetchDltMessages();
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred.';
+            toast({
+                title: "Error",
+                description: `Failed to purge message: ${errorMessage}`,
+                variant: "destructive",
+            });
+        }
+    };
+    
     const formatJsonPayload = (payload: string) => {
         try {
             const parsed = JSON.parse(payload);
             return JSON.stringify(parsed, null, 2);
         } catch {
-            return payload; // Return as-is if not valid JSON
+            return payload;
         }
     }
 
@@ -132,9 +151,14 @@ const DltManagementPanel: React.FC = () => {
                                                     <ArchiveRestore className="h-4 w-4 mr-2" />
                                                     Redrive
                                                 </Button>
-                                                <Button variant="destructive" size="sm" onClick={() => handleDelete(msg.id)}>
+                                                <Button variant="outline" size="sm" onClick={() => handleDelete(msg.id)}>
                                                     <Trash2 className="h-4 w-4 mr-2" />
                                                     Delete
+                                                </Button>
+                                                {/* NEW: Purge Button */}
+                                                <Button variant="destructive" size="sm" onClick={() => handlePurge(msg.id)}>
+                                                    <Flame className="h-4 w-4 mr-2" />
+                                                    Purge
                                                 </Button>
                                             </div>
                                         </div>
