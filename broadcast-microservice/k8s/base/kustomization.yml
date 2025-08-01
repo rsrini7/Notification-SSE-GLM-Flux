@@ -1,0 +1,24 @@
+# This file lists all the base resources for the application.
+# These resources are common across all environments.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Define the namespace for all resources in this Kustomization.
+namespace: broadcast-system
+
+resources:
+  - namespace.yaml
+  - service-account.yaml
+  - role.yaml
+  - role-binding.yaml
+  - configmap.yaml
+  - network-policy.yaml
+  - deployment.yaml
+  - service.yaml
+  - hpa.yaml
+  - pod-disruption-budget.yaml
+  # Note: These might be in different namespaces in a real setup,
+  # but we include them here for a complete base.
+  - kafka-topic.yaml
+  - prometheus-config.yaml
+  - broadcast-alerts.yml

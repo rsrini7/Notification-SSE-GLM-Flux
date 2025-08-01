@@ -1,0 +1,29 @@
+# This patch modifies the base Deployment for the development environment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broadcast-microservice
+spec:
+  # For development, we only need one replica.
+  replicas: 1
+  # FIX: The immutable selector field must be included in the patch.
+  # This must match the selector in the base deployment.yaml.
+  selector:
+    matchLabels:
+      app: broadcast-microservice
+  template:
+    spec:
+      containers:
+        - name: broadcast-microservice
+          # Set lower resource requests for development to save cluster resources.
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          env:
+            # Set the active Spring profile to use PostgreSQL.
+            - name: SPRING_PROFILES_ACTIVE
+              value: "dev-pg"
