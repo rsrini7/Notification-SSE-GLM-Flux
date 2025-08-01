@@ -28,25 +28,29 @@ public class KafkaConsumerService {
             groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}",
             containerFactory = "kafkaListenerContainerFactory"
     )
-    // The @Transactional annotation is REMOVED from here. This is the definitive fix.
     public void processBroadcastEvent(
-            @Payload Object payload,
+            @Payload byte[] payload, // <-- We now receive raw bytes
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
 
-        MessageDeliveryEvent event = objectMapper.convertValue(payload, MessageDeliveryEvent.class);
+        try {
+            // Manually deserialize the payload. If this fails, the DLT will catch the original byte array.
+            MessageDeliveryEvent event = objectMapper.readValue(payload, MessageDeliveryEvent.class);
 
-        log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
-                event.getEventId(), topic, partition, offset);
-        
-        // If handleEvent throws an exception, the DefaultErrorHandler will now correctly
-        // manage the retries and DLT process without a transaction conflict.
-        handleEvent(event);
+            log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
+                    event.getEventId(), topic, partition, offset);
+            
+            handleEvent(event);
 
-        // This will only be reached if handleEvent completes successfully.
-        acknowledgment.acknowledge();
+            acknowledgment.acknowledge();
+
+        } catch (Exception e) {
+            log.error("Failed to process message from topic {}. Root cause: {}", topic, e.getMessage());
+            // Re-throw to trigger the DefaultErrorHandler, which will send the original byte[] payload to the DLT.
+            throw new RuntimeException("Failed to process message", e);
+        }
     }
 
     private void handleEvent(MessageDeliveryEvent event) {
@@ -71,13 +75,13 @@ public class KafkaConsumerService {
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
         
-        BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
-                .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
+        // BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
+        //         .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
 
-        if (broadcastMessage.getContent() != null && broadcastMessage.getContent().contains("FAIL_ME")) {
-            log.warn("Poison pill 'FAIL_ME' detected in broadcast message content. Simulating processing failure.");
-            throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");
-        }
+        // if (broadcastMessage.getContent() != null && broadcastMessage.getContent().contains("FAIL_ME")) {
+        //     log.warn("Poison pill 'FAIL_ME' detected in broadcast message content. Simulating processing failure.");
+        //     throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");
+        // }
 
         boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) || sseService.isUserConnected(event.getUserId());
         if (isOnline) {
