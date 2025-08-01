@@ -4,6 +4,7 @@ import com.example.broadcast.dto.BroadcastRequest;
 import com.example.broadcast.dto.BroadcastResponse;
 import com.example.broadcast.dto.MessageDeliveryEvent;
 import com.example.broadcast.dto.UserBroadcastResponse;
+import com.example.broadcast.exception.ResourceNotFoundException;
 import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.BroadcastStatistics;
 import com.example.broadcast.model.UserBroadcastMessage;
@@ -79,7 +80,7 @@ public class BroadcastService {
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public void processScheduledBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
-                .orElseThrow(() -> new RuntimeException("Broadcast not found: " + broadcastId));
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
         broadcast.setStatus("ACTIVE");
         broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
         broadcastRepository.updateStatus(broadcast.getId(), "ACTIVE");
@@ -116,7 +117,7 @@ public class BroadcastService {
 
     public BroadcastResponse getBroadcast(Long id) {
         return broadcastRepository.findBroadcastWithStatsById(id)
-                .orElseThrow(() -> new RuntimeException("Broadcast not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
     }
 
     public List<BroadcastResponse> getActiveBroadcasts() {
@@ -134,7 +135,7 @@ public class BroadcastService {
     @Transactional
     public void cancelBroadcast(Long id) {
         BroadcastMessage broadcast = broadcastRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Broadcast not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
         broadcastRepository.updateStatus(id, "CANCELLED");
         
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
@@ -149,7 +150,7 @@ public class BroadcastService {
     @Transactional
     public void expireBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
-                .orElseThrow(() -> new RuntimeException("Broadcast not found: " + broadcastId));
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
         if ("ACTIVE".equals(broadcast.getStatus())) {
             broadcastRepository.updateStatus(broadcastId, "EXPIRED");
             log.info("Broadcast expired: {}", broadcastId);
@@ -162,14 +163,11 @@ public class BroadcastService {
         }
     }
 
-    // **REFACTORED**: This method now calls the new repository method that performs a JOIN.
-    // The N+1 query problem is resolved.
     public List<UserBroadcastResponse> getUserMessages(String userId) {
         log.info("Getting messages for user: {}", userId);
         return userBroadcastRepository.findUserMessagesByUserId(userId);
     }
 
-    // **REFACTORED**: This method also calls a new, efficient repository method.
     public List<UserBroadcastResponse> getUnreadMessages(String userId) {
         log.info("Getting unread messages for user: {}", userId);
         return userBroadcastRepository.findUnreadMessagesByUserId(userId);
@@ -179,13 +177,32 @@ public class BroadcastService {
     public void markMessageAsRead(String userId, Long messageId) {
         log.info("Marking message as read: user={}, message={}", userId, messageId);
         UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
-                .orElseThrow(() -> new RuntimeException("User message not found: " + messageId));
+                .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
+        
         if (!userId.equals(userMessage.getUserId())) {
-            throw new RuntimeException("Message does not belong to user: " + userId);
+            // In a real app with security, this would be an AccessDeniedException (403)
+            throw new ResourceNotFoundException("Message does not belong to user: " + userId);
         }
         
+        // Update the user-specific message status
         userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
-        log.info("Message marked as read: user={}, message={}", userId, messageId);
+        
+        // **FIX**: Atomically increment the total_read count in the statistics table.
+        broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
+
+        // **FIX**: Send a Kafka event to notify other systems of the read receipt.
+        MessageDeliveryEvent event = MessageDeliveryEvent.builder()
+            .eventId(UUID.randomUUID().toString())
+            .broadcastId(userMessage.getBroadcastId())
+            .userId(userId)
+            .eventType("READ")
+            .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+            .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+            .message("User marked message as read")
+            .build();
+        kafkaTemplate.send(broadcastTopicName, userId, event);
+
+        log.info("Message marked as read and statistics updated for broadcast ID: {}", userMessage.getBroadcastId());
     }
 
     public List<String> getAllUserIds() {
@@ -240,9 +257,6 @@ public class BroadcastService {
                 .build();
     }
     
-    // **REMOVED**: The buildUserBroadcastResponse method is no longer needed
-    // as the mapping is now handled efficiently in the repository layer.
-
     public List<UserBroadcastMessage> getBroadcastDeliveries(Long broadcastId) {
         log.info("Retrieving delivery details for broadcast ID: {}", broadcastId);
         return userBroadcastRepository.findByBroadcastId(broadcastId);
