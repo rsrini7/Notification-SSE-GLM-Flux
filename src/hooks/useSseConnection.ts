@@ -18,7 +18,6 @@ interface SseConnectionState {
   connecting: boolean;
   sessionId: string | null;
   error: string | null;
-
 }
 
 export const useSseConnection = (options: UseSseConnectionOptions) => {
@@ -32,17 +31,14 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     onDisconnect,
     onError
   } = options;
-
   const [state, setState] = useState<SseConnectionState>({
     connected: false,
     connecting: false,
     sessionId: null,
     error: null
   });
-
   const MAX_RECONNECT_ATTEMPTS = 5; // Define a maximum number of reconnection attempts
   const reconnectAttemptsRef = useRef(0);
-
   const eventSourceRef = useRef<EventSource | null>(null);
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -53,19 +49,16 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const onDisconnectRef = useRef(onDisconnect);
   const onErrorRef = useRef(onError);
   const onMessageRef = useRef(onMessage);
-
   useEffect(() => {
     onConnectRef.current = onConnect;
     onDisconnectRef.current = onDisconnect;
     onErrorRef.current = onError;
     onMessageRef.current = onMessage;
   }, [onConnect, onDisconnect, onError, onMessage]);
-
   // Generate session ID
   const generateSessionId = useCallback(() => {
     return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }, []);
-
   // Start heartbeat
   const startHeartbeat = useCallback(() => {
     if (heartbeatRef.current) {
@@ -89,7 +82,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       }
     }, heartbeatInterval);
   }, [userId, baseUrl, heartbeatInterval]);
-
   // Connect to SSE
   const connect = useCallback(() => {
     if (eventSourceRef.current) {
@@ -123,7 +115,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         console.log('SSE Connection: Connected');
         reconnectAttemptsRef.current = 0; // Reset attempts on successful connection
       };
-
       eventSourceRef.current.onmessage = (event) => {
         try {
           if (event.data) {
@@ -152,7 +143,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
           connecting: false,
           error: 'Connection lost'
         }));
-
         onDisconnectRef.current?.();
         onErrorRef.current?.(event);
         console.error('SSE Connection: Error and attempting reconnect');
@@ -171,17 +161,14 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
           setState(prev => ({ ...prev, error: 'Max reconnection attempts reached' }));
         }
       };
-
     } catch (error) {
       console.error('Failed to create SSE connection:', error);
-      
       setState(prev => ({
         ...prev,
         connected: false,
         connecting: false,
         error: 'Failed to connect'
       }));
-
       onErrorRef.current?.(error);
 
 
@@ -227,8 +214,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
 
     sessionIdRef.current = null;
     onDisconnectRef.current?.();
-  }, [userId, baseUrl]);
-
+  }, [userId, baseUrl, state.connected]);
   // Send read receipt
   const markAsRead = useCallback(async (messageId: number) => {
     if (sessionIdRef.current) {
@@ -242,7 +228,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       }
     }
   }, [userId, baseUrl]);
-
   // Check connection status
   const checkConnection = useCallback(async () => {
     if (sessionIdRef.current) {
@@ -269,7 +254,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       return null;
     }
   }, [baseUrl]);
-
   // Auto-connect on mount
   useEffect(() => {
     if (autoConnect && userId) {
@@ -279,7 +263,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     return () => {
       disconnect();
     };
-  }, [autoConnect, userId, connect, disconnect]);
+  }, [autoConnect, userId]);
 
   return {
     ...state,
