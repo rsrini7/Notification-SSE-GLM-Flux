@@ -99,6 +99,41 @@ public class BroadcastRepository {
         return broadcast;
     }
 
+    // START OF FIX: Add a dedicated update method.
+    // The previous implementation incorrectly used the `save` (INSERT) method for updates.
+    public BroadcastMessage update(BroadcastMessage broadcast) {
+        String sql = """
+            UPDATE broadcast_messages SET
+                sender_id = ?,
+                sender_name = ?,
+                content = ?,
+                target_type = ?,
+                target_ids = ?,
+                priority = ?,
+                category = ?,
+                scheduled_at = ?,
+                expires_at = ?,
+                status = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """;
+        jdbcTemplate.update(sql,
+            broadcast.getSenderId(),
+            broadcast.getSenderName(),
+            broadcast.getContent(),
+            broadcast.getTargetType(),
+            toJsonArray(broadcast.getTargetIds()),
+            broadcast.getPriority(),
+            broadcast.getCategory(),
+            broadcast.getScheduledAt(),
+            broadcast.getExpiresAt(),
+            broadcast.getStatus(),
+            broadcast.getId()
+        );
+        return broadcast;
+    }
+    // END OF FIX
+
     public Optional<BroadcastMessage> findById(Long id) {
         String sql = "SELECT * FROM broadcast_messages WHERE id = ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, id).stream().findFirst();
@@ -188,18 +223,10 @@ public class BroadcastRepository {
         return jdbcTemplate.query(sql, broadcastRowMapper, now, limit);
     }
 
-    // START OF FIX: Resolves the race condition between scheduling and expiration services.
     public List<BroadcastMessage> findExpiredBroadcasts(ZonedDateTime now) {
-        String sql = """
-            SELECT * FROM broadcast_messages 
-            WHERE status = 'ACTIVE' 
-            AND expires_at IS NOT NULL 
-            AND expires_at <= ? 
-            AND updated_at < DATEADD('MINUTE', -1, CURRENT_TIMESTAMP)
-        """;
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at <= ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, now);
     }
-    // END OF FIX
 
     public int updateStatus(Long broadcastId, String status) {
         String sql = "UPDATE broadcast_messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";

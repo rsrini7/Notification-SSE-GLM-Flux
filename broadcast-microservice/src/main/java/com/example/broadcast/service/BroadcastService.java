@@ -22,7 +22,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -30,7 +29,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import com.example.broadcast.util.Constants.BroadcastStatus;
 import com.example.broadcast.util.Constants.EventType;
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -43,14 +41,12 @@ public class BroadcastService {
     private final BroadcastTargetingService broadcastTargetingService;
     private final UserPreferencesRepository userPreferencesRepository;
     private final UserService userService;
-
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
     private String broadcastTopicName;
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
-        
         BroadcastMessage broadcast = BroadcastMessage.builder()
                 .senderId(request.getSenderId())
                 .senderName(request.getSenderName())
@@ -64,7 +60,6 @@ public class BroadcastService {
                 .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
-
         if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
             log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());
             broadcast.setStatus(BroadcastStatus.EXPIRED.name());
@@ -88,9 +83,13 @@ public class BroadcastService {
     public void processScheduledBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
+        
+        // START OF FIX: Change status and call the new `update` method instead of `save`.
+        // This prevents creating a new duplicate broadcast record every minute.
         broadcast.setStatus(BroadcastStatus.ACTIVE.name());
         broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
-        broadcastRepository.save(broadcast);
+        broadcastRepository.update(broadcast);
+        // END OF FIX
 
         triggerBroadcast(broadcast);
     }
@@ -143,7 +142,7 @@ public class BroadcastService {
         BroadcastMessage broadcast = broadcastRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
         broadcast.setStatus(BroadcastStatus.CANCELLED.name());
-        broadcastRepository.save(broadcast);
+        broadcastRepository.update(broadcast);
         
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
         List<String> targetUsers = userBroadcasts.stream()
@@ -160,7 +159,7 @@ public class BroadcastService {
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
         if (BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) {
             broadcast.setStatus(BroadcastStatus.EXPIRED.name());
-            broadcastRepository.save(broadcast);
+            broadcastRepository.update(broadcast);
             log.info("Broadcast expired: {}", broadcastId);
             List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);
             List<String> targetUsers = userBroadcasts.stream()
@@ -186,14 +185,12 @@ public class BroadcastService {
         log.info("Marking message as read: user={}, message={}", userId, messageId);
         UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
-        
         if (!userId.equals(userMessage.getUserId())) {
             throw new ResourceNotFoundException("Message does not belong to user: " + userId);
         }
         
         userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
         broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
-
         MessageDeliveryEvent event = MessageDeliveryEvent.builder()
             .eventId(UUID.randomUUID().toString())
             .broadcastId(userMessage.getBroadcastId())
