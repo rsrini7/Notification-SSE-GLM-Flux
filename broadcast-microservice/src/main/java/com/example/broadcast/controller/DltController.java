@@ -33,7 +33,7 @@ public class DltController {
         } catch (JsonProcessingException e) {
             log.error("Failed to parse DLT message payload for redrive: {}", id, e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Cannot parse message payload.", e);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException | IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         }
     }
@@ -42,5 +42,19 @@ public class DltController {
     public ResponseEntity<Void> deleteMessage(@PathVariable String id) {
         dltService.deleteMessage(id);
         return ResponseEntity.noContent().build();
+    }
+    
+    // NEW: Endpoint to purge a message from both the DB and Kafka.
+    @DeleteMapping("/purge/{id}")
+    public ResponseEntity<Void> purgeMessage(@PathVariable String id) {
+        try {
+            dltService.purgeMessage(id);
+            return ResponseEntity.noContent().build();
+        } catch (JsonProcessingException e) {
+            log.error("Failed to parse DLT message payload for purge: {}", id, e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Cannot parse message payload.", e);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        }
     }
 }

@@ -10,6 +10,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
 // Request interceptor for logging
 /* api.interceptors.request.use(
   (config) => {
@@ -33,22 +34,14 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );*/
-
-// --- START OF CHANGES ---
-
-// NEW: DLT Message Interface
 export interface DltMessage {
   id: string;
   originalTopic: string;
   exceptionMessage: string;
   failedAt: string;
-  originalMessagePayload: string; // The payload will be a JSON string
+  originalMessagePayload: string; 
 }
 
-// --- END OF CHANGES ---
-
-
-// Interfaces
 export interface BroadcastMessage {
   id: string;
   senderId: string;
@@ -106,7 +99,6 @@ export interface BroadcastRequest {
   isImmediate: boolean;
 }
 
-// Services
 export const broadcastService = {
   getBroadcasts: async (filter = 'all'): Promise<BroadcastMessage[]> => {
     const response = await api.get(`/api/broadcasts?filter=${filter}`);
@@ -141,17 +133,12 @@ export const userService = {
   markMessageAsRead: async (userId: string, messageId: string): Promise<void> => {
     await api.post(`/api/sse/read?userId=${userId}&messageId=${messageId}`);
   },
-  /**
-   * **NEW:** Get all user IDs from the database
-   */
   getAllUsers: async (): Promise<string[]> => {
     const response = await api.get('/api/user/all');
     return response.data;
   },
 };
 
-// --- START OF CHANGES ---
-// NEW: DLT Service
 export const dltService = {
   getDltMessages: async (): Promise<DltMessage[]> => {
     const response = await api.get('/api/dlt/messages');
@@ -160,10 +147,14 @@ export const dltService = {
   redriveDltMessage: async (id: string): Promise<void> => {
     await api.post(`/api/dlt/redrive/${id}`);
   },
+  // This is the "soft delete" from the application's perspective.
   deleteDltMessage: async (id: string): Promise<void> => {
     await api.delete(`/api/dlt/delete/${id}`);
   },
+  // NEW: This is the "hard delete" that also purges from Kafka.
+  purgeDltMessage: async (id: string): Promise<void> => {
+    await api.delete(`/api/dlt/purge/${id}`);
+  },
 };
-// --- END OF CHANGES ---
 
 export default api;

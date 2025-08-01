@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -87,6 +88,7 @@ public class SseService {
                 "timestamp", ZonedDateTime.now(),
                 "message", "SSE connection established"
         ));
+        
         return sink.asFlux()
                 .doOnCancel(() -> {
                     log.debug("SSE stream cancelled for user: {}", userId);
@@ -121,14 +123,15 @@ public class SseService {
         try {
             List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
             for (UserBroadcastMessage message : pendingMessages) {
-                UserBroadcastResponse response = buildUserBroadcastResponse(message);
-                sendEventToSink(sink, Map.of(
-                        "type", SseEventType.MESSAGE.name(),
-                        "data", response,
-                        "timestamp", ZonedDateTime.now()
-                ));
-                userBroadcastRepository.updateDeliveryStatus(message.getId(), DeliveryStatus.DELIVERED.name());
-                broadcastStatisticsRepository.incrementDeliveredCount(message.getBroadcastId());
+                buildUserBroadcastResponse(message).ifPresent(response -> {
+                    sendEventToSink(sink, Map.of(
+                            "type", SseEventType.MESSAGE.name(),
+                            "data", response,
+                            "timestamp", ZonedDateTime.now()
+                    ));
+                    userBroadcastRepository.updateDeliveryStatus(message.getId(), DeliveryStatus.DELIVERED.name());
+                    broadcastStatisticsRepository.incrementDeliveredCount(message.getBroadcastId());
+                });
             }
             
             if (!pendingMessages.isEmpty()) {
@@ -164,42 +167,54 @@ public class SseService {
             List<UserBroadcastMessage> messages = userBroadcastRepository.findPendingMessagesByBroadcastId(userId, broadcastId);
             if (!messages.isEmpty()) {
                 UserBroadcastMessage message = messages.get(0); // Should only be one
-                UserBroadcastResponse response = buildUserBroadcastResponse(message);
-                sendEvent(userId, Map.of(
-                        "type", SseEventType.MESSAGE.name(),
-                        "data", response,
-                        "timestamp", ZonedDateTime.now()
-                ));
-                userBroadcastRepository.updateDeliveryStatus(message.getId(), DeliveryStatus.DELIVERED.name());
-                broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
-                log.info("Message delivered to online user: {}, broadcast: {}", userId, broadcastId);
+                buildUserBroadcastResponse(message).ifPresent(response -> {
+                    sendEvent(userId, Map.of(
+                            "type", SseEventType.MESSAGE.name(),
+                            "data", response,
+                            "timestamp", ZonedDateTime.now()
+                    ));
+                    userBroadcastRepository.updateDeliveryStatus(message.getId(), DeliveryStatus.DELIVERED.name());
+                    broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
+                    log.info("Message delivered to online user: {}, broadcast: {}", userId, broadcastId);
+                });
             } else {
-                log.warn("Could not find PENDING message for user {} and broadcast {}, it might have been delivered already.", userId, broadcastId);
+                // FIX: This warning is now sufficient, as the DltService ensures the record is ready for processing.
+                // No need for complex fallback logic here.
+                log.warn("Could not find PENDING message for user {} and broadcast {}. This may happen if the message was delivered by another instance right before this one processed it.", userId, broadcastId);
             }
         } catch (Exception e) {
             log.error("Error delivering message to user {}: {}", userId, e.getMessage());
         }
     }
 
-    private UserBroadcastResponse buildUserBroadcastResponse(UserBroadcastMessage message) {
-        BroadcastMessage broadcast = broadcastRepository.findById(message.getBroadcastId())
-                .orElseThrow(() -> new RuntimeException("Broadcast not found: " + message.getBroadcastId()));
-        return UserBroadcastResponse.builder()
-                .id(message.getId())
-                .broadcastId(message.getBroadcastId())
-                .userId(message.getUserId())
-                .deliveryStatus(DeliveryStatus.DELIVERED.name()) // We are delivering it now
-                .readStatus(ReadStatus.UNREAD.name()) // We are delivering it now
-                .deliveredAt(message.getDeliveredAt())
-                .readAt(message.getReadAt())
-                .createdAt(message.getCreatedAt())
-                .senderName(broadcast.getSenderName())
-                .content(broadcast.getContent())
-                .priority(broadcast.getPriority())
-                .category(broadcast.getCategory())
-                .broadcastCreatedAt(broadcast.getCreatedAt())
-                .expiresAt(broadcast.getExpiresAt())
-                .build();
+    private Optional<UserBroadcastResponse> buildUserBroadcastResponse(UserBroadcastMessage message) {
+        return broadcastRepository.findById(message.getBroadcastId())
+            .flatMap(broadcast -> buildUserBroadcastResponse(message, broadcast));
+    }
+    
+    private Optional<UserBroadcastResponse> buildUserBroadcastResponse(UserBroadcastMessage message, BroadcastMessage broadcast) {
+        try {
+            UserBroadcastResponse response = UserBroadcastResponse.builder()
+                    .id(message.getId())
+                    .broadcastId(message.getBroadcastId())
+                    .userId(message.getUserId())
+                    .deliveryStatus(DeliveryStatus.DELIVERED.name()) // We are delivering it now
+                    .readStatus(ReadStatus.UNREAD.name())
+                    .deliveredAt(message.getDeliveredAt())
+                    .readAt(message.getReadAt())
+                    .createdAt(message.getCreatedAt())
+                    .senderName(broadcast.getSenderName())
+                    .content(broadcast.getContent())
+                    .priority(broadcast.getPriority())
+                    .category(broadcast.getCategory())
+                    .broadcastCreatedAt(broadcast.getCreatedAt())
+                    .expiresAt(broadcast.getExpiresAt())
+                    .build();
+            return Optional.of(response);
+        } catch (Exception e) {
+            log.error("Error building user broadcast response for broadcast ID {}: {}", message.getBroadcastId(), e.getMessage());
+            return Optional.empty();
+        }
     }
 
     private void startHeartbeat() {

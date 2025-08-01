@@ -1,19 +1,17 @@
-// broadcast-microservice/src/main/java/com/example/broadcast/service/KafkaConsumerService.java
 package com.example.broadcast.service;
 
 import com.example.broadcast.dto.MessageDeliveryEvent;
+import com.example.broadcast.model.BroadcastMessage;
+import com.example.broadcast.repository.BroadcastRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataAccessException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +20,7 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CaffeineCacheService caffeineCacheService;
+    private final BroadcastRepository broadcastRepository;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(
@@ -30,23 +29,26 @@ public class KafkaConsumerService {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void processBroadcastEvent(
-            @Payload MessageDeliveryEvent event,
+            @Payload byte[] payload,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
 
-        log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
-                event.getEventId(), topic, partition, offset);
-        
-        Mono.fromRunnable(() -> handleEvent(event))
-            .subscribeOn(Schedulers.boundedElastic())
-            .doOnSuccess(v -> {
-                acknowledgment.acknowledge();
-                log.debug("Event processed and acknowledged: {}", event.getEventId());
-            })
-            .doOnError(e -> log.error("Error processing event {}, will not acknowledge: {}", event.getEventId(), e.getMessage()))
-            .subscribe();
+        try {
+            MessageDeliveryEvent event = objectMapper.readValue(payload, MessageDeliveryEvent.class);
+
+            log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
+                    event.getEventId(), topic, partition, offset);
+            
+            handleEvent(event);
+
+            acknowledgment.acknowledge();
+
+        } catch (Exception e) {
+            log.error("Failed to process message from topic {}. Root cause: {}", topic, e.getMessage());
+            throw new RuntimeException("Failed to process message", e);
+        }
     }
 
     private void handleEvent(MessageDeliveryEvent event) {
@@ -69,82 +71,40 @@ public class KafkaConsumerService {
     }
 
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
-        log.info("Handling broadcast created event for user: {}, broadcast: {}",
-                event.getUserId(), event.getBroadcastId());
+        log.info("Handling broadcast created event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
+        
+        // The "FAIL_ME" poison pill logic has been COMMENTED OUT to allow normal processing.                
+        // BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
+        //         .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
+        // if (broadcastMessage.getContent() != null && broadcastMessage.getContent().contains("FAIL_ME")) {
+        //     log.warn("Poison pill 'FAIL_ME' detected in broadcast message content. Simulating processing failure.");
+        //     throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");
+        // }
 
-        // --- START OF TEMPORARY TEST CODE ---
-        // Check for a "poison pill" message to simulate a processing failure.
-        try {
-            // We need to look inside the message content which is part of the event.
-            if (event.getMessage() != null && event.getMessage().contains("FAIL_ME")) {
-                throw new RuntimeException("Simulating a poison pill message failure for testing the DLT.");
-            }
-        } catch (Exception e) {
-            // Re-throw to trigger the Kafka error handler
-            throw new RuntimeException("DLT Test Failure", e);
-        }
-        // --- END OF TEMPORARY TEST CODE ---
-
-        try {
-            boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) ||
-                              sseService.isUserConnected(event.getUserId());
-            if (isOnline) {
-                // Delegate delivery and status updates entirely to the SseService
-                sseService.handleMessageEvent(event);
-                log.info("Broadcast event for online user {} forwarded to SSE service.", event.getUserId());
-            } else {
-                log.info("User {} is offline, message remains pending", event.getUserId());
-                caffeineCacheService.cachePendingEvent(event);
-            }
-        } catch (DataAccessException dae) {
-            // Granular handling for potentially recoverable database errors.
-            log.warn("A recoverable data access error occurred while processing event {}: {}. Will allow container error handler to retry.", event.getEventId(), dae.getMessage());
-            // We rethrow to ensure the Mono's doOnError captures it, triggering the DefaultErrorHandler
-            throw new RuntimeException("Failed to handle broadcast created event due to a database issue.", dae);
-        } catch (Exception e) {
-            // Granular handling for other, likely non-recoverable, errors.
-            log.error("An unexpected error occurred while processing event {}: {}", event.getEventId(), e.getMessage());
-            // We rethrow to ensure the Mono's doOnError captures it, triggering the DefaultErrorHandler
-            throw new RuntimeException("Failed to handle broadcast created event", e);
+        boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) || sseService.isUserConnected(event.getUserId());
+        if (isOnline) {
+            sseService.handleMessageEvent(event);
+            log.info("Broadcast event for online user {} forwarded to SSE service.", event.getUserId());
+        } else {
+            log.info("User {} is offline, message remains pending", event.getUserId());
+            caffeineCacheService.cachePendingEvent(event);
         }
     }
 
     private void handleMessageRead(MessageDeliveryEvent event) {
-        log.info("Handling message read event for user: {}, broadcast: {}",
-                event.getUserId(), event.getBroadcastId());
-        try {
-            // Forward to SSE service to notify other potential client sessions
-            sseService.handleMessageEvent(event);
-            // Update cache if necessary
-            caffeineCacheService.updateMessageReadStatus(event.getUserId(), event.getBroadcastId());
-        } catch (Exception e) {
-            log.error("Error handling message read event: {}", e.getMessage());
-            throw new RuntimeException("Failed to handle message read event", e);
-        }
+        log.info("Handling message read event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
+        sseService.handleMessageEvent(event);
+        caffeineCacheService.updateMessageReadStatus(event.getUserId(), event.getBroadcastId());
     }
 
     private void handleBroadcastCancelled(MessageDeliveryEvent event) {
-        log.info("Handling broadcast cancelled event for user: {}, broadcast: {}",
-                event.getUserId(), event.getBroadcastId());
-        try {
-            // Remove from pending cache if it exists
-            caffeineCacheService.removePendingEvent(event.getUserId(), event.getBroadcastId());
-            // Notify connected clients
-            sseService.handleMessageEvent(event);
-        } catch (Exception e) {
-            log.error("Error handling broadcast cancelled event: {}", e.getMessage());
-            throw new RuntimeException("Failed to handle broadcast cancelled event", e);
-        }
+        log.info("Handling broadcast cancelled event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
+        caffeineCacheService.removePendingEvent(event.getUserId(), event.getBroadcastId());
+        sseService.handleMessageEvent(event);
     }
 
     private void handleBroadcastExpired(MessageDeliveryEvent event) {
-        log.info("Handling broadcast expired event for user: {}, broadcast: {}",
-                event.getUserId(), event.getBroadcastId());
-        try {
-            sseService.handleMessageEvent(event);
-        } catch (Exception e) {
-            log.error("Error handling broadcast expired event: {}", e.getMessage());
-            throw new RuntimeException("Failed to handle broadcast expired event", e);
-        }
+        log.info("Handling broadcast expired event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
+        sseService.handleMessageEvent(event);
     }
 }

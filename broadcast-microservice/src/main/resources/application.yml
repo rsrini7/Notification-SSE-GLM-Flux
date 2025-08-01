@@ -47,7 +47,7 @@ spring:
         max.poll.records: 500
         fetch.max.wait.ms: 1000
     listener:
-      ack-mode: manual
+      ack-mode: MANUAL_IMMEDIATE
       concurrency: 3
   
   # Jackson Configuration
