@@ -18,6 +18,8 @@ interface SseConnectionState {
   connecting: boolean;
   sessionId: string | null;
   error: string | null;
+  // **NEW**: Added to provide more granular feedback to the UI
+  reconnectAttempt: number;
 }
 
 export const useSseConnection = (options: UseSseConnectionOptions) => {
@@ -35,9 +37,16 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     connected: false,
     connecting: false,
     sessionId: null,
-    error: null
+    error: null,
+    // **NEW**: Initialize reconnect attempt count
+    reconnectAttempt: 0
   });
-  const MAX_RECONNECT_ATTEMPTS = 5; // Define a maximum number of reconnection attempts
+
+  // **NEW**: Constants for exponential backoff strategy
+  const MAX_RECONNECT_ATTEMPTS = 5;
+  const BASE_RECONNECT_DELAY = 1000; // 1 second
+  const MAX_RECONNECT_DELAY = 30000; // 30 seconds
+
   const reconnectAttemptsRef = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
@@ -55,10 +64,12 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     onErrorRef.current = onError;
     onMessageRef.current = onMessage;
   }, [onConnect, onDisconnect, onError, onMessage]);
+
   // Generate session ID
   const generateSessionId = useCallback(() => {
     return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }, []);
+
   // Start heartbeat
   const startHeartbeat = useCallback(() => {
     if (heartbeatRef.current) {
@@ -82,17 +93,25 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       }
     }, heartbeatInterval);
   }, [userId, baseUrl, heartbeatInterval]);
+
   // Connect to SSE
   const connect = useCallback(() => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
+    
+    // **MODIFIED**: Differentiate between initial connection and reconnection for UI feedback
+    const isReconnecting = reconnectAttemptsRef.current > 0;
+    console.log(isReconnecting ? `SSE Reconnection Attempt: ${reconnectAttemptsRef.current}` : 'SSE Connection: Attempting to connect...');
 
-    console.log('SSE Connection: Disconnected');
-    setState(prev => ({ ...prev, connecting: true, error: null }));
+    setState(prev => ({ 
+        ...prev, 
+        connecting: true, 
+        error: isReconnecting ? `Connection lost. Reconnecting... (Attempt ${reconnectAttemptsRef.current})` : null,
+        reconnectAttempt: reconnectAttemptsRef.current
+    }));
     reconnectAttemptsRef.current++;
 
-    console.log('SSE Connection: Attempting to connect...');
     const newSessionId = generateSessionId();
     sessionIdRef.current = newSessionId;
 
@@ -107,7 +126,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
           connected: true,
           connecting: false,
           sessionId: newSessionId,
-          error: null
+          error: null,
+          reconnectAttempt: 0 // Reset on successful connection
         }));
 
         onConnectRef.current?.();
@@ -147,18 +167,24 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         onErrorRef.current?.(event);
         console.error('SSE Connection: Error and attempting reconnect');
 
-        // Attempt to reconnect after 5 seconds
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
         }
         
         if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+          // **MODIFIED**: Implement exponential backoff with jitter
+          const delay = Math.min(MAX_RECONNECT_DELAY, BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptsRef.current));
+          const jitter = delay * 0.1 * Math.random(); // Add up to 10% jitter
+          const reconnectDelay = delay + jitter;
+
+          console.log(`SSE Connection: Reconnecting in ${reconnectDelay.toFixed(2)}ms`);
+
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
-          }, 5000);
+          }, reconnectDelay);
         } else {
           console.error('SSE Connection: Max reconnection attempts reached. Stopping reconnects.');
-          setState(prev => ({ ...prev, error: 'Max reconnection attempts reached' }));
+          setState(prev => ({ ...prev, error: 'Max reconnection attempts reached. Please check your connection or try again later.' }));
         }
       };
     } catch (error) {
@@ -170,8 +196,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         error: 'Failed to connect'
       }));
       onErrorRef.current?.(error);
-
-
     }
   }, [userId, baseUrl, generateSessionId, startHeartbeat]);
 
@@ -192,6 +216,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       reconnectTimeoutRef.current = null;
     }
 
+    reconnectAttemptsRef.current = 0; // Reset reconnect attempts on manual disconnect
+
     // Notify backend about disconnection
     // Optimistically update state to disconnected
     setState(prev => ({
@@ -199,7 +225,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       connected: false,
       connecting: false,
       sessionId: null,
-      error: null
+      error: null,
+      reconnectAttempt: 0
     }));
 
     if (sessionIdRef.current && state.connected) {
@@ -207,14 +234,13 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         method: 'POST',
       }).catch(error => {
         console.error('Error sending disconnect signal to backend:', error);
-        // Optionally, you could revert state here if the disconnect truly failed and you want to retry
-        // For now, we assume the UI should reflect disconnected state immediately.
       });
     }
 
     sessionIdRef.current = null;
     onDisconnectRef.current?.();
   }, [userId, baseUrl, state.connected]);
+
   // Send read receipt
   const markAsRead = useCallback(async (messageId: number) => {
     if (sessionIdRef.current) {
@@ -228,6 +254,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       }
     }
   }, [userId, baseUrl]);
+
   // Check connection status
   const checkConnection = useCallback(async () => {
     if (sessionIdRef.current) {
@@ -254,6 +281,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       return null;
     }
   }, [baseUrl]);
+
   // Auto-connect on mount
   useEffect(() => {
     if (autoConnect && userId) {
@@ -263,6 +291,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     return () => {
       disconnect();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoConnect, userId]);
 
   return {
