@@ -12,6 +12,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -22,15 +23,16 @@ public class KafkaConsumerService {
     private final CaffeineCacheService caffeineCacheService;
     private final BroadcastRepository broadcastRepository;
 
+
+    // --- START OF SIMPLIFICATION ---
+    // The Acknowledgment is now handled automatically by the container and error handler.
+    // We can remove the try/catch block and let exceptions propagate naturally.
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}",
             groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}",
             containerFactory = "kafkaListenerContainerFactory"
     )
-
-    // --- START OF SIMPLIFICATION ---
-    // The Acknowledgment is now handled automatically by the container and error handler.
-    // We can remove the try/catch block and let exceptions propagate naturally.
+    @Transactional
     public void processBroadcastEvent(
             @Payload MessageDeliveryEvent event,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,

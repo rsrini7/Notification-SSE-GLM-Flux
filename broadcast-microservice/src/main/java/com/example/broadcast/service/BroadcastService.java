@@ -22,10 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-// --- START OF NEW IMPORTS ---
 import org.springframework.transaction.support.TransactionTemplate;
-// --- END OF NEW IMPORTS ---
-
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -47,56 +44,49 @@ public class BroadcastService {
     private final BroadcastTargetingService broadcastTargetingService;
     private final UserPreferencesRepository userPreferencesRepository;
     private final UserService userService;
-    // --- START OF NEW INJECTION ---
     private final TransactionTemplate transactionTemplate;
-    // --- END OF NEW INJECTION ---
-
 
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
     private String broadcastTopicName;
 
     // --- START OF MODIFIED createBroadcast METHOD ---
     // The @Transactional annotation is removed from here
+    @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
+        
+        BroadcastMessage broadcast = BroadcastMessage.builder()
+                .senderId(request.getSenderId())
+                .senderName(request.getSenderName())
+                .content(request.getContent())
+                .targetType(request.getTargetType())
+                .targetIds(request.getTargetIds())
+                .priority(request.getPriority())
+                .category(request.getCategory())
+                .scheduledAt(request.getScheduledAt())
+                .expiresAt(request.getExpiresAt())
+                .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .build();
 
-        // Use TransactionTemplate to explicitly manage the transaction
-        return transactionTemplate.execute(status -> {
-            BroadcastMessage broadcast = BroadcastMessage.builder()
-                    .senderId(request.getSenderId())
-                    .senderName(request.getSenderName())
-                    .content(request.getContent())
-                    .targetType(request.getTargetType())
-                    .targetIds(request.getTargetIds())
-                    .priority(request.getPriority())
-                    .category(request.getCategory())
-                    .scheduledAt(request.getScheduledAt())
-                    .expiresAt(request.getExpiresAt())
-                    .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
-                    .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                    .build();
+        if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
+            log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());
+            broadcast.setStatus(BroadcastStatus.EXPIRED.name());
+            broadcast = broadcastRepository.save(broadcast);
+            return buildBroadcastResponse(broadcast, 0);
+        }
 
-            if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
-                log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());
-                broadcast.setStatus(BroadcastStatus.EXPIRED.name());
-                broadcast = broadcastRepository.save(broadcast);
-                return buildBroadcastResponse(broadcast, 0);
-            }
-
-            if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
-                broadcast.setStatus(BroadcastStatus.SCHEDULED.name());
-                broadcast = broadcastRepository.save(broadcast);
-                log.info("Broadcast with ID: {} is scheduled for: {}", broadcast.getId(), broadcast.getScheduledAt());
-                return buildBroadcastResponse(broadcast, 0);
-            } else {
-                broadcast.setStatus(BroadcastStatus.ACTIVE.name());
-                broadcast = broadcastRepository.save(broadcast);
-                return triggerBroadcast(broadcast);
-            }
-        });
+        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
+            broadcast.setStatus(BroadcastStatus.SCHEDULED.name());
+            broadcast = broadcastRepository.save(broadcast);
+            log.info("Broadcast with ID: {} is scheduled for: {}", broadcast.getId(), broadcast.getScheduledAt());
+            return buildBroadcastResponse(broadcast, 0);
+        } else {
+            broadcast.setStatus(BroadcastStatus.ACTIVE.name());
+            broadcast = broadcastRepository.save(broadcast);
+            return triggerBroadcast(broadcast);
+        }
     }
-    // --- END OF MODIFIED createBroadcast METHOD ---
-
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public void processScheduledBroadcast(Long broadcastId) {
@@ -232,17 +222,30 @@ public class BroadcastService {
     }
 
     private void sendBroadcastEvent(BroadcastMessage broadcast, List<String> targetUsers, String eventType) {
-        targetUsers.forEach(userId -> {
-            MessageDeliveryEvent event = MessageDeliveryEvent.builder()
-                    .eventId(UUID.randomUUID().toString())
-                    .broadcastId(broadcast.getId())
-                    .userId(userId)
-                    .eventType(eventType)
-                    .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
-                    .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-                    .message("Broadcast " + eventType.toLowerCase())
-                    .build();
-            sendBroadcastEventAfterCommit(event);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                targetUsers.forEach(userId -> {
+                    MessageDeliveryEvent event = MessageDeliveryEvent.builder()
+                            .eventId(UUID.randomUUID().toString())
+                            .broadcastId(broadcast.getId())
+                            .userId(userId)
+                            .eventType(eventType)
+                            .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                            .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                            .message("Broadcast " + eventType.toLowerCase())
+                            .build();
+
+                    kafkaTemplate.send(broadcastTopicName, userId, event)
+                        .whenComplete((result, ex) -> {
+                            if (ex == null) {
+                                log.debug("Event sent successfully to Kafka topic '{}' after commit: {}", broadcastTopicName, event.getEventId());
+                            } else {
+                                log.error("Failed to send event to Kafka after commit: {}", ex.getMessage());
+                            }
+                        });
+                });
+            }
         });
     }
     
