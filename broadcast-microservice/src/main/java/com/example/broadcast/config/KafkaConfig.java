@@ -4,6 +4,7 @@ import com.example.broadcast.dto.MessageDeliveryEvent;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,7 @@ import org.springframework.kafka.config.KafkaListenerContainerFactory;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
+import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
@@ -23,12 +25,8 @@ import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BiFunction;
 
-/**
- * Kafka configuration for broadcast messaging system
- * Configures producers, consumers, and topics for high-scale event streaming.
- * Includes retry and Dead Letter Queue (DLQ) configuration for error handling.
- */
 @Configuration
 @EnableKafka
 public class KafkaConfig {
@@ -45,9 +43,6 @@ public class KafkaConfig {
     @Value("${broadcast.kafka.topic.replication-factor:1}")
     private short topicReplicationFactor;
 
-    /**
-     * Configure Kafka producer for sending broadcast events
-     */
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
         Map<String, Object> configProps = new HashMap<>();
@@ -65,117 +60,93 @@ public class KafkaConfig {
         return new DefaultKafkaProducerFactory<>(configProps);
     }
 
-    /**
-     * Configure Kafka template for sending messages
-     */
     @Bean
     public KafkaTemplate<String, Object> kafkaTemplate() {
         return new KafkaTemplate<>(producerFactory());
     }
 
-    /**
-     * Configure Kafka consumer for receiving broadcast events
-     */
     @Bean
-    public ConsumerFactory<String, MessageDeliveryEvent> consumerFactory() {
+    public ConsumerFactory<String, Object> consumerFactory() {
         Map<String, Object> configProps = new HashMap<>();
         
-        // Basic consumer configuration
         configProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         configProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
         
-        // Group and offset management
         configProps.put(ConsumerConfig.GROUP_ID_CONFIG, "broadcast-service-group");
         configProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         configProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         
-        // Performance tuning properties
         configProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 500);
         configProps.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, 1000);
         
-        // Session and heartbeat settings
         configProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 30000);
         configProps.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10000);
         
-        // Security and reliability
         configProps.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
         
-        // JSON deserializer configuration
         configProps.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
         configProps.put(JsonDeserializer.VALUE_DEFAULT_TYPE, MessageDeliveryEvent.class.getName());
         
         return new DefaultKafkaConsumerFactory<>(configProps);
     }
 
-    /**
-     * Configure Kafka listener container factory with retry and DLQ logic.
-     */
     @Bean
-    public KafkaListenerContainerFactory<ConcurrentMessageListenerContainer<String, MessageDeliveryEvent>> 
+    public KafkaListenerContainerFactory<ConcurrentMessageListenerContainer<String, Object>> 
             kafkaListenerContainerFactory(DefaultErrorHandler errorHandler) {
         
-        ConcurrentKafkaListenerContainerFactory<String, MessageDeliveryEvent> factory = 
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = 
                 new ConcurrentKafkaListenerContainerFactory<>();
         
         factory.setConsumerFactory(consumerFactory());
-        factory.setConcurrency(3); // Number of consumer threads
-        factory.getContainerProperties().setAckMode(org.springframework.kafka.listener.ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        factory.setConcurrency(3);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         
-        // Set the custom error handler with retry and DLQ logic
         factory.setCommonErrorHandler(errorHandler);
         
         return factory;
     }
 
-    /**
-     * Configures the error handler for the Kafka listener.
-     * It will retry processing a message 2 times (3 total attempts) with a 1-second delay.
-     * If all attempts fail, it sends the message to a Dead Letter Topic.
-     */
     @Bean
     public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
-        // Retry twice with a 1-second interval between retries.
+        // Set retries to 2 (total 3 attempts)
         FixedBackOff backOff = new FixedBackOff(1000L, 2L);
-        return new DefaultErrorHandler(deadLetterPublishingRecoverer, backOff);
+        
+        // --- THIS IS THE KEY CHANGE ---
+        // We explicitly tell the error handler to NOT retry after the backoff is exhausted.
+        // This stops the infinite loop. When retries are done, it will only call the recoverer.
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(deadLetterPublishingRecoverer, backOff);
+        errorHandler.setCommitRecovered(true); // Commit the original offset after recovery
+        return errorHandler;
     }
-
-    /**
-     * Creates the recoverer that publishes failed messages to the DLQ.
-     */
+    
     @Bean
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(KafkaTemplate<String, Object> kafkaTemplate) {
-        return new DeadLetterPublishingRecoverer(kafkaTemplate);
+        // This function ensures failed messages always go to partition 0 of the DLT
+        BiFunction<org.apache.kafka.clients.consumer.ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
+                new TopicPartition(cr.topic() + ".DLT", 0);
+
+        return new DeadLetterPublishingRecoverer(kafkaTemplate, destinationResolver);
     }
 
-    /**
-     * Configure Kafka topic for broadcast events
-     */
     @Bean
     public NewTopic broadcastTopic() {
         return TopicBuilder.name(topicName)
                 .partitions(topicPartitions)
                 .replicas(topicReplicationFactor)
-                .config("retention.ms", "604800000") // 7 days retention
+                .config("retention.ms", "604800000")
                 .build();
     }
     
-    /**
-     * NEW: Define the Dead Letter Topic.
-     * Failed messages will be sent here for later analysis.
-     */
     @Bean
     public NewTopic deadLetterTopic() {
         return TopicBuilder.name(topicName + ".DLT")
-                .partitions(1) // Usually, 1 partition is enough for a DLT
+                .partitions(1)
                 .replicas(topicReplicationFactor)
-                .config("retention.ms", "1209600000") // 14 days retention for analysis
+                .config("retention.ms", "1209600000")
                 .build();
     }
 
-    /**
-     * Configure admin client for topic management
-     */
     @Bean
     public KafkaAdmin kafkaAdmin() {
         Map<String, Object> configs = new HashMap<>();

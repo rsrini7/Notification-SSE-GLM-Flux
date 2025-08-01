@@ -1,4 +1,3 @@
-
 package com.example.broadcast.service;
 
 import com.example.broadcast.dto.BroadcastRequest;
@@ -51,7 +50,7 @@ public class BroadcastService {
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
-
+        
         BroadcastMessage broadcast = BroadcastMessage.builder()
                 .senderId(request.getSenderId())
                 .senderName(request.getSenderName())
