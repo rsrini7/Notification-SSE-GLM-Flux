@@ -78,13 +78,16 @@ public class KafkaConfig {
         return factory;
     }
 
+    // --- START: DEFINITIVE AND FINAL FIX ---
     @Bean
     public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
         FixedBackOff backOff = new FixedBackOff(1000L, 2L);
+        // We instantiate our new custom class here.
         DefaultErrorHandler errorHandler = new ConciseLoggingErrorHandler(deadLetterPublishingRecoverer, backOff);
         errorHandler.setCommitRecovered(true);
         return errorHandler;
     }
+    // --- END: DEFINITIVE AND FINAL FIX ---
 
     @Bean
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
