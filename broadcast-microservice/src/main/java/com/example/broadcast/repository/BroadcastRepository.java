@@ -1,5 +1,4 @@
 package com.example.broadcast.repository;
-
 import com.example.broadcast.dto.BroadcastResponse;
 import com.example.broadcast.model.BroadcastMessage;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -11,7 +10,6 @@ import java.sql.Statement;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -19,12 +17,10 @@ import java.util.Map;
 import java.util.Optional;
 
 import com.example.broadcast.util.Constants.BroadcastStatus;
-
 @Repository
 public class BroadcastRepository {
 
     private final JdbcTemplate jdbcTemplate;
-
     public BroadcastRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -46,7 +42,6 @@ public class BroadcastRepository {
             .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
             .status(rs.getString("status"))
             .build();
-
     private final RowMapper<BroadcastResponse> broadcastResponseRowMapper = (rs, rowNum) -> BroadcastResponse.builder()
             .id(rs.getLong("id"))
             .senderId(rs.getString("sender_id"))
@@ -66,14 +61,12 @@ public class BroadcastRepository {
             .totalDelivered(rs.getInt("total_delivered"))
             .totalRead(rs.getInt("total_read"))
             .build();
-
     public BroadcastMessage save(BroadcastMessage broadcast) {
         String sql = """
             INSERT INTO broadcast_messages 
             (sender_id, sender_name, content, target_type, target_ids, priority, category, scheduled_at, expires_at, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
-
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
@@ -89,7 +82,6 @@ public class BroadcastRepository {
             ps.setString(10, broadcast.getStatus() != null ? broadcast.getStatus() : BroadcastStatus.ACTIVE.name());
             return ps;
         }, keyHolder);
-
         if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
             Map<String, Object> keys = keyHolder.getKeyList().get(0);
             Number id = (Number) keys.get("ID");
@@ -196,10 +188,18 @@ public class BroadcastRepository {
         return jdbcTemplate.query(sql, broadcastRowMapper, now, limit);
     }
 
+    // START OF FIX: Resolves the race condition between scheduling and expiration services.
     public List<BroadcastMessage> findExpiredBroadcasts(ZonedDateTime now) {
-        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at <= ?";
+        String sql = """
+            SELECT * FROM broadcast_messages 
+            WHERE status = 'ACTIVE' 
+            AND expires_at IS NOT NULL 
+            AND expires_at <= ? 
+            AND updated_at < DATEADD('MINUTE', -1, CURRENT_TIMESTAMP)
+        """;
         return jdbcTemplate.query(sql, broadcastRowMapper, now);
     }
+    // END OF FIX
 
     public int updateStatus(Long broadcastId, String status) {
         String sql = "UPDATE broadcast_messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";

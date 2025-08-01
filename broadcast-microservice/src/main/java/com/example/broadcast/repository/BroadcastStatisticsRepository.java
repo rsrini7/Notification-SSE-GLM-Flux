@@ -3,8 +3,6 @@ package com.example.broadcast.repository;
 import com.example.broadcast.model.BroadcastStatistics;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
@@ -32,27 +30,28 @@ public class BroadcastStatisticsRepository {
                 .build();
     }
 
-    public BroadcastStatistics save(BroadcastStatistics stats) {
-        String sql = "INSERT INTO broadcast_statistics (broadcast_id, total_targeted, total_delivered, total_read, total_failed, avg_delivery_time_ms, calculated_at) VALUES (?, ?, ?, ?, ?, ?, ?)";
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-
+    // START OF FIX: Changed from a simple INSERT to a MERGE (upsert) statement.
+    // This makes the operation idempotent and works with the new UNIQUE constraint
+    // on the broadcast_id column, preventing duplicate statistic entries.
+    public void save(BroadcastStatistics stats) {
+        String sql = """
+            MERGE INTO broadcast_statistics (broadcast_id, total_targeted, total_delivered, total_read, total_failed, calculated_at)
+            KEY(broadcast_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """;
+    
         jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(sql, new String[]{"ID"});
+            PreparedStatement ps = connection.prepareStatement(sql);
             ps.setLong(1, stats.getBroadcastId());
             ps.setInt(2, stats.getTotalTargeted());
             ps.setInt(3, stats.getTotalDelivered());
             ps.setInt(4, stats.getTotalRead());
             ps.setInt(5, stats.getTotalFailed());
-            ps.setObject(6, stats.getAvgDeliveryTimeMs());
-            ps.setObject(7, stats.getCalculatedAt());
+            ps.setObject(6, stats.getCalculatedAt());
             return ps;
-        }, keyHolder);
-
-        if (keyHolder.getKey() != null) {
-            stats.setId(keyHolder.getKey().longValue());
-        }
-        return stats;
+        });
     }
+    // END OF FIX
 
     public Optional<BroadcastStatistics> findByBroadcastId(Long broadcastId) {
         String sql = "SELECT * FROM broadcast_statistics WHERE broadcast_id = ?";

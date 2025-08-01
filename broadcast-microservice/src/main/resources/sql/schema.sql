@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS broadcast_messages (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'SCHEDULED', 'EXPIRED', 'CANCELLED'))
 );
-
 -- User Broadcast Messages Table (User-side records)
 -- Tracks delivery and read status for each user per broadcast
 CREATE TABLE IF NOT EXISTS user_broadcast_messages (
@@ -40,7 +39,6 @@ CREATE TABLE IF NOT EXISTS user_broadcast_messages (
     -- Unique constraint to prevent duplicate user-broadcast entries
     UNIQUE (broadcast_id, user_id)
 );
-
 -- Indexes for performance
 DROP INDEX IF EXISTS idx_broadcast_created_at;
 DROP INDEX IF EXISTS idx_broadcast_status;
@@ -62,8 +60,6 @@ CREATE INDEX idx_user_broadcast_status ON user_broadcast_messages (delivery_stat
 CREATE INDEX idx_user_broadcast_broadcast_id ON user_broadcast_messages (broadcast_id);
 CREATE INDEX idx_user_broadcast_created_at ON user_broadcast_messages (created_at);
 CREATE INDEX idx_user_broadcast_unread ON user_broadcast_messages (user_id, read_status, delivery_status);
-
-
 -- User Sessions Table (for connection tracking)
 -- Tracks active user sessions and pod assignments for efficient SSE routing
 CREATE TABLE IF NOT EXISTS user_sessions (
@@ -79,7 +75,6 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     -- Unique constraint for active sessions
     UNIQUE (user_id, session_id, pod_id)
 );
-
 -- Broadcast Statistics Table (for monitoring and analytics)
 -- Tracks performance metrics and delivery statistics
 CREATE TABLE IF NOT EXISTS broadcast_statistics (
@@ -93,7 +88,12 @@ CREATE TABLE IF NOT EXISTS broadcast_statistics (
     calculated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
     -- Foreign key constraint
-    FOREIGN KEY (broadcast_id) REFERENCES broadcast_messages(id) ON DELETE CASCADE
+    FOREIGN KEY (broadcast_id) REFERENCES broadcast_messages(id) ON DELETE CASCADE,
+
+    -- START OF FIX: Enforces a 1-to-1 relationship between a broadcast and its statistics.
+    -- This prevents duplicate rows and fixes the multiple entry bug in the admin UI.
+    UNIQUE (broadcast_id)
+    -- END OF FIX
 );
 
 -- User Preferences Table (for notification filtering)
@@ -111,21 +111,16 @@ CREATE TABLE IF NOT EXISTS user_preferences (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-
 -- Indexes for fast session lookups
 CREATE INDEX idx_user_sessions_user_id ON user_sessions (user_id);
 CREATE INDEX idx_user_sessions_pod_id ON user_sessions (pod_id);
 CREATE INDEX idx_user_sessions_status ON user_sessions (connection_status);
 CREATE INDEX idx_user_sessions_heartbeat ON user_sessions (last_heartbeat);
-
 -- Indexes for analytics queries
 CREATE INDEX idx_stats_broadcast_id ON broadcast_statistics (broadcast_id);
 CREATE INDEX idx_stats_calculated_at ON broadcast_statistics (calculated_at);
-
 -- Index for user preference lookups
 CREATE INDEX idx_user_preferences_user_id ON user_preferences (user_id);
-
-
 CREATE TABLE IF NOT EXISTS dlt_messages (
     id VARCHAR(255) PRIMARY KEY,
     original_topic VARCHAR(255) NOT NULL,
@@ -135,10 +130,8 @@ CREATE TABLE IF NOT EXISTS dlt_messages (
     failed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     original_message_payload TEXT
 );
-
 -- Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_dlt_failed_at ON dlt_messages (failed_at);
-
 -- Create sequence for ID generation
 CREATE SEQUENCE IF NOT EXISTS broadcast_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS user_broadcast_seq START WITH 1 INCREMENT BY 1;
