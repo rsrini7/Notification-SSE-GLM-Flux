@@ -95,7 +95,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
                 return new Date(message.expiresAt).getTime() > now;
             });
 
-            // **MODIFIED**: Only update state if the messages array has actually changed.
             if (activeMessages.length !== prevMessages.length) {
                 return activeMessages;
             }
@@ -144,7 +143,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [sseConnection, toast]);
 
-  // Mark all messages as read
   const markAllAsRead = useCallback(async () => {
     const unreadMessages = messages.filter(msg => msg.readStatus === 'UNREAD');
     try {
@@ -167,7 +165,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [messages, sseConnection, toast]);
 
-  // Delete message (local/archive)
   const deleteMessage = useCallback(async (messageId: number) => {
     try {
       setMessages(prev => prev.filter(msg => msg.id !== messageId));
@@ -184,7 +181,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [toast]);
 
-  // **MODIFIED**: The stats object is now memoized and only recalculates when `messages` changes.
   const stats = useMemo(() => {
     const total = messages.length;
     const unread = messages.filter(msg => msg.readStatus === 'UNREAD').length;
@@ -192,17 +188,14 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     return { total, unread, read, readRate: total > 0 ? (read / total) * 100 : 0 };
   }, [messages]);
 
-  // Filter messages by status
   const getMessagesByStatus = useCallback((status: 'READ' | 'UNREAD') => {
     return messages.filter(msg => msg.readStatus === status);
   }, [messages]);
 
-  // Filter messages by priority
   const getMessagesByPriority = useCallback((priority: string) => {
     return messages.filter(msg => msg.priority === priority);
   }, [messages]);
 
-  // Search messages
   const searchMessages = useCallback((query: string) => {
     const lowercaseQuery = query.toLowerCase();
     return messages.filter(msg => 
