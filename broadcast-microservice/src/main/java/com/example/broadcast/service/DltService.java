@@ -2,7 +2,9 @@ package com.example.broadcast.service;
 
 import com.example.broadcast.dto.DltMessage;
 import com.example.broadcast.dto.MessageDeliveryEvent;
+import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.UserBroadcastMessage;
+import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.DltRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.util.Constants.DeliveryStatus;
@@ -34,8 +36,9 @@ public class DltService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final DltRepository dltRepository;
-    // NEW: Inject UserBroadcastRepository
     private final UserBroadcastRepository userBroadcastRepository;
+    // NEW: Inject BroadcastRepository to check for the parent broadcast's existence.
+    private final BroadcastRepository broadcastRepository;
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}.DLT",
@@ -84,7 +87,6 @@ public class DltService {
 
         MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
 
-        // FIX: Before redriving, ensure a 'PENDING' user message record exists in the database.
         prepareDatabaseForRedrive(originalPayload);
 
         log.info("Redriving message ID: {}. Sending to original topic: {}", id, dltMessage.getOriginalTopic());
@@ -94,19 +96,24 @@ public class DltService {
         dltRepository.deleteById(id);
     }
 
-    // NEW: Helper method to manage database state before redriving to Kafka.
     private void prepareDatabaseForRedrive(MessageDeliveryEvent payload) {
+        // FIX: First, verify that the parent broadcast message still exists.
+        Optional<BroadcastMessage> parentBroadcast = broadcastRepository.findById(payload.getBroadcastId());
+        if (parentBroadcast.isEmpty()) {
+            log.error("Cannot redrive message for broadcast ID {}. The original broadcast has been deleted.", payload.getBroadcastId());
+            // This exception will be caught and shown to the user in the UI.
+            throw new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") has been deleted.");
+        }
+
         Optional<UserBroadcastMessage> existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(
             payload.getUserId(), payload.getBroadcastId()
         );
 
         if (existingMessage.isPresent()) {
-            // If a record exists (e.g., status is FAILED), reset it to PENDING.
             UserBroadcastMessage message = existingMessage.get();
             userBroadcastRepository.updateStatusToPending(message.getId());
             log.info("Reset existing UserBroadcastMessage (ID: {}) to PENDING for redrive.", message.getId());
         } else {
-            // If no record exists, create a new one. This can happen if the original transaction failed completely.
             UserBroadcastMessage newMessage = UserBroadcastMessage.builder()
                     .broadcastId(payload.getBroadcastId())
                     .userId(payload.getUserId())
