@@ -18,10 +18,10 @@ const DltManagementPanel: React.FC = () => {
         try {
             const data = await dltService.getDltMessages();
             setDltMessages(data);
-        } catch (error) {
+        } catch (error: any) {
             toast({
                 title: "Error",
-                description: `Failed to fetch DLT messages: ${error}`,
+                description: `Failed to fetch DLT messages: ${error.response?.data?.message || error.message}`,
                 variant: "destructive",
             });
         } finally {
@@ -41,10 +41,12 @@ const DltManagementPanel: React.FC = () => {
                 description: "Message has been sent for reprocessing.",
             });
             fetchDltMessages(); // Refresh list
-        } catch (error) {
+        } catch (error: any) {
+            // FIX: Display a more specific error message from the backend if available.
+            const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred.';
             toast({
                 title: "Error",
-                description: `Failed to redrive message: ${error}`,
+                description: `Failed to redrive message: ${errorMessage}`,
                 variant: "destructive",
             });
         }
@@ -58,10 +60,12 @@ const DltManagementPanel: React.FC = () => {
                 description: "Message has been deleted.",
             });
             fetchDltMessages(); // Refresh list
-        } catch (error) {
+        } catch (error: any) {
+            // FIX: Display a more specific error message from the backend if available.
+            const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred.';
             toast({
                 title: "Error",
-                description: `Failed to delete message: ${error}`,
+                description: `Failed to delete message: ${errorMessage}`,
                 variant: "destructive",
             });
         }

@@ -8,13 +8,13 @@ import org.springframework.stereotype.Repository;
 
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
 public class DltRepository {
 
     private final JdbcTemplate jdbcTemplate;
-
     private final RowMapper<DltMessage> rowMapper = (rs, rowNum) -> DltMessage.builder()
             .id(rs.getString("id"))
             .originalTopic(rs.getString("original_topic"))
@@ -42,9 +42,11 @@ public class DltRepository {
         return jdbcTemplate.query(sql, rowMapper);
     }
 
-    public DltMessage findById(String id) {
+    // FIX: Changed the return type to Optional<DltMessage> to avoid exceptions on not found.
+    // This provides a safer way for the service layer to handle cases where the message might have been processed by another instance.
+    public Optional<DltMessage> findById(String id) {
         String sql = "SELECT * FROM dlt_messages WHERE id = ?";
-        return jdbcTemplate.queryForObject(sql, rowMapper, id);
+        return jdbcTemplate.query(sql, rowMapper, id).stream().findFirst();
     }
 
     public void deleteById(String id) {
