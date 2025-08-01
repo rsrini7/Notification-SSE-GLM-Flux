@@ -28,6 +28,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import com.example.broadcast.util.Constants.DeliveryStatus;
+import com.example.broadcast.util.Constants.EventType;
+import com.example.broadcast.util.Constants.SseEventType;
+import com.example.broadcast.util.Constants.ReadStatus;
+
+
 @Service
 @Slf4j
 public class SseService {
@@ -77,7 +83,7 @@ public class SseService {
         
         sendPendingMessages(userId, sink);
         sendEvent(userId, Map.of(
-                "type", "CONNECTED",
+                "type", SseEventType.CONNECTED.name(),
                 "timestamp", ZonedDateTime.now(),
                 "message", "SSE connection established"
         ));
@@ -94,17 +100,17 @@ public class SseService {
 
     public void handleMessageEvent(MessageDeliveryEvent event) {
         log.debug("Handling message event: {} for user: {}", event.getEventType(), event.getUserId());
-        if ("CREATED".equals(event.getEventType())) {
+        if (EventType.CREATED.name().equals(event.getEventType())) {
             deliverMessageToUser(event.getUserId(), event.getBroadcastId());
-        } else if ("READ".equals(event.getEventType())) {
+        } else if (EventType.READ.name().equals(event.getEventType())) {
             sendEvent(event.getUserId(), Map.of(
-                    "type", "READ_RECEIPT",
+                    "type", SseEventType.READ_RECEIPT.name(),
                     "data", Map.of("broadcastId", event.getBroadcastId()),
                     "timestamp", event.getTimestamp()
             ));
-        } else if ("EXPIRED".equals(event.getEventType()) || "CANCELLED".equals(event.getEventType())) {
+        } else if (EventType.EXPIRED.name().equals(event.getEventType()) || EventType.CANCELLED.name().equals(event.getEventType())) {
             sendEvent(event.getUserId(), Map.of(
-                    "type", "MESSAGE_REMOVED",
+                    "type", SseEventType.MESSAGE_REMOVED.name(),
                     "data", Map.of("broadcastId", event.getBroadcastId()),
                     "timestamp", event.getTimestamp()
             ));
@@ -117,11 +123,11 @@ public class SseService {
             for (UserBroadcastMessage message : pendingMessages) {
                 UserBroadcastResponse response = buildUserBroadcastResponse(message);
                 sendEventToSink(sink, Map.of(
-                        "type", "MESSAGE",
+                        "type", SseEventType.MESSAGE.name(),
                         "data", response,
                         "timestamp", ZonedDateTime.now()
                 ));
-                userBroadcastRepository.updateDeliveryStatus(message.getId(), "DELIVERED");
+                userBroadcastRepository.updateDeliveryStatus(message.getId(), DeliveryStatus.DELIVERED.name());
                 broadcastStatisticsRepository.incrementDeliveredCount(message.getBroadcastId());
             }
             
@@ -160,11 +166,11 @@ public class SseService {
                 UserBroadcastMessage message = messages.get(0); // Should only be one
                 UserBroadcastResponse response = buildUserBroadcastResponse(message);
                 sendEvent(userId, Map.of(
-                        "type", "MESSAGE",
+                        "type", SseEventType.MESSAGE.name(),
                         "data", response,
                         "timestamp", ZonedDateTime.now()
                 ));
-                userBroadcastRepository.updateDeliveryStatus(message.getId(), "DELIVERED");
+                userBroadcastRepository.updateDeliveryStatus(message.getId(), DeliveryStatus.DELIVERED.name());
                 broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
                 log.info("Message delivered to online user: {}, broadcast: {}", userId, broadcastId);
             } else {
@@ -182,8 +188,8 @@ public class SseService {
                 .id(message.getId())
                 .broadcastId(message.getBroadcastId())
                 .userId(message.getUserId())
-                .deliveryStatus("DELIVERED") // We are delivering it now
-                .readStatus(message.getReadStatus())
+                .deliveryStatus(DeliveryStatus.DELIVERED.name()) // We are delivering it now
+                .readStatus(ReadStatus.UNREAD.name()) // We are delivering it now
                 .deliveredAt(message.getDeliveredAt())
                 .readAt(message.getReadAt())
                 .createdAt(message.getCreatedAt())

@@ -17,6 +17,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.example.broadcast.util.Constants.DeliveryStatus;
+import com.example.broadcast.util.Constants.ReadStatus;
+import com.example.broadcast.util.Constants.TargetType;
+
 /**
  * A service dedicated to handling the logic of targeting users for broadcasts.
  * It determines which users should receive a message and filters them based on
@@ -28,7 +32,7 @@ import java.util.stream.Collectors;
 public class BroadcastTargetingService {
 
     private final UserPreferencesRepository userPreferencesRepository;
-    private final UserService userService; // Inject the new mock user service
+    private final UserService userService;
 
     /**
      * Creates a list of UserBroadcastMessage entities for all targeted users of a broadcast.
@@ -57,8 +61,8 @@ public class BroadcastTargetingService {
             .map(userId -> UserBroadcastMessage.builder()
                 .broadcastId(broadcast.getId())
                 .userId(userId)
-                .deliveryStatus("PENDING")
-                .readStatus("UNREAD")
+                .deliveryStatus(DeliveryStatus.PENDING.name())
+                .readStatus(ReadStatus.UNREAD.name())
                 .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .build())

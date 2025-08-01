@@ -26,6 +26,9 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.example.broadcast.util.Constants.BroadcastStatus;
+import com.example.broadcast.util.Constants.EventType;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -37,6 +40,7 @@ public class BroadcastService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final BroadcastTargetingService broadcastTargetingService;
     private final UserPreferencesRepository userPreferencesRepository;
+
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
     private String broadcastTopicName;
 
@@ -50,7 +54,6 @@ public class BroadcastService {
                 .targetType(request.getTargetType())
                 .targetIds(request.getTargetIds())
                 .priority(request.getPriority())
- 
                 .category(request.getCategory())
                 .scheduledAt(request.getScheduledAt())
                 .expiresAt(request.getExpiresAt())
@@ -60,18 +63,18 @@ public class BroadcastService {
         // Check for immediate expiration on creation
         if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
             log.warn("Broadcast creation request for an already expired message from sender: {}. Expiration: {}", broadcast.getSenderId(), broadcast.getExpiresAt());
-            broadcast.setStatus("EXPIRED");
+            broadcast.setStatus(BroadcastStatus.EXPIRED.name());
             broadcast = broadcastRepository.save(broadcast);
             return buildBroadcastResponse(broadcast, 0); // No users will be targeted
         }
 
         if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
-            broadcast.setStatus("SCHEDULED");
+            broadcast.setStatus(BroadcastStatus.SCHEDULED.name());
             broadcast = broadcastRepository.save(broadcast);
             log.info("Broadcast with ID: {} is scheduled for: {}", broadcast.getId(), broadcast.getScheduledAt());
             return buildBroadcastResponse(broadcast, 0);
         } else {
-            broadcast.setStatus("ACTIVE");
+            broadcast.setStatus(BroadcastStatus.ACTIVE.name());
             broadcast = broadcastRepository.save(broadcast);
             return triggerBroadcast(broadcast);
         }
@@ -81,9 +84,9 @@ public class BroadcastService {
     public void processScheduledBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
-        broadcast.setStatus("ACTIVE");
+        broadcast.setStatus(BroadcastStatus.ACTIVE.name());
         broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
-        broadcastRepository.updateStatus(broadcast.getId(), "ACTIVE");
+        broadcastRepository.save(broadcast);
 
         triggerBroadcast(broadcast);
     }
@@ -98,7 +101,6 @@ public class BroadcastService {
                 .totalDelivered(0)
                 .totalRead(0)
                 .totalFailed(0)
-             
                 .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
         broadcastStatisticsRepository.save(initialStats);
@@ -110,7 +112,7 @@ public class BroadcastService {
         List<String> targetUserIds = userBroadcasts.stream()
             .map(UserBroadcastMessage::getUserId)
             .collect(Collectors.toList());
-        sendBroadcastEvent(broadcast, targetUserIds, "CREATED");
+        sendBroadcastEvent(broadcast, targetUserIds, EventType.CREATED.name());
         log.info("Broadcast triggered successfully with ID: {}, targeting {} users", broadcast.getId(), totalTargeted);
         return buildBroadcastResponse(broadcast, totalTargeted);
     }
@@ -136,14 +138,15 @@ public class BroadcastService {
     public void cancelBroadcast(Long id) {
         BroadcastMessage broadcast = broadcastRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
-        broadcastRepository.updateStatus(id, "CANCELLED");
+        broadcast.setStatus(BroadcastStatus.CANCELLED.name());
+        broadcastRepository.save(broadcast);
         
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
         List<String> targetUsers = userBroadcasts.stream()
                 .map(UserBroadcastMessage::getUserId)
                 .distinct()
                 .collect(Collectors.toList());
-        sendBroadcastEvent(broadcast, targetUsers, "CANCELLED");
+        sendBroadcastEvent(broadcast, targetUsers, EventType.CANCELLED.name());
         log.info("Broadcast cancelled: {}", id);
     }
 
@@ -151,15 +154,16 @@ public class BroadcastService {
     public void expireBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
-        if ("ACTIVE".equals(broadcast.getStatus())) {
-            broadcastRepository.updateStatus(broadcastId, "EXPIRED");
+        if (BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) {
+            broadcast.setStatus(BroadcastStatus.EXPIRED.name());
+            broadcastRepository.save(broadcast);
             log.info("Broadcast expired: {}", broadcastId);
             List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);
             List<String> targetUsers = userBroadcasts.stream()
                     .map(UserBroadcastMessage::getUserId)
                     .distinct()
                     .collect(Collectors.toList());
-            sendBroadcastEvent(broadcast, targetUsers, "EXPIRED");
+            sendBroadcastEvent(broadcast, targetUsers, EventType.EXPIRED.name());
         }
     }
 
@@ -195,7 +199,7 @@ public class BroadcastService {
             .eventId(UUID.randomUUID().toString())
             .broadcastId(userMessage.getBroadcastId())
             .userId(userId)
-            .eventType("READ")
+            .eventType(EventType.READ.name())
             .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
             .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
             .message("User marked message as read")
@@ -216,12 +220,10 @@ public class BroadcastService {
                     .eventId(UUID.randomUUID().toString())
                     .broadcastId(broadcast.getId())
                     .userId(userId)
- 
                     .eventType(eventType)
                     .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
                     .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                     .message("Broadcast " + eventType.toLowerCase())
-                 
                     .build();
             
             kafkaTemplate.send(broadcastTopicName, userId, event)
@@ -242,14 +244,12 @@ public class BroadcastService {
                 .senderName(broadcast.getSenderName())
                 .content(broadcast.getContent())
                 .targetType(broadcast.getTargetType())
- 
                 .targetIds(broadcast.getTargetIds())
                 .priority(broadcast.getPriority())
                 .category(broadcast.getCategory())
                 .expiresAt(broadcast.getExpiresAt())
                 .createdAt(broadcast.getCreatedAt())
                 .scheduledAt(broadcast.getScheduledAt())
-     
                 .status(broadcast.getStatus())
                 .totalTargeted(totalTargeted)
                 .totalDelivered(0)
