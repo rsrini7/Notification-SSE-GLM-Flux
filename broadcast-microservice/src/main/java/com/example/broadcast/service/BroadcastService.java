@@ -30,6 +30,10 @@ import java.util.stream.Collectors;
 import com.example.broadcast.util.Constants.BroadcastStatus;
 import com.example.broadcast.util.Constants.EventType;
 
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -244,25 +248,36 @@ public class BroadcastService {
     // --- END OF CHANGES ---
 
     private void sendBroadcastEvent(BroadcastMessage broadcast, List<String> targetUsers, String eventType) {
-        targetUsers.forEach(userId -> {
-            MessageDeliveryEvent event = MessageDeliveryEvent.builder()
-                    .eventId(UUID.randomUUID().toString())
-                    .broadcastId(broadcast.getId())
-                    .userId(userId)
-                    .eventType(eventType)
-                    .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
-                    .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-                    .message("Broadcast " + eventType.toLowerCase())
-                    .build();
-            
-            kafkaTemplate.send(broadcastTopicName, userId, event)
-                .whenComplete((result, ex) -> {
-                    if (ex == null) {
-                        log.debug("Event sent successfully to Kafka: {}", event.getEventId());
-                    } else {
-                        log.error("Failed to send event to Kafka: {}", ex.getMessage());
-                    }
+
+        // This synchronization manager ensures that the code inside 'afterCommit'
+        // only runs AFTER the database transaction for creating the broadcast has
+        // successfully completed. This prevents the race condition we observed.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                // The existing forEach loop is now safely inside the afterCommit block.
+                targetUsers.forEach(userId -> {
+                    MessageDeliveryEvent event = MessageDeliveryEvent.builder()
+                            .eventId(UUID.randomUUID().toString())
+                            .broadcastId(broadcast.getId())
+                            .userId(userId)
+                            .eventType(eventType)
+                            .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                            .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                            .message("Broadcast " + eventType.toLowerCase())
+                            .build();
+
+                    kafkaTemplate.send(broadcastTopicName, userId, event)
+                        .whenComplete((result, ex) -> {
+                            if (ex == null) {
+                                // Added the topic name to the log for better clarity
+                                log.debug("Event sent successfully to Kafka topic '{}' after commit: {}", broadcastTopicName, event.getEventId());
+                            } else {
+                                log.error("Failed to send event to Kafka after commit: {}", ex.getMessage());
+                            }
+                        });
                 });
+            }
         });
     }
 

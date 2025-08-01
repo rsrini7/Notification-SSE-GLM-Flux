@@ -2,8 +2,8 @@
 package com.example.broadcast.service;
 
 import com.example.broadcast.dto.MessageDeliveryEvent;
-import com.example.broadcast.model.BroadcastMessage; // <-- ADD THIS IMPORT
-import com.example.broadcast.repository.BroadcastRepository; // <-- ADD THIS IMPORT
+import com.example.broadcast.model.BroadcastMessage;
+import com.example.broadcast.repository.BroadcastRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -23,7 +24,7 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CaffeineCacheService caffeineCacheService;
-    private final BroadcastRepository broadcastRepository; // <-- INJECT THIS REPOSITORY
+    private final BroadcastRepository broadcastRepository;
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}",
@@ -39,15 +40,27 @@ public class KafkaConsumerService {
 
         log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                 event.getEventId(), topic, partition, offset);
-        
-        Mono.fromRunnable(() -> handleEvent(event))
-            .subscribeOn(Schedulers.boundedElastic())
-            .doOnSuccess(v -> {
-                acknowledgment.acknowledge();
-                log.debug("Event processed and acknowledged: {}", event.getEventId());
-            })
-            .doOnError(e -> log.error("Error processing event {}, will not acknowledge: {}", event.getEventId(), e.getMessage()))
-            .subscribe();
+
+        // --- START OF CHANGES ---
+        try {
+            // By calling .block(), we ensure that the processing completes or fails
+            // on the current thread. If handleEvent throws an exception, .block()
+            // will re-throw it here, where the Kafka listener container can catch it.
+            Mono.fromRunnable(() -> handleEvent(event))
+                .subscribeOn(Schedulers.boundedElastic())
+                .block(); // This is the key change.
+
+            // If .block() completes without an exception, we can safely acknowledge.
+            acknowledgment.acknowledge();
+            log.debug("Event processed and acknowledged: {}", event.getEventId());
+
+        } catch (Exception e) {
+            // If .block() throws an exception, we log it and then re-throw it.
+            // This allows the DefaultErrorHandler to take over and send the message to the DLT.
+            log.error("Error processing event {}, propagating exception to Kafka listener container for DLT handling.", event.getEventId(), e);
+            throw e;
+        }
+        // --- END OF CHANGES ---
     }
 
     private void handleEvent(MessageDeliveryEvent event) {
@@ -73,7 +86,6 @@ public class KafkaConsumerService {
         log.info("Handling broadcast created event for user: {}, broadcast: {}",
                 event.getUserId(), event.getBroadcastId());
         try {
-            // --- START OF MODIFIED TEST LOGIC ---
             // First, fetch the full broadcast message from the database.
             BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
                     .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
@@ -83,8 +95,6 @@ public class KafkaConsumerService {
                 log.warn("Poison pill 'FAIL_ME' detected in broadcast message content. Simulating processing failure.");
                 throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");
             }
-            // --- END OF MODIFIED TEST LOGIC ---
-
 
             boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) ||
                               sseService.isUserConnected(event.getUserId());
