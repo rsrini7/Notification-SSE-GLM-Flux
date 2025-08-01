@@ -18,7 +18,6 @@ interface SseConnectionState {
   connecting: boolean;
   sessionId: string | null;
   error: string | null;
-  // **NEW**: Added to provide more granular feedback to the UI
   reconnectAttempt: number;
 }
 
@@ -38,12 +37,11 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     connecting: false,
     sessionId: null,
     error: null,
-    // **NEW**: Initialize reconnect attempt count
     reconnectAttempt: 0
   });
 
-  // **NEW**: Constants for exponential backoff strategy
-  const MAX_RECONNECT_ATTEMPTS = 5;
+  // Constants for exponential backoff strategy
+  const MAX_RECONNECT_ATTEMPTS = 2;
   const BASE_RECONNECT_DELAY = 1000; // 1 second
   const MAX_RECONNECT_DELAY = 30000; // 30 seconds
 
@@ -135,6 +133,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         console.log('SSE Connection: Connected');
         reconnectAttemptsRef.current = 0; // Reset attempts on successful connection
       };
+
       eventSourceRef.current.onmessage = (event) => {
         try {
           if (event.data) {
@@ -172,7 +171,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         }
         
         if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-          // **MODIFIED**: Implement exponential backoff with jitter
+          // Implement exponential backoff with jitter
           const delay = Math.min(MAX_RECONNECT_DELAY, BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptsRef.current));
           const jitter = delay * 0.1 * Math.random(); // Add up to 10% jitter
           const reconnectDelay = delay + jitter;
