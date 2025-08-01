@@ -1,6 +1,8 @@
 package com.example.broadcast.service;
 
 import com.example.broadcast.dto.MessageDeliveryEvent;
+import com.example.broadcast.model.BroadcastMessage;
+import com.example.broadcast.repository.BroadcastRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +20,7 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CaffeineCacheService caffeineCacheService;
+    private final BroadcastRepository broadcastRepository;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(
@@ -26,20 +29,26 @@ public class KafkaConsumerService {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void processBroadcastEvent(
-            @Payload Object payload,
+            @Payload byte[] payload,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
 
-        MessageDeliveryEvent event = objectMapper.convertValue(payload, MessageDeliveryEvent.class);
+        try {
+            MessageDeliveryEvent event = objectMapper.readValue(payload, MessageDeliveryEvent.class);
 
-        log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
-                event.getEventId(), topic, partition, offset);
-        
-        handleEvent(event);
+            log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
+                    event.getEventId(), topic, partition, offset);
+            
+            handleEvent(event);
 
-        acknowledgment.acknowledge();
+            acknowledgment.acknowledge();
+
+        } catch (Exception e) {
+            log.error("Failed to process message from topic {}. Root cause: {}", topic, e.getMessage());
+            throw new RuntimeException("Failed to process message", e);
+        }
     }
 
     private void handleEvent(MessageDeliveryEvent event) {

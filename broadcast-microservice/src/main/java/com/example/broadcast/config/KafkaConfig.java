@@ -56,13 +56,11 @@ public class KafkaConfig {
         return new KafkaTemplate<>(producerFactory);
     }
 
-    // --- START: DEFINITIVE AND FINAL FIX ---
     @Bean
     public ConsumerFactory<String, byte[]> consumerFactory() {
         Map<String, Object> configProps = new HashMap<>();
         configProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        // We configure the consumer to receive raw bytes. Deserialization will be handled manually.
         configProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
         configProps.put(ConsumerConfig.GROUP_ID_CONFIG, "broadcast-service-group");
         configProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
@@ -83,7 +81,7 @@ public class KafkaConfig {
     @Bean
     public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
         FixedBackOff backOff = new FixedBackOff(1000L, 2L);
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(deadLetterPublishingRecoverer, backOff);
+        DefaultErrorHandler errorHandler = new ConciseLoggingErrorHandler(deadLetterPublishingRecoverer, backOff);
         errorHandler.setCommitRecovered(true);
         return errorHandler;
     }
@@ -95,8 +93,6 @@ public class KafkaConfig {
         BiFunction<org.apache.kafka.clients.consumer.ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
                 new TopicPartition(cr.topic() + ".DLT", 0);
         
-        // This recoverer is now compatible because it receives a ConsumerRecord<String, byte[]>
-        // and passes it to a KafkaTemplate<String, byte[]>
         return new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
     }
 
@@ -114,7 +110,6 @@ public class KafkaConfig {
         configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class);
         return new DefaultKafkaProducerFactory<>(configProps);
     }
-    // --- END: DEFINITIVE AND FINAL FIX ---
     
     @Bean
     public NewTopic broadcastTopic() {
