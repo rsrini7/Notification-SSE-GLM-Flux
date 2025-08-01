@@ -1,6 +1,5 @@
 package com.example.broadcast.config;
 
-import com.example.broadcast.dto.MessageDeliveryEvent;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -68,15 +67,13 @@ public class KafkaConfig {
     @Bean
     public ConsumerFactory<String, Object> consumerFactory() {
         Map<String, Object> configProps = new HashMap<>();
-        
         configProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         configProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
-        
         configProps.put(ConsumerConfig.GROUP_ID_CONFIG, "broadcast-service-group");
         configProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         configProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
-        
+
         configProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 500);
         configProps.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, 1000);
         
@@ -84,45 +81,34 @@ public class KafkaConfig {
         configProps.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10000);
         
         configProps.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
-        
-        configProps.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
-        configProps.put(JsonDeserializer.VALUE_DEFAULT_TYPE, MessageDeliveryEvent.class.getName());
-        
-        return new DefaultKafkaConsumerFactory<>(configProps);
+
+        JsonDeserializer<Object> jsonDeserializer = new JsonDeserializer<>();
+        jsonDeserializer.addTrustedPackages("*");
+
+        return new DefaultKafkaConsumerFactory<>(configProps, new StringDeserializer(), jsonDeserializer);
     }
 
     @Bean
-    public KafkaListenerContainerFactory<ConcurrentMessageListenerContainer<String, Object>> 
+    public KafkaListenerContainerFactory<ConcurrentMessageListenerContainer<String, Object>>
             kafkaListenerContainerFactory(DefaultErrorHandler errorHandler) {
-        
-        ConcurrentKafkaListenerContainerFactory<String, Object> factory = 
-                new ConcurrentKafkaListenerContainerFactory<>();
-        
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
         factory.setConcurrency(3);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
-        
         factory.setCommonErrorHandler(errorHandler);
-        
         return factory;
     }
 
     @Bean
     public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
-        // Set retries to 2 (total 3 attempts)
         FixedBackOff backOff = new FixedBackOff(1000L, 2L);
-        
-        // --- THIS IS THE KEY CHANGE ---
-        // We explicitly tell the error handler to NOT retry after the backoff is exhausted.
-        // This stops the infinite loop. When retries are done, it will only call the recoverer.
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(deadLetterPublishingRecoverer, backOff);
-        errorHandler.setCommitRecovered(true); // Commit the original offset after recovery
+        errorHandler.setCommitRecovered(true);
         return errorHandler;
     }
-    
+
     @Bean
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(KafkaTemplate<String, Object> kafkaTemplate) {
-        // This function ensures failed messages always go to partition 0 of the DLT
         BiFunction<org.apache.kafka.clients.consumer.ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
                 new TopicPartition(cr.topic() + ".DLT", 0);
 
@@ -137,7 +123,7 @@ public class KafkaConfig {
                 .config("retention.ms", "604800000")
                 .build();
     }
-    
+
     @Bean
     public NewTopic deadLetterTopic() {
         return TopicBuilder.name(topicName + ".DLT")

@@ -3,6 +3,7 @@ package com.example.broadcast.service;
 import com.example.broadcast.dto.MessageDeliveryEvent;
 import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.repository.BroadcastRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -11,7 +12,6 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -21,26 +21,31 @@ public class KafkaConsumerService {
     private final SseService sseService;
     private final CaffeineCacheService caffeineCacheService;
     private final BroadcastRepository broadcastRepository;
+    private final ObjectMapper objectMapper;
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}",
             groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}",
             containerFactory = "kafkaListenerContainerFactory"
     )
-    @Transactional
+    // The @Transactional annotation is REMOVED from here. This is the definitive fix.
     public void processBroadcastEvent(
-            @Payload MessageDeliveryEvent event,
-            // --- The headers are correctly restored here ---
+            @Payload Object payload,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
 
+        MessageDeliveryEvent event = objectMapper.convertValue(payload, MessageDeliveryEvent.class);
+
         log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                 event.getEventId(), topic, partition, offset);
         
+        // If handleEvent throws an exception, the DefaultErrorHandler will now correctly
+        // manage the retries and DLT process without a transaction conflict.
         handleEvent(event);
 
+        // This will only be reached if handleEvent completes successfully.
         acknowledgment.acknowledge();
     }
 
@@ -65,31 +70,22 @@ public class KafkaConsumerService {
 
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
-        try {
-            // The race condition is solved by the producer side's afterCommit logic.
-            // This lookup will now succeed.
-            BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
-                    .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
+        
+        BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
+                .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
 
-            // The "FAIL_ME" test logic remains.
-            if (broadcastMessage.getContent() != null && broadcastMessage.getContent().contains("FAIL_ME")) {
-                log.warn("Poison pill 'FAIL_ME' detected in broadcast message content. Simulating processing failure.");
-                throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");
-            }
+        if (broadcastMessage.getContent() != null && broadcastMessage.getContent().contains("FAIL_ME")) {
+            log.warn("Poison pill 'FAIL_ME' detected in broadcast message content. Simulating processing failure.");
+            throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");
+        }
 
-            // The rest of the business logic.
-            boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) || sseService.isUserConnected(event.getUserId());
-            if (isOnline) {
-                sseService.handleMessageEvent(event);
-                log.info("Broadcast event for online user {} forwarded to SSE service.", event.getUserId());
-            } else {
-                log.info("User {} is offline, message remains pending", event.getUserId());
-                caffeineCacheService.cachePendingEvent(event);
-            }
-        } catch (Exception e) {
-            log.error("An unexpected error occurred while processing event {}: {}", event.getEventId(), e.getMessage());
-            // Let the DefaultErrorHandler catch this exception
-            throw new RuntimeException("Failed to handle broadcast created event", e);
+        boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) || sseService.isUserConnected(event.getUserId());
+        if (isOnline) {
+            sseService.handleMessageEvent(event);
+            log.info("Broadcast event for online user {} forwarded to SSE service.", event.getUserId());
+        } else {
+            log.info("User {} is offline, message remains pending", event.getUserId());
+            caffeineCacheService.cachePendingEvent(event);
         }
     }
 
@@ -98,8 +94,6 @@ public class KafkaConsumerService {
         sseService.handleMessageEvent(event);
         caffeineCacheService.updateMessageReadStatus(event.getUserId(), event.getBroadcastId());
     }
-
-
 
     private void handleBroadcastCancelled(MessageDeliveryEvent event) {
         log.info("Handling broadcast cancelled event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
