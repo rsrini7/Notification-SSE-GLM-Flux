@@ -2,6 +2,7 @@ package com.example.broadcast.repository;
 
 import com.example.broadcast.dto.UserBroadcastResponse;
 import com.example.broadcast.model.UserBroadcastMessage;
+import com.example.broadcast.util.Constants.DeliveryStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -16,10 +17,12 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
 @Repository
 public class UserBroadcastRepository {
 
     private final JdbcTemplate jdbcTemplate;
+
     public UserBroadcastRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -31,15 +34,13 @@ public class UserBroadcastRepository {
             .deliveryStatus(rs.getString("delivery_status"))
             .readStatus(rs.getString("read_status"))
             .deliveredAt(rs.getTimestamp("delivered_at") != null ? 
-            
                 rs.getTimestamp("delivered_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .readAt(rs.getTimestamp("read_at") != null ? 
                     rs.getTimestamp("read_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
             .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
             .build();
-            
-    // **NEW**: RowMapper for the JOIN query result, mapping directly to the DTO.
+    
     private final RowMapper<UserBroadcastResponse> userBroadcastResponseRowMapper = (rs, rowNum) -> UserBroadcastResponse.builder()
             .id(rs.getLong("id"))
             .broadcastId(rs.getLong("broadcast_id"))
@@ -49,8 +50,6 @@ public class UserBroadcastRepository {
             .deliveredAt(rs.getTimestamp("delivered_at") != null ? rs.getTimestamp("delivered_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .readAt(rs.getTimestamp("read_at") != null ? rs.getTimestamp("read_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC) : null)
-            
-            // Fields from the joined broadcast_messages table
             .senderName(rs.getString("sender_name"))
             .content(rs.getString("content"))
             .priority(rs.getString("priority"))
@@ -59,7 +58,6 @@ public class UserBroadcastRepository {
             .scheduledAt(rs.getTimestamp("scheduled_at") != null ? rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .expiresAt(rs.getTimestamp("expires_at") != null ? rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .build();
-
 
     public UserBroadcastMessage save(UserBroadcastMessage userBroadcast) {
         String sql = """
@@ -75,10 +73,10 @@ public class UserBroadcastRepository {
             ps.setString(3, userBroadcast.getDeliveryStatus());
             ps.setString(4, userBroadcast.getReadStatus());
             ps.setObject(5, userBroadcast.getDeliveredAt());
-            
             ps.setObject(6, userBroadcast.getReadAt());
             return ps;
         }, keyHolder);
+
         if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
             Map<String, Object> keys = keyHolder.getKeyList().get(0);
             Number id = (Number) keys.get("ID");
@@ -98,7 +96,6 @@ public class UserBroadcastRepository {
         return jdbcTemplate.query(sql, userBroadcastRowMapper, id).stream().findFirst();
     }
 
-    // **NEW**: This method performs a JOIN to fetch all required data in one query.
     public List<UserBroadcastResponse> findUserMessagesByUserId(String userId) {
         String sql = """
             SELECT
@@ -120,7 +117,6 @@ public class UserBroadcastRepository {
         return jdbcTemplate.query(sql, userBroadcastResponseRowMapper, userId);
     }
     
-    // **NEW**: A similar JOIN-based method specifically for unread messages.
     public List<UserBroadcastResponse> findUnreadMessagesByUserId(String userId) {
         String sql = """
             SELECT
@@ -149,16 +145,21 @@ public class UserBroadcastRepository {
         return jdbcTemplate.query(sql, userBroadcastRowMapper, userId);
     }
 
-    /**
-     * **NEW:** Finds a specific pending message for a user and broadcast.
-     * This is a more targeted query to ensure the correct message is delivered.
-     * @param userId The ID of the user.
-     * @param broadcastId The ID of the broadcast.
-     * @return A list containing the pending message, if it exists.
-     */
     public List<UserBroadcastMessage> findPendingMessagesByBroadcastId(String userId, Long broadcastId) {
         String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND broadcast_id = ? AND delivery_status = 'PENDING'";
         return jdbcTemplate.query(sql, userBroadcastRowMapper, userId, broadcastId);
+    }
+    
+    // NEW: Find a user message for a specific broadcast, regardless of its current status.
+    public Optional<UserBroadcastMessage> findByUserIdAndBroadcastId(String userId, Long broadcastId) {
+        String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND broadcast_id = ?";
+        return jdbcTemplate.query(sql, userBroadcastRowMapper, userId, broadcastId).stream().findFirst();
+    }
+    
+    // NEW: Reset the status of an existing message to PENDING for redelivery.
+    public int updateStatusToPending(Long id) {
+        String sql = "UPDATE user_broadcast_messages SET delivery_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        return jdbcTemplate.update(sql, DeliveryStatus.PENDING.name(), id);
     }
 
     public List<UserBroadcastMessage> findByBroadcastId(Long broadcastId) {

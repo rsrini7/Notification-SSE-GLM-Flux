@@ -2,12 +2,15 @@ package com.example.broadcast.service;
 
 import com.example.broadcast.dto.DltMessage;
 import com.example.broadcast.dto.MessageDeliveryEvent;
+import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.repository.DltRepository;
+import com.example.broadcast.repository.UserBroadcastRepository;
+import com.example.broadcast.util.Constants.DeliveryStatus;
+import com.example.broadcast.util.Constants.ReadStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
@@ -20,7 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Collection;
-
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -31,6 +34,8 @@ public class DltService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final DltRepository dltRepository;
+    // NEW: Inject UserBroadcastRepository
+    private final UserBroadcastRepository userBroadcastRepository;
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}.DLT",
@@ -74,20 +79,44 @@ public class DltService {
 
     @Transactional
     public void redriveMessage(String id) throws JsonProcessingException {
-        // FIX: Use Optional for better null handling and a clearer "not found" case.
         DltMessage dltMessage = dltRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
 
-        // FIX: Deserialize the payload into the specific DTO expected by the consumer.
-        // The KafkaConsumerService expects a MessageDeliveryEvent.
         MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
+
+        // FIX: Before redriving, ensure a 'PENDING' user message record exists in the database.
+        prepareDatabaseForRedrive(originalPayload);
 
         log.info("Redriving message ID: {}. Sending to original topic: {}", id, dltMessage.getOriginalTopic());
         
-        // FIX: Send the deserialized, type-safe object. The key should be the userId for correct partitioning.
         kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload);
         
-        // After successfully re-sending, delete it from the database.
         dltRepository.deleteById(id);
+    }
+
+    // NEW: Helper method to manage database state before redriving to Kafka.
+    private void prepareDatabaseForRedrive(MessageDeliveryEvent payload) {
+        Optional<UserBroadcastMessage> existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(
+            payload.getUserId(), payload.getBroadcastId()
+        );
+
+        if (existingMessage.isPresent()) {
+            // If a record exists (e.g., status is FAILED), reset it to PENDING.
+            UserBroadcastMessage message = existingMessage.get();
+            userBroadcastRepository.updateStatusToPending(message.getId());
+            log.info("Reset existing UserBroadcastMessage (ID: {}) to PENDING for redrive.", message.getId());
+        } else {
+            // If no record exists, create a new one. This can happen if the original transaction failed completely.
+            UserBroadcastMessage newMessage = UserBroadcastMessage.builder()
+                    .broadcastId(payload.getBroadcastId())
+                    .userId(payload.getUserId())
+                    .deliveryStatus(DeliveryStatus.PENDING.name())
+                    .readStatus(ReadStatus.UNREAD.name())
+                    .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
+                    .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                    .build();
+            userBroadcastRepository.save(newMessage);
+            log.info("Created new UserBroadcastMessage for redrive for user {} and broadcast {}.", payload.getUserId(), payload.getBroadcastId());
+        }
     }
 }
