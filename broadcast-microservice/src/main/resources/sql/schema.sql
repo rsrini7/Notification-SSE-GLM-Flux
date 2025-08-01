@@ -54,6 +54,10 @@ CREATE INDEX idx_broadcast_sender ON broadcast_messages (sender_id);
 CREATE INDEX idx_user_broadcast_user_id ON user_broadcast_messages (user_id);
 
 -- Additional Indexes for user_broadcast_messages
+DROP INDEX IF EXISTS idx_user_broadcast_status;
+DROP INDEX IF EXISTS idx_user_broadcast_broadcast_id;
+DROP INDEX IF EXISTS idx_user_broadcast_created_at;
+DROP INDEX IF EXISTS idx_user_broadcast_unread;
 CREATE INDEX idx_user_broadcast_status ON user_broadcast_messages (delivery_status, read_status);
 CREATE INDEX idx_user_broadcast_broadcast_id ON user_broadcast_messages (broadcast_id);
 CREATE INDEX idx_user_broadcast_created_at ON user_broadcast_messages (created_at);

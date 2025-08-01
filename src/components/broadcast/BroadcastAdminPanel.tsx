@@ -8,6 +8,10 @@ import { broadcastService, type BroadcastMessage, type BroadcastStats, type Broa
 import BroadcastCreationForm from './BroadcastCreationForm';
 import BroadcastManagementList from './BroadcastManagementList';
 import BroadcastStatisticsView from './BroadcastStatisticsView';
+// --- START OF CHANGES ---
+import DltManagementPanel from './DltManagementPanel'; // Import the new DLT panel
+// --- END OF CHANGES ---
+
 
 const BroadcastAdminPanel: React.FC = () => {
   const [broadcasts, setBroadcasts] = useState<BroadcastMessage[]>([]);
@@ -136,10 +140,15 @@ const BroadcastAdminPanel: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
-        <TabsList className="grid w-full grid-cols-3">
+        {/* --- START OF CHANGES --- */}
+        <TabsList className="grid w-full grid-cols-4"> 
+        {/* --- END OF CHANGES --- */}
           <TabsTrigger value="create">Create Broadcast</TabsTrigger>
           <TabsTrigger value="manage">Manage Broadcasts</TabsTrigger>
           <TabsTrigger value="stats">Statistics</TabsTrigger>
+          {/* --- START OF CHANGES --- */}
+          <TabsTrigger value="dlt">DLQ Management</TabsTrigger>
+          {/* --- END OF CHANGES --- */}
         </TabsList>
 
         <TabsContent value="create">
@@ -173,6 +182,12 @@ const BroadcastAdminPanel: React.FC = () => {
                 onRefresh={refreshStats}
             />
         </TabsContent>
+        
+        {/* --- START OF CHANGES --- */}
+        <TabsContent value="dlt">
+            <DltManagementPanel />
+        </TabsContent>
+        {/* --- END OF CHANGES --- */}
       </Tabs>
     </div>
   );

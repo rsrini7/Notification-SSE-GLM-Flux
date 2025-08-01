@@ -34,6 +34,20 @@ api.interceptors.response.use(
   }
 );*/
 
+// --- START OF CHANGES ---
+
+// NEW: DLT Message Interface
+export interface DltMessage {
+  id: string;
+  originalTopic: string;
+  exceptionMessage: string;
+  failedAt: string;
+  originalMessagePayload: string; // The payload will be a JSON string
+}
+
+// --- END OF CHANGES ---
+
+
 // Interfaces
 export interface BroadcastMessage {
   id: string;
@@ -135,5 +149,21 @@ export const userService = {
     return response.data;
   },
 };
+
+// --- START OF CHANGES ---
+// NEW: DLT Service
+export const dltService = {
+  getDltMessages: async (): Promise<DltMessage[]> => {
+    const response = await api.get('/api/dlt/messages');
+    return response.data;
+  },
+  redriveDltMessage: async (id: string): Promise<void> => {
+    await api.post(`/api/dlt/redrive/${id}`);
+  },
+  deleteDltMessage: async (id: string): Promise<void> => {
+    await api.delete(`/api/dlt/delete/${id}`);
+  },
+};
+// --- END OF CHANGES ---
 
 export default api;

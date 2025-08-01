@@ -13,8 +13,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-
-import com.example.broadcast.util.Constants.EventType;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +22,7 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CaffeineCacheService caffeineCacheService;
+    private final ObjectMapper objectMapper;
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}",
@@ -71,6 +71,20 @@ public class KafkaConsumerService {
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}",
                 event.getUserId(), event.getBroadcastId());
+
+        // --- START OF TEMPORARY TEST CODE ---
+        // Check for a "poison pill" message to simulate a processing failure.
+        try {
+            // We need to look inside the message content which is part of the event.
+            if (event.getMessage() != null && event.getMessage().contains("FAIL_ME")) {
+                throw new RuntimeException("Simulating a poison pill message failure for testing the DLT.");
+            }
+        } catch (Exception e) {
+            // Re-throw to trigger the Kafka error handler
+            throw new RuntimeException("DLT Test Failure", e);
+        }
+        // --- END OF TEMPORARY TEST CODE ---
+
         try {
             boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) ||
                               sseService.isUserConnected(event.getUserId());
