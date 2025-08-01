@@ -32,12 +32,14 @@ public class BroadcastTargetingService {
 
     /**
      * Creates a list of UserBroadcastMessage entities for all targeted users of a broadcast.
-     * This method encapsulates the logic for determining target users and filtering them
-     * based on their individual notification preferences.
+     * This method is now protected by a Circuit Breaker and a Bulkhead. If the call to the
+     * UserService fails, the circuit breaker will open, and the fallback method will be invoked.
      *
      * @param broadcast The broadcast message to be sent.
      * @return A list of UserBroadcastMessage objects ready to be saved to the database.
      */
+    @CircuitBreaker(name = "userService", fallbackMethod = "fallbackCreateUserBroadcastMessagesForBroadcast")
+    @Bulkhead(name = "userService")
     public List<UserBroadcastMessage> createUserBroadcastMessagesForBroadcast(BroadcastMessage broadcast) {
         List<String> targetUserIds = determineTargetUsers(broadcast);
 
@@ -68,15 +70,12 @@ public class BroadcastTargetingService {
 
     /**
      * Determines the initial list of target user IDs by calling the external UserService.
-     * This method is protected by a Circuit Breaker and a Bulkhead. If the call to the
-     * UserService fails, the circuit breaker will open, and the fallback method will be invoked.
+     * This is now a helper method and does not need resilience annotations.
      *
      * @param broadcast The broadcast message.
      * @return A list of user IDs.
      */
-    @CircuitBreaker(name = "userService", fallbackMethod = "fallbackDetermineTargetUsers")
-    @Bulkhead(name = "userService")
-    protected List<String> determineTargetUsers(BroadcastMessage broadcast) {
+    private List<String> determineTargetUsers(BroadcastMessage broadcast) {
         log.info("Broadcast ID {}: Calling UserService to determine target users. Target type is {}", broadcast.getId(), broadcast.getTargetType());
         switch (broadcast.getTargetType()) {
             case "ALL":
@@ -93,14 +92,14 @@ public class BroadcastTargetingService {
     }
 
     /**
-     * Fallback method for determineTargetUsers. This method is executed when the
+     * Fallback method for createUserBroadcastMessagesForBroadcast. This method is executed when the
      * circuit breaker for the 'userService' is open.
      *
      * @param broadcast The original broadcast message.
      * @param t The exception that caused the fallback.
-     * @return An empty list of users to prevent the broadcast from being sent.
+     * @return An empty list of UserBroadcastMessage to prevent the broadcast from being sent.
      */
-    protected List<String> fallbackDetermineTargetUsers(BroadcastMessage broadcast, Throwable t) {
+    public List<UserBroadcastMessage> fallbackCreateUserBroadcastMessagesForBroadcast(BroadcastMessage broadcast, Throwable t) {
         log.error("Circuit breaker opened for user service. Falling back for broadcast ID {}. Error: {}", broadcast.getId(), t.getMessage());
         // Fallback logic: return an empty list to prevent sending the broadcast.
         // In a real-world scenario, you might return a cached list of users or trigger an alert.

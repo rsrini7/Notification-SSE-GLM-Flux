@@ -1,10 +1,17 @@
 import type { Config } from "tailwindcss";
 
-const config: Config = {
+const config = {
   darkMode: "class",
   content: [
     "./src/**/*.{js,ts,jsx,tsx,mdx}",
     "./index.html"
+  ],
+  safelist: [
+    {
+      pattern: /data-\[state=active\]:(bg-card|text-card-foreground|shadow-sm)/,
+    },
+    'bg-muted',
+    'p-1'
   ],
   theme: {
     extend: {

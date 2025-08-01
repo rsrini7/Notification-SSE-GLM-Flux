@@ -87,6 +87,16 @@ public class UserPreferencesRepository {
     }
 
     /**
+     * **NEW:** Find all distinct user IDs from the preferences.
+     * This provides a list of all known users in the system.
+     * @return A list of unique user IDs.
+     */
+    public List<String> findAllUserIds() {
+        String sql = "SELECT DISTINCT user_id FROM user_preferences ORDER BY user_id";
+        return jdbcTemplate.queryForList(sql, String.class);
+    }
+
+    /**
      * Helper method to parse JSON array from database
      */
     private List<String> parseJsonArray(String json) {

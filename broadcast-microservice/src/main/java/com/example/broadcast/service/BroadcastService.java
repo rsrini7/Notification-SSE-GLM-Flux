@@ -10,12 +10,14 @@ import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
+import com.example.broadcast.repository.UserPreferencesRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.broadcast.exception.UserServiceUnavailableException;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -33,11 +35,12 @@ public class BroadcastService {
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final BroadcastTargetingService broadcastTargetingService;
+    private final UserPreferencesRepository userPreferencesRepository;
 
     @Value("${broadcast.kafka.topic.name:broadcast-events}")
-    private String kafkaTopic;
+    private String broadcastTopicName;
 
-    @Transactional
+    @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
 
@@ -55,6 +58,14 @@ public class BroadcastService {
                 .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
 
+        // Check for immediate expiration on creation
+        if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
+            log.warn("Broadcast creation request for an already expired message from sender: {}. Expiration: {}", broadcast.getSenderId(), broadcast.getExpiresAt());
+            broadcast.setStatus("EXPIRED");
+            broadcast = broadcastRepository.save(broadcast);
+            return buildBroadcastResponse(broadcast, 0); // No users will be targeted
+        }
+
         if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
             broadcast.setStatus("SCHEDULED");
             broadcast = broadcastRepository.save(broadcast);
@@ -67,7 +78,7 @@ public class BroadcastService {
         }
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public void processScheduledBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new RuntimeException("Broadcast not found: " + broadcastId));
@@ -190,6 +201,11 @@ public class BroadcastService {
         log.info("Message marked as read: user={}, message={}", userId, messageId);
     }
 
+    public List<String> getAllUserIds() {
+        log.info("Retrieving all unique user IDs from the system.");
+        return userPreferencesRepository.findAllUserIds();
+    }
+
     private void sendBroadcastEvent(BroadcastMessage broadcast, List<String> targetUsers, String eventType) {
         targetUsers.forEach(userId -> {
             MessageDeliveryEvent event = MessageDeliveryEvent.builder()
@@ -202,7 +218,7 @@ public class BroadcastService {
                     .message("Broadcast " + eventType.toLowerCase())
                     .build();
             
-            kafkaTemplate.send(kafkaTopic, userId, event)
+            kafkaTemplate.send(broadcastTopicName, userId, event)
                 .whenComplete((result, ex) -> {
                     if (ex == null) {
                         log.debug("Event sent successfully to Kafka: {}", event.getEventId());
@@ -255,11 +271,6 @@ public class BroadcastService {
                 .build();
     }
 
-    /**
-     * **NEW:** Retrieves the delivery details for a specific broadcast.
-     * @param broadcastId The ID of the broadcast.
-     * @return A list of user-specific message details.
-     */
     public List<UserBroadcastMessage> getBroadcastDeliveries(Long broadcastId) {
         log.info("Retrieving delivery details for broadcast ID: {}", broadcastId);
         return userBroadcastRepository.findByBroadcastId(broadcastId);

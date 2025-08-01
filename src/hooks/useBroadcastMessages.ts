@@ -50,13 +50,13 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
           setMessages(prev => {
             const exists = prev.some(msg => msg.id === event.data.id);
             if (!exists) {
+              toast({
+                title: 'New Message',
+                description: `From ${event.data.senderName}: ${event.data.content.substring(0, 30)}...`,
+              });
               return [event.data, ...prev];
             }
             return prev;
-          });
-          toast({
-            title: 'New Message',
-            description: event.data.content.substring(0, 50) + '...',
           });
         }
         break;
@@ -69,11 +69,11 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         ));
         break;
       
-      case 'MESSAGE_EXPIRED':
+      case 'MESSAGE_REMOVED':
         if (event.data && event.data.broadcastId) {
             setMessages(prev => prev.filter(msg => msg.broadcastId !== event.data.broadcastId));
             toast({
-                title: 'Message Expired',
+                title: 'Message Removed',
                 description: 'A broadcast message has been removed.',
             });
         }
