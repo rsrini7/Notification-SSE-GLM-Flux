@@ -1,4 +1,4 @@
-services:  
+services:
   kafka:
     image: confluentinc/cp-kafka:7.3.0
     depends_on:
@@ -24,3 +24,19 @@ services:
     image: openzipkin/zipkin
     ports:
       - "9411:9411"
+
+  # NEW: PostgreSQL service for local development
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: broadcastdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+# NEW: Named volume to persist PostgreSQL data
+volumes:
+  postgres_data:

@@ -8,7 +8,7 @@ spring:
   application:
     name: broadcast-microservice
   
-  # h2 Database Configuration
+  # h2 Database Configuration (default)
   datasource:
     url: jdbc:h2:mem:broadcastdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
     driver-class-name: org.h2.Driver
@@ -136,3 +136,21 @@ broadcast:
     retry:
       max-attempts: 3
       backoff-delay: 1000
+
+---
+# NEW: PostgreSQL-specific profile
+spring:
+  config:
+    activate:
+      on-profile: "dev-pg"
+  datasource:
+    url: jdbc:postgresql://localhost:5432/broadcastdb
+    driver-class-name: org.postgresql.Driver
+    username: user
+    password: password
+  # For a persistent DB, you usually want more control over schema creation.
+  # 'none' prevents Spring from running schema.sql automatically.
+  # Use a migration tool like Flyway for production.
+  sql:
+    init:
+      mode: never

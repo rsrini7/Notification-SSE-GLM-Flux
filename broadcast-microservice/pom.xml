@@ -67,6 +67,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Spring Kafka for event streaming -->
         <dependency>
             <groupId>org.springframework.kafka</groupId>
