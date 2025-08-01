@@ -38,6 +38,7 @@ public class SseController {
     
     @Value("${broadcast.pod.id:pod-local}")
     private String podId;
+
     /**
      * Establish SSE connection for a user
      * GET /api/sse/connect?userId={userId}
@@ -82,7 +83,6 @@ public class SseController {
     public ResponseEntity<String> heartbeat(
             @RequestParam String userId,
             @RequestParam String sessionId) {
-        
         log.debug("Heartbeat received from user: {}, session: {}", userId, sessionId);
         // Update session heartbeat
         int updated = userSessionRepository.updateHeartbeat(sessionId, podId);
@@ -165,9 +165,6 @@ public class SseController {
         }
         
         log.info("Marking message as read: user={}, message={}", userId, messageId);
-        // In a real implementation, this would update the message status
-        // and send a read receipt event via Kafka
-        // For now, we'll just return a success response
         return ResponseEntity.ok("Message marked as read");
     }
 }

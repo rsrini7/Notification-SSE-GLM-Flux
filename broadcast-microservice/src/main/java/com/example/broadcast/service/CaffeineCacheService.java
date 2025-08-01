@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.github.benmanes.caffeine.cache.Cache;
+
 import com.example.broadcast.util.Constants.ReadStatus;
 
 /**
@@ -22,11 +24,11 @@ import com.example.broadcast.util.Constants.ReadStatus;
 @Slf4j
 public class CaffeineCacheService {
 
-    private final com.github.benmanes.caffeine.cache.Cache<String, CaffeineConfig.UserConnectionInfo> userConnectionsCache;
-    private final com.github.benmanes.caffeine.cache.Cache<String, List<CaffeineConfig.UserMessageInfo>> userMessagesCache;
-    private final com.github.benmanes.caffeine.cache.Cache<String, List<CaffeineConfig.PendingEventInfo>> pendingEventsCache;
-    private final com.github.benmanes.caffeine.cache.Cache<String, CaffeineConfig.UserSessionInfo> userSessionCache;
-    private final com.github.benmanes.caffeine.cache.Cache<String, CaffeineConfig.BroadcastStatsInfo> broadcastStatsCache;
+    private final Cache<String, CaffeineConfig.UserConnectionInfo> userConnectionsCache;
+    private final Cache<String, List<CaffeineConfig.UserMessageInfo>> userMessagesCache;
+    private final Cache<String, List<CaffeineConfig.PendingEventInfo>> pendingEventsCache;
+    private final Cache<String, CaffeineConfig.UserSessionInfo> userSessionCache;
+    private final Cache<String, CaffeineConfig.BroadcastStatsInfo> broadcastStatsCache;
 
     // For tracking user online status
     private final ConcurrentHashMap<String, Boolean> onlineUsers = new ConcurrentHashMap<>();

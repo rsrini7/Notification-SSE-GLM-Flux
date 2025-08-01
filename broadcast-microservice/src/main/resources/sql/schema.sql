@@ -42,6 +42,11 @@ CREATE TABLE IF NOT EXISTS user_broadcast_messages (
 );
 
 -- Indexes for performance
+DROP INDEX IF EXISTS idx_broadcast_created_at;
+DROP INDEX IF EXISTS idx_broadcast_status;
+DROP INDEX IF EXISTS idx_broadcast_expires_at;
+DROP INDEX IF EXISTS idx_broadcast_sender;
+DROP INDEX IF EXISTS idx_user_broadcast_user_id;
 CREATE INDEX idx_broadcast_created_at ON broadcast_messages (created_at);
 CREATE INDEX idx_broadcast_status ON broadcast_messages (status);
 CREATE INDEX idx_broadcast_expires_at ON broadcast_messages (expires_at);
