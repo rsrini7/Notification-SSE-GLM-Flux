@@ -2,6 +2,8 @@
 package com.example.broadcast.service;
 
 import com.example.broadcast.dto.MessageDeliveryEvent;
+import com.example.broadcast.model.BroadcastMessage; // <-- ADD THIS IMPORT
+import com.example.broadcast.repository.BroadcastRepository; // <-- ADD THIS IMPORT
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -13,7 +15,6 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -22,7 +23,7 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CaffeineCacheService caffeineCacheService;
-    private final ObjectMapper objectMapper;
+    private final BroadcastRepository broadcastRepository; // <-- INJECT THIS REPOSITORY
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}",
@@ -71,21 +72,20 @@ public class KafkaConsumerService {
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}",
                 event.getUserId(), event.getBroadcastId());
-
-        // --- START OF TEMPORARY TEST CODE ---
-        // Check for a "poison pill" message to simulate a processing failure.
         try {
-            // We need to look inside the message content which is part of the event.
-            if (event.getMessage() != null && event.getMessage().contains("FAIL_ME")) {
-                throw new RuntimeException("Simulating a poison pill message failure for testing the DLT.");
+            // --- START OF MODIFIED TEST LOGIC ---
+            // First, fetch the full broadcast message from the database.
+            BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
+                    .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
+
+            // Now, check the *actual content* of the message for the poison pill.
+            if (broadcastMessage.getContent() != null && broadcastMessage.getContent().contains("FAIL_ME")) {
+                log.warn("Poison pill 'FAIL_ME' detected in broadcast message content. Simulating processing failure.");
+                throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");
             }
-        } catch (Exception e) {
-            // Re-throw to trigger the Kafka error handler
-            throw new RuntimeException("DLT Test Failure", e);
-        }
-        // --- END OF TEMPORARY TEST CODE ---
+            // --- END OF MODIFIED TEST LOGIC ---
 
-        try {
+
             boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) ||
                               sseService.isUserConnected(event.getUserId());
             if (isOnline) {
