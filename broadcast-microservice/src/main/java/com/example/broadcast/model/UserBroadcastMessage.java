@@ -20,7 +20,7 @@ public class UserBroadcastMessage {
     private Long broadcastId;
     private String userId;
     private String deliveryStatus; // PENDING, DELIVERED, FAILED
-    private String readStatus; // UNREAD, READ, ARCHIVED
+    private String readStatus; // UNREAD, READ
     private ZonedDateTime deliveredAt;
     private ZonedDateTime readAt;
     private ZonedDateTime createdAt;

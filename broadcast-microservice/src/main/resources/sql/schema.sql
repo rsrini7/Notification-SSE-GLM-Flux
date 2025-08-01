@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS user_broadcast_messages (
     broadcast_id BIGINT NOT NULL,
     user_id VARCHAR(255) NOT NULL,
     delivery_status VARCHAR(20) DEFAULT 'PENDING' CHECK (delivery_status IN ('PENDING', 'DELIVERED', 'FAILED')),
-    read_status VARCHAR(20) DEFAULT 'UNREAD' CHECK (read_status IN ('UNREAD', 'READ', 'ARCHIVED')),
+    read_status VARCHAR(20) DEFAULT 'UNREAD' CHECK (read_status IN ('UNREAD', 'READ')),
     delivered_at TIMESTAMP WITH TIME ZONE,
     read_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

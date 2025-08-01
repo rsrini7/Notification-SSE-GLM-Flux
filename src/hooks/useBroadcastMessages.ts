@@ -165,22 +165,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [messages, sseConnection, toast]);
 
-  const deleteMessage = useCallback(async (messageId: number) => {
-    try {
-      setMessages(prev => prev.filter(msg => msg.id !== messageId));
-      toast({
-        title: 'Message Archived',
-        description: 'Message has been removed from your view.',
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to archive message',
-        variant: 'destructive',
-      });
-    }
-  }, [toast]);
-
   const stats = useMemo(() => {
     const total = messages.length;
     const unread = messages.filter(msg => msg.readStatus === 'UNREAD').length;
@@ -213,7 +197,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     actions: {
       markAsRead,
       markAllAsRead,
-      deleteMessage,
       refresh: fetchMessages,
       getMessagesByStatus,
       getMessagesByPriority,

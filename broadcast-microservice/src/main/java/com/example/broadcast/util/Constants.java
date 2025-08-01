@@ -20,8 +20,7 @@ public final class Constants {
 
     public enum ReadStatus {
         UNREAD,
-        READ,
-        ARCHIVED
+        READ
     }
 
     public enum TargetType {
