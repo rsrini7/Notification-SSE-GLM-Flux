@@ -1,6 +1,5 @@
 'use client';
-
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useSseConnection } from './useSseConnection';
 import { userService, type UserBroadcastMessage } from '../services/api';
@@ -17,7 +16,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     baseUrl = 'http://localhost:8081',
     autoConnect = true
   } = options;
-
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -81,10 +79,8 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
 
       case 'CONNECTED':
         break;
-
       case 'HEARTBEAT':
         break;
-      
       default:
         console.log('Unhandled SSE event type:', event.type);
     }
@@ -93,12 +89,19 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   useEffect(() => {
     const intervalId = setInterval(() => {
         const now = new Date().getTime();
-        setMessages(prevMessages =>
-            prevMessages.filter(message => {
+        setMessages(prevMessages => {
+            const activeMessages = prevMessages.filter(message => {
                 if (!message.expiresAt) return true;
                 return new Date(message.expiresAt).getTime() > now;
-            })
-        );
+            });
+
+            // **MODIFIED**: Only update state if the messages array has actually changed.
+            if (activeMessages.length !== prevMessages.length) {
+                return activeMessages;
+            }
+
+            return prevMessages;
+        });
     }, 60000);
 
     return () => clearInterval(intervalId);
@@ -137,7 +140,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
       ));
       toast({ title: 'Message Read', description: 'Message marked as read' });
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to mark message as read. Please try again.', variant: 'destructive' });
+       toast({ title: 'Error', description: 'Failed to mark message as read. Please try again.', variant: 'destructive' });
     }
   }, [sseConnection, toast]);
 
@@ -181,7 +184,8 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [toast]);
 
-  const getMessageStats = useCallback(() => {
+  // **MODIFIED**: The stats object is now memoized and only recalculates when `messages` changes.
+  const stats = useMemo(() => {
     const total = messages.length;
     const unread = messages.filter(msg => msg.readStatus === 'UNREAD').length;
     const read = total - unread;
@@ -211,7 +215,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   return {
     messages,
     loading,
-    stats: getMessageStats(),
+    stats, // Return the memoized stats
     sseConnection,
     actions: {
       markAsRead,
