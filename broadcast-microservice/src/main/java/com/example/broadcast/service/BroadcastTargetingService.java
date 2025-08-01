@@ -19,7 +19,6 @@ import java.util.stream.Collectors;
 
 import com.example.broadcast.util.Constants.DeliveryStatus;
 import com.example.broadcast.util.Constants.ReadStatus;
-import com.example.broadcast.util.Constants.TargetType;
 
 /**
  * A service dedicated to handling the logic of targeting users for broadcasts.

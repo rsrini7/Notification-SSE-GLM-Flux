@@ -18,6 +18,9 @@ import java.time.ZonedDateTime;
 import java.util.UUID;
 import com.example.broadcast.service.BroadcastService;
 import org.springframework.http.HttpStatus;
+
+import com.example.broadcast.util.Constants.BroadcastStatus;
+
 /**
  * REST Controller for Server-Sent Events (SSE)
  * Provides real-time message delivery to connected users
@@ -57,7 +60,7 @@ public class SseController {
                 .userId(userId)
                 .sessionId(sessionId)
                 .podId(podId)
-                .connectionStatus("ACTIVE")
+                .connectionStatus(BroadcastStatus.ACTIVE.name())
                 .connectedAt(ZonedDateTime.now())
                 .lastHeartbeat(ZonedDateTime.now())
                 .build();

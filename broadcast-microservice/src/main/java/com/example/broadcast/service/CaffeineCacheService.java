@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.example.broadcast.util.Constants.ReadStatus;
+
 /**
  * Service for managing Caffeine cache operations
  * Provides high-performance caching for user connections, messages, and pending events
@@ -274,7 +276,7 @@ public class CaffeineCacheService {
                                     msg.getPriority(),
                                     msg.getCreatedAt(),
                                     msg.getDeliveryStatus(),
-                                    "READ");
+                                    ReadStatus.READ.name());
                             
                             messages.remove(msg);
                             messages.add(updatedMsg);

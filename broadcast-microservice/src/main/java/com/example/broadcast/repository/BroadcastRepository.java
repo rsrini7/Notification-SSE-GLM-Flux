@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.example.broadcast.util.Constants.BroadcastStatus;
+
 @Repository
 public class BroadcastRepository {
 
@@ -84,7 +86,7 @@ public class BroadcastRepository {
             ps.setString(7, broadcast.getCategory());
             ps.setObject(8, broadcast.getScheduledAt());
             ps.setObject(9, broadcast.getExpiresAt());
-            ps.setString(10, broadcast.getStatus() != null ? broadcast.getStatus() : "ACTIVE");
+            ps.setString(10, broadcast.getStatus() != null ? broadcast.getStatus() : BroadcastStatus.ACTIVE.name());
             return ps;
         }, keyHolder);
 
