@@ -79,6 +79,7 @@ export default function () {
             if (event.data && event.data.trim().startsWith('{')) {
                 try {
                     const parsedData = JSON.parse(event.data);
+                    console.log(`VU ${__VU} (${userID}): Received SSE event type=${event.type}, parsed data=${parsedData}`);
                     sseEventParsedSuccessfully.add(true);
 
                     // START OF CHANGE: Simulate user reading a message
