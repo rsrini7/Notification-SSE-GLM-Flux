@@ -88,7 +88,7 @@ logging:
   level:
     com.example.broadcast: DEBUG
     org.springframework.kafka: WARN
-    org.springframework.web: WARN
+    org.springframework.web: INFO
     org.springframework.jdbc: DEBUG
     io.github.resilience4j: INFO
   pattern:

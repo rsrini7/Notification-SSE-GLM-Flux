@@ -28,7 +28,7 @@ export const options = {
   insecureSkipTLSVerify: true,
 };
 
-const BASE_URL = 'https://localhost';
+const BASE_URL = 'https://localhost:8081';
 
 // This function runs once before the test starts.
 // It creates the broadcast message that all virtual users will receive.
@@ -83,6 +83,7 @@ export default function (data) {
             if (event.data && event.data.trim().startsWith('{')) {
                 try {
                     const parsedData = JSON.parse(event.data);
+                    console.log(`VU ${__VU} (${userID}): Received event: ${event.data}`);
                     
                     if (parsedData.type === 'MESSAGE' && parsedData.data.broadcastId === expectedBroadcastId) {
                         const receivedTime = Date.now();
