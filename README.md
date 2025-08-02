@@ -35,6 +35,11 @@ A modern React frontend for the Broadcast Messaging System, built with Vite, Typ
 
 2.  **Start the development server**:
     ```bash
+
+     keytool -genkeypair -alias netty -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore broadcast-microservice/src/main/resources/keystore.p12 -validity 3650 -storepass password -keypass password -dname "CN=example.com, OU=IT, O=MyCompany, L=Bangalore, ST=Karnataka, C=IN"
+
+    openssl req -x509 -newkey rsa:2048 -nodes -sha256 -subj '/CN=localhost' -keyout localhost-key.pem -out localhost.pem -days 3650
+
     npm run dev
     ```
 
