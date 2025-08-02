@@ -10,6 +10,7 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import com.github.benmanes.caffeine.cache.Cache;
 
@@ -29,10 +30,8 @@ public class CaffeineCacheService {
     private final Cache<String, List<CaffeineConfig.PendingEventInfo>> pendingEventsCache;
     private final Cache<String, CaffeineConfig.UserSessionInfo> userSessionCache;
     private final Cache<String, CaffeineConfig.BroadcastStatsInfo> broadcastStatsCache;
-
     // For tracking user online status
     private final ConcurrentHashMap<String, Boolean> onlineUsers = new ConcurrentHashMap<>();
-
     /**
      * Register user connection
      * Called when user establishes SSE connection
@@ -41,7 +40,6 @@ public class CaffeineCacheService {
         try {
             CaffeineConfig.UserConnectionInfo connectionInfo = new CaffeineConfig.UserConnectionInfo(
                     userId, sessionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
-            
             userConnectionsCache.put(userId, connectionInfo);
             onlineUsers.put(userId, true);
             
@@ -51,7 +49,6 @@ public class CaffeineCacheService {
             userSessionCache.put(sessionId, sessionInfo);
             
             log.debug("User connection registered: {} on pod {}", userId, podId);
-            
         } catch (Exception e) {
             log.error("Error registering user connection for {}: {}", userId, e.getMessage());
         }
@@ -88,7 +85,6 @@ public class CaffeineCacheService {
                         connectionInfo.getPodId(),
                         connectionInfo.getConnectedAt(),
                         ZonedDateTime.now());
-                
                 userConnectionsCache.put(userId, updatedInfo);
             }
             
@@ -200,12 +196,10 @@ public class CaffeineCacheService {
                     event.getEventType(),
                     event.getTimestamp(),
                     event.getMessage());
-            
             pendingEvents.add(pendingEvent);
             pendingEventsCache.put(userId, pendingEvents);
             
             log.debug("Cached pending event for user {}: {}", userId, event.getEventId());
-            
         } catch (Exception e) {
             log.error("Error caching pending event: {}", e.getMessage());
         }
@@ -224,7 +218,6 @@ public class CaffeineCacheService {
             return pendingEvents.stream()
                     .map(this::convertToMessageDeliveryEvent)
                     .toList();
-                    
         } catch (Exception e) {
             log.error("Error getting pending events for user {}: {}", userId, e.getMessage());
             return List.of();
@@ -263,34 +256,38 @@ public class CaffeineCacheService {
     /**
      * Update message read status in cache
      */
+    // START OF FIX: The UserMessageInfo class is immutable.
+    // The previous implementation was broken because it tried to modify the object directly.
+    // The fix is to create a new list where the target message is replaced by a new, updated instance.
     public void updateMessageReadStatus(String userId, Long broadcastId) {
         try {
             List<CaffeineConfig.UserMessageInfo> messages = userMessagesCache.getIfPresent(userId);
             if (messages != null) {
-                messages.stream()
-                        .filter(msg -> msg.getBroadcastId().equals(broadcastId))
-                        .forEach(msg -> {
-                            // Update the message status (would need to create a new immutable object)
-                            CaffeineConfig.UserMessageInfo updatedMsg = new CaffeineConfig.UserMessageInfo(
-                                    msg.getMessageId(),
-                                    msg.getBroadcastId(),
-                                    msg.getContent(),
-                                    msg.getPriority(),
-                                    msg.getCreatedAt(),
-                                    msg.getDeliveryStatus(),
-                                    ReadStatus.READ.name());
-                            
-                            messages.remove(msg);
-                            messages.add(updatedMsg);
-                        });
+                List<CaffeineConfig.UserMessageInfo> updatedMessages = messages.stream()
+                    .map(msg -> {
+                        if (msg.getBroadcastId().equals(broadcastId)) {
+                            // Create a new instance with the updated read status
+                            return new CaffeineConfig.UserMessageInfo(
+                                msg.getMessageId(),
+                                msg.getBroadcastId(),
+                                msg.getContent(),
+                                msg.getPriority(),
+                                msg.getCreatedAt(),
+                                msg.getDeliveryStatus(),
+                                ReadStatus.READ.name() // The updated value
+                            );
+                        }
+                        return msg; // Return the original message if it's not the one we're updating
+                    })
+                    .collect(Collectors.toList());
                 
-                userMessagesCache.put(userId, messages);
+                userMessagesCache.put(userId, updatedMessages);
             }
-            
         } catch (Exception e) {
             log.error("Error updating message read status for user {}: {}", userId, e.getMessage());
         }
     }
+    // END OF FIX
 
     /**
      * Cache broadcast statistics
@@ -317,7 +314,6 @@ public class CaffeineCacheService {
      */
     public java.util.Map<String, Object> getCacheStats() {
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
-        
         stats.put("userConnectionsCache", userConnectionsCache.stats());
         stats.put("userMessagesCache", userMessagesCache.stats());
         stats.put("pendingEventsCache", pendingEventsCache.stats());
@@ -341,7 +337,6 @@ public class CaffeineCacheService {
                 }
                 return false;
             });
-            
             log.debug("Cache cleanup completed. Online users: {}", onlineUsers.size());
             
         } catch (Exception e) {

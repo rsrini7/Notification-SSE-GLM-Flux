@@ -121,6 +121,15 @@ broadcast:
     user-messages:
       maximum-size: 100000
       expire-after-write: 24h
+    pending-events:
+      maximum-size: 50000
+      expire-after-write: 6h
+    user-session:
+      maximum-size: 10000
+      expire-after-access: 30m
+    broadcast-stats:
+      maximum-size: 1000
+      expire-after-write: 5m
       
   # Database Configuration
   db:
