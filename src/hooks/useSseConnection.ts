@@ -100,7 +100,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     
     // **MODIFIED**: Differentiate between initial connection and reconnection for UI feedback
     const isReconnecting = reconnectAttemptsRef.current > 0;
-    console.log(isReconnecting ? `SSE Reconnection Attempt: ${reconnectAttemptsRef.current}` : 'SSE Connection: Attempting to connect...');
+    console.log(isReconnecting ? `SSE Reconnection Attempt for User ${userId}: ${reconnectAttemptsRef.current}` : `SSE Connection for User ${userId}: Attempting to connect...`);
 
     setState(prev => ({ 
         ...prev, 
@@ -130,7 +130,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
 
         onConnectRef.current?.();
         startHeartbeat();
-        console.log('SSE Connection: Connected');
+        console.log(`SSE Connection for User ${userId}: Connected`);
         reconnectAttemptsRef.current = 0; // Reset attempts on successful connection
       };
 
