@@ -19,7 +19,11 @@ public class UserService {
         // In a real application, this would make a network call.
         // This could also be a database lookup depending on the architecture.
         // A proper implementation would have a WebClient call here.
-        return List.of("user-001", "user-002", "user-003", "user-004", "user-005", "user-006", "user-007", "user-008", "user-009", "user-010");
+
+        //useSseConnection.ts:80  POST https://localhost/api/sse/heartbeat?userId=user-117&sessionId=session-1754111099026-trcv6by5p net::ERR_INSUFFICIENT_RESOURCES
+        return java.util.stream.IntStream.rangeClosed(1, 50)
+                .mapToObj(i -> String.format("user-%03d", i))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     /**
