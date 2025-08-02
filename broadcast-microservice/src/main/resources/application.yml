@@ -142,6 +142,8 @@ broadcast:
       name: broadcast-events
       partitions: 10
       replication-factor: 1
+    consumer:
+      dlt-group-id: broadcast-dlt-group
     retry:
       max-attempts: 3
       backoff-delay: 1000

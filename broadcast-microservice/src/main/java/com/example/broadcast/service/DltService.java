@@ -41,7 +41,7 @@ public class DltService {
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}.DLT",
-            groupId = "broadcast-dlt-group",
+            groupId = "${broadcast.kafka.consumer.dlt-group-id:broadcast-dlt-group}",
             containerFactory = "kafkaListenerContainerFactory"
     )
     @Transactional
