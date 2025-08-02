@@ -5,6 +5,8 @@ public final class Constants {
     // Private constructor to prevent instantiation
     private Constants() {}
 
+    public static final String DLT_SUFFIX = ".DLT";
+
     public enum BroadcastStatus {
         ACTIVE,
         SCHEDULED,

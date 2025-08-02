@@ -1,8 +1,7 @@
 package com.example.broadcast.service;
-
 import com.example.broadcast.dto.MessageDeliveryEvent;
-import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.repository.BroadcastRepository;
+import com.example.broadcast.util.Constants.EventType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,10 +36,8 @@ public class KafkaConsumerService {
 
         try {
             MessageDeliveryEvent event = objectMapper.readValue(payload, MessageDeliveryEvent.class);
-
             log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                     event.getEventId(), topic, partition, offset);
-            
             handleEvent(event);
 
             acknowledgment.acknowledge();
@@ -52,27 +49,37 @@ public class KafkaConsumerService {
     }
 
     private void handleEvent(MessageDeliveryEvent event) {
-        switch (event.getEventType()) {
-            case "CREATED":
+        // START OF REFACTORING: Use constants instead of hardcoded strings
+        EventType eventType;
+        try {
+            eventType = EventType.valueOf(event.getEventType());
+        } catch (IllegalArgumentException e) {
+            log.warn("Unknown event type: {}", event.getEventType());
+            return;
+        }
+
+        switch (eventType) {
+            case CREATED:
                 handleBroadcastCreated(event);
                 break;
-            case "READ":
+            case READ:
                 handleMessageRead(event);
                 break;
-            case "CANCELLED":
+            case CANCELLED:
                 handleBroadcastCancelled(event);
                 break;
-            case "EXPIRED":
+            case EXPIRED:
                 handleBroadcastExpired(event);
                 break;
             default:
-                log.warn("Unknown event type: {}", event.getEventType());
+                log.warn("Unhandled event type: {}", event.getEventType());
         }
+        // END OF REFACTORING
     }
 
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
-        
+
         // The "FAIL_ME" poison pill logic has been COMMENTED OUT to allow normal processing.                
         // BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
         //         .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
@@ -80,7 +87,7 @@ public class KafkaConsumerService {
         //     log.warn("Poison pill 'FAIL_ME' detected in broadcast message content. Simulating processing failure.");
         //     throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");
         // }
-
+        
         boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) || sseService.isUserConnected(event.getUserId());
         if (isOnline) {
             sseService.handleMessageEvent(event);

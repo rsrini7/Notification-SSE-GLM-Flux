@@ -20,6 +20,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.broadcast.util.Constants;
 
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
@@ -40,7 +41,7 @@ public class DltService {
     private final BroadcastRepository broadcastRepository;
 
     @KafkaListener(
-            topics = "${broadcast.kafka.topic.name:broadcast-events}.DLT",
+            topics = "${broadcast.kafka.topic.name:broadcast-events}" + Constants.DLT_SUFFIX,
             groupId = "${broadcast.kafka.consumer.dlt-group-id:broadcast-dlt-group}",
             containerFactory = "kafkaListenerContainerFactory"
     )
@@ -138,7 +139,7 @@ public class DltService {
         // Send a tombstone message to the DLT to purge it from Kafka's log.
         // We need a key for compaction to work. Let's use the DB message ID as the key.
         String messageKey = dltMessage.getId();
-        String dltTopicName = dltMessage.getOriginalTopic() + ".DLT";
+        String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
         
         kafkaTemplate.send(dltTopicName, messageKey, null);
         log.info("Sent tombstone message to Kafka topic {} with key {} to purge the message.", dltTopicName, messageKey);

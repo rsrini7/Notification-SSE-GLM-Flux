@@ -21,6 +21,7 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.util.backoff.FixedBackOff;
+import com.example.broadcast.util.Constants;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -94,7 +95,7 @@ public class KafkaConfig {
             @Qualifier("dltKafkaTemplate") KafkaTemplate<String, byte[]> dltKafkaTemplate) {
         
         BiFunction<org.apache.kafka.clients.consumer.ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
-                new TopicPartition(cr.topic() + ".DLT", 0);
+                new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
         
         return new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
     }
@@ -125,7 +126,7 @@ public class KafkaConfig {
 
     @Bean
     public NewTopic deadLetterTopic() {
-        return TopicBuilder.name(topicName + ".DLT")
+        return TopicBuilder.name(topicName + Constants.DLT_SUFFIX)
                 .partitions(1)
                 .replicas(topicReplicationFactor)
                 .config("retention.ms", "1209600000")
