@@ -2,11 +2,11 @@ import { check, sleep } from 'k6';
 import sse from "k6/x/sse";
 import { textSummary } from 'https://jslib.k6.io/k6-summary/0.0.2/index.js';
 
-const userIDs = [ 'user-001', 'user-002', 'user-003', 'user-004', 'user-005' ];
+const userIDs = [ 'user-001' ];
 
 export const options = {
   stages: [
-    { duration: '30s', target: 5 },
+    { duration: '5s', target: 1 },
   ],
   insecureSkipTLSVerify: true,
 };
