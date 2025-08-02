@@ -1,4 +1,16 @@
 services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./localhost.pem:/etc/nginx/certs/localhost.pem
+      - ./localhost-key.pem:/etc/nginx/certs/localhost-key.pem
+    depends_on:
+      - kafka
+      - postgres
+
   kafka:
     image: confluentinc/cp-kafka:7.3.0
     depends_on:
@@ -25,7 +37,6 @@ services:
     ports:
       - "9411:9411"
 
-  # NEW: PostgreSQL service for local development
   postgres:
     image: postgres:15
     environment:
@@ -37,6 +48,5 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-# NEW: Named volume to persist PostgreSQL data
 volumes:
   postgres_data:

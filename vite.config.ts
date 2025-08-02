@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import fs from 'fs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -26,24 +27,27 @@ export default defineConfig({
   plugins: [
     react({
       include: '**/*.{jsx,tsx}',
-      // Completely disable React refresh
       fastRefresh: false,
-      skipReactRefresh: true,
-      // Don't inject React refresh runtime
-      injectReactRefresh: false
     }),
     rootPathPlugin()
   ],
   server: {
     port: 3000,
+    // START OF CHANGE: Expose the server to the network
+    host: true, 
+    // END OF CHANGE
+    https: {
+      key: fs.readFileSync('./localhost-key.pem'),
+      cert: fs.readFileSync('./localhost.pem'),
+    },
+    http2: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8081',
+        target: 'https://localhost:8081',
         changeOrigin: true,
         secure: false,
       },
     },
-    // Disable HMR completely
     hmr: false
   },
   resolve: {

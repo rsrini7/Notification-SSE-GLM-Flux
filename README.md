@@ -4,49 +4,52 @@ A modern React frontend for the Broadcast Messaging System, built with Vite, Typ
 
 ## Features
 
-- **Real-time Messaging**: Connects to Java backend via HTTP SSE and EventSource for real-time message delivery
-- **Admin Panel**: Create, manage, and monitor broadcast messages
-- **User Panel**: Receive and manage broadcast messages with read/unread status
-- **Modern UI**: Built with shadcn/ui components and Tailwind CSS
-- **Responsive Design**: Works seamlessly on desktop and mobile devices
-- **TypeScript**: Full type safety throughout the application
+- **Real-time Messaging**: Connects to the Java backend via HTTP SSE and `EventSource` for real-time message delivery.
+- **Admin Panel**: Create, manage, and monitor broadcast messages, including a panel for Dead Letter Queue (DLQ) management.
+- **User Panel**: Receive and manage broadcast messages with read/unread status.
+- **Modern UI**: Built with shadcn/ui components and Tailwind CSS.
+- **Responsive Design**: Works seamlessly on desktop and mobile devices.
+- **TypeScript**: Full type safety throughout the application.
 
 ## Tech Stack
 
-- **React 19**: Latest React with hooks and modern features
-- **Vite**: Fast build tool and development server
-- **TypeScript**: Type-safe JavaScript
-- **Tailwind CSS**: Utility-first CSS framework
-- **shadcn/ui**: High-quality React components
-- **Axios**: HTTP client for API communication
-- **Lucide React**: Beautiful icons
+- **React 19**: Latest React with hooks and modern features.
+- **Vite**: Fast build tool and development server.
+- **TypeScript**: Type-safe JavaScript.
+- **Tailwind CSS**: Utility-first CSS framework.
+- **shadcn/ui**: High-quality React components.
+- **Axios**: HTTP client for API communication.
+- **Lucide React**: Beautiful icons.
 
 ## Prerequisites
 
-- Node.js 18+ 
-- Java backend running on port 8080
+- Node.js 18+.
+- Java backend running on port **8081**.
 
 ## Getting Started
 
-1. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+1.  **Install dependencies**:
+    ```bash
+    npm install
+    ```
 
-2. **Start the development server**:
-   ```bash
-   npm run dev
-   ```
+2.  **Start the development server**:
+    ```bash
+    npm run dev
+    ```
 
-3. **Open your browser**:
-   Navigate to `http://localhost:3000`
+3.  **Open your browser**:
+    This will support only max 6 user connections including admin
+    Navigate to `https://localhost:3000`
+
+    Navigate to `https://localhost` for ngnix http2 support for more than 6 parellal http connections test from browswer.
 
 ## Available Scripts
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
-- `npm run lint` - Run ESLint
+-   `npm run dev` - Start development server.
+-   `npm run build` - Build for production.
+-   `npm run preview` - Preview production build.
+-   `npm run lint` - Run ESLint.
 
 ## Project Structure
 
@@ -66,17 +69,21 @@ src/
 
 The frontend is configured to connect to a Java backend:
 
-- **Development**: `http://localhost:8081`
-- **Production**: `https://your-java-backend.com`
+- **Development**: `https://localhost:8081`
 
 ### API Endpoints Used
 
-- `GET /api/broadcasts` - Get all broadcasts
-- `POST /api/broadcasts` - Create new broadcast
-- `DELETE /api/broadcasts/{id}` - Cancel broadcast
-- `GET /api/broadcasts/{id}/stats` - Get broadcast statistics
-- `GET /api/user/messages` - Get user messages
-- `POST /api/sse/read` - Mark message as read
+-   [cite_start]`GET /api/broadcasts` - Get all broadcasts [cite: 40-41].
+-   `POST /api/broadcasts` - Create a new broadcast.
+-   `DELETE /api/broadcasts/{id}` - Cancel a broadcast.
+-   `GET /api/broadcasts/{id}/stats` - Get broadcast statistics.
+-   `GET /api/user/messages` - Get user messages.
+-   `POST /api/sse/read` - Mark a message as read.
+-   `GET /api/dlt/messages` - Get all messages from the Dead Letter Topic.
+-   `POST /api/dlt/redrive/{id}` - Re-process a failed message from the DLT.
+-   `DELETE /api/dlt/delete/{id}` - Delete a message from the DLT.
+-   `DELETE /api/dlt/purge/{id}` - Permanently purge a message from the DLT and Kafka.
+
 
 ## Components
 

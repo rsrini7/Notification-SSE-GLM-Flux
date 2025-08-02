@@ -13,13 +13,15 @@ interface UseBroadcastMessagesOptions {
 export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const {
     userId,
-    baseUrl = 'http://localhost:8081',
+    // START OF FIX: Default to a relative path.
+    baseUrl = '',
+    // END OF FIX
     autoConnect = true
   } = options;
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-
+  
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
@@ -139,7 +141,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
       ));
       toast({ title: 'Message Read', description: 'Message marked as read' });
     } catch (error) {
-       toast({ title: 'Error', description: 'Failed to mark message as read. Please try again.', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to mark message as read. Please try again.', variant: 'destructive' });
     }
   }, [sseConnection, toast]);
 

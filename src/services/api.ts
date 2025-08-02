@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://your-java-backend.com' 
-  : 'http://localhost:8081';
+// START OF FIX: Make the base URL relative so the Vite proxy can handle all requests.
+const API_BASE_URL = ''; 
+// END OF FIX
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -11,29 +11,6 @@ const api = axios.create({
   },
 });
 
-// Request interceptor for logging
-/* api.interceptors.request.use(
-  (config) => {
-    console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, config.data);
-    return config;
-  },
-  (error) => {
-    console.error('API Request Error:', error);
-    return Promise.reject(error);
-  }
-);
-
-// Response interceptor for error handling
-api.interceptors.response.use(
-  (response) => {
-    console.log(`API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, response.data);
-    return response;
-  },
-  (error) => {
-    console.error('API Response Error:', error.response?.data || error.message);
-    return Promise.reject(error);
-  }
-);*/
 export interface DltMessage {
   id: string;
   originalTopic: string;
@@ -124,7 +101,6 @@ export const broadcastService = {
     return response.data;
   },
 };
-
 export const userService = {
   getUserMessages: async (userId: string): Promise<UserBroadcastMessage[]> => {
     const response = await api.get(`/api/user/messages?userId=${userId}`);
@@ -138,7 +114,6 @@ export const userService = {
     return response.data;
   },
 };
-
 export const dltService = {
   getDltMessages: async (): Promise<DltMessage[]> => {
     const response = await api.get('/api/dlt/messages');
