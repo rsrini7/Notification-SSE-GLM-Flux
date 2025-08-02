@@ -137,6 +137,10 @@ VITE_API_BASE_URL=http://localhost:8081
 3. Handle errors gracefully
 4. Add loading states in components
 
+### Performance Testing
+
+k6 run --insecure-skip-tls-verify sse-test.js
+
 ## Troubleshooting
 
 ### Common Issues
