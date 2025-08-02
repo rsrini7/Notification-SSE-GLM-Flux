@@ -212,7 +212,7 @@
                 <artifactId>gatling-maven-plugin</artifactId>
                 <version>4.9.0</version>
                 <configuration>
-                    <simulationClass>SseSimulation</simulationClass>
+                    <simulationClass>com.example.broadcast.gatling.SseSimulation</simulationClass>
                 </configuration>
             </plugin>
         </plugins>
