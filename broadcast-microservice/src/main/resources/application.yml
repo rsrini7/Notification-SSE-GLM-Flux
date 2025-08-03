@@ -16,6 +16,9 @@ server:
 spring:
   application:
     name: broadcast-microservice
+  threads:
+    virtual:
+      enabled: true
   
   # h2 Database Configuration (default)
   datasource:
@@ -70,7 +73,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,circuitbreakers,bulkheads
+        include: health,info,metrics,prometheus,circuitbreakers,bulkheads,ratelimiters
   endpoint:
     health:
       show-details: always
@@ -99,6 +102,18 @@ logging:
 
 # Resilience4j Configuration
 resilience4j:
+  ratelimiter:
+    instances:
+      createBroadcastLimiter:
+        limitForPeriod: 10               # Allow 10 requests...
+        limitRefreshPeriod: 1m           # ...per 1 minute window.
+        timeoutDuration: 0               # Don't wait for permission, fail immediately.
+        registerHealthIndicator: true    # Expose status in the health endpoint.
+      sseConnectLimiter:
+        limitForPeriod: 20              # Allow 20 new connection attempts...
+        limitRefreshPeriod: 1m          # ...per 1 minute window.
+        timeoutDuration: 0              # Fail immediately if the limit is exceeded.
+        registerHealthIndicator: true
   circuitbreaker:
     instances:
       userService:

@@ -41,7 +41,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     reconnectAttempt: 0
   });
 
-  const MAX_RECONNECT_ATTEMPTS = 5;
+  // MODIFIED: Increased max attempts for more resilience
+  const MAX_RECONNECT_ATTEMPTS = 10;
   const BASE_RECONNECT_DELAY = 1000;
   const MAX_RECONNECT_DELAY = 30000;
 
@@ -103,26 +104,43 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   useEffect(() => {
     disconnectRef.current = disconnect;
   }, [disconnect]);
+  
+  // MODIFIED: Extracted scheduleReconnect into its own function for clarity and reuse.
+  const scheduleReconnect = useCallback(() => {
+    if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+      const delay = Math.min(MAX_RECONNECT_DELAY, BASE_RECONNECT_DELAY * 2 ** reconnectAttemptsRef.current);
+      console.log(`SSE: Scheduling reconnect for user ${userId} in ${delay}ms`);
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = setTimeout(() => connect(true), delay);
+    } else {
+      console.error(`SSE: Max reconnection attempts reached for user ${userId}.`);
+      setState(prev => ({ ...prev, error: 'Max reconnection attempts reached.', connecting: false }));
+    }
+  }, [userId]);
 
-  const connect = useCallback(() => {
+  // MODIFIED: The connect function now takes an isRetry flag.
+  const connect = useCallback((isRetry = false) => {
     if (eventSourceRef.current) eventSourceRef.current.close();
     
-    const isReconnecting = reconnectAttemptsRef.current > 0;
-    setState(prev => ({ ...prev, connecting: true, error: isReconnecting ? `Reconnecting... (Attempt ${reconnectAttemptsRef.current})` : null, reconnectAttempt: reconnectAttemptsRef.current }));
-    reconnectAttemptsRef.current++;
+    if (isRetry) {
+      reconnectAttemptsRef.current++;
+    } else {
+      reconnectAttemptsRef.current = 1; // Start with attempt 1
+    }
+    
+    setState(prev => ({ ...prev, connecting: true, error: isRetry ? `Reconnecting... (Attempt ${reconnectAttemptsRef.current})` : null, reconnectAttempt: reconnectAttemptsRef.current }));
 
     const newSessionId = generateSessionId();
     sessionIdRef.current = newSessionId;
     const sseUrl = `${baseUrl}/api/sse/connect?userId=${userId}&sessionId=${newSessionId}`;
 
-    // MODIFIED: Restored the try...catch block to handle synchronous connection errors.
     try {
       eventSourceRef.current = new EventSource(sseUrl);
 
       eventSourceRef.current.onopen = () => {
         setState(prev => ({ ...prev, connected: true, connecting: false, sessionId: newSessionId, error: null, reconnectAttempt: 0 }));
         onConnectRef.current?.();
-        reconnectAttemptsRef.current = 0;
+        reconnectAttemptsRef.current = 0; // Reset on successful connection
       };
 
       SSE_EVENT_TYPES.forEach(type => {
@@ -130,23 +148,18 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       });
 
       eventSourceRef.current.onerror = () => {
-        onDisconnectRef.current?.();
-        onErrorRef.current?.(new Error('SSE connection error'));
         eventSourceRef.current?.close();
-        if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-          const delay = Math.min(MAX_RECONNECT_DELAY, BASE_RECONNECT_DELAY * 2 ** reconnectAttemptsRef.current);
-          reconnectTimeoutRef.current = setTimeout(connect, delay);
-        } else {
-          setState(prev => ({ ...prev, error: 'Max reconnection attempts reached.' }));
-        }
+        onErrorRef.current?.(new Error('SSE connection error'));
+        // MODIFIED: Centralized reconnect scheduling
+        scheduleReconnect();
       };
     } catch (error) {
       console.error('Failed to create SSE connection:', error);
-      setState(prev => ({ ...prev, connected: false, connecting: false, error: 'Failed to connect' }));
-      // This is the critical onErrorRef call that was missing.
       onErrorRef.current?.(error);
+      // MODIFIED: Centralized reconnect scheduling for initial synchronous failures
+      scheduleReconnect();
     }
-  }, [userId, baseUrl, generateSessionId, handleSseMessage]);
+  }, [userId, baseUrl, generateSessionId, handleSseMessage, scheduleReconnect]);
 
   const markAsRead = useCallback(async (messageId: number) => {
     if (!sessionIdRef.current) {
@@ -173,7 +186,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     };
   }, [autoConnect, userId, connect]);
 
-  return { ...state, connect, disconnect, markAsRead };
+  return { ...state, connect: () => connect(false), disconnect, markAsRead };
 };
 
 export default useSseConnection;

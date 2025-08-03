@@ -1,24 +1,28 @@
-// broadcast-microservice/src/main/java/com/example/broadcast/controller/SseController.java
 package com.example.broadcast.controller;
 
 import com.example.broadcast.model.UserSession;
 import com.example.broadcast.repository.UserSessionRepository;
-import com.example.broadcast.service.SseService;
 import com.example.broadcast.service.CacheService;
+import com.example.broadcast.service.SseService;
+import com.example.broadcast.service.BroadcastService;
+import com.example.broadcast.util.Constants.BroadcastStatus;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 
-import org.springframework.web.server.ServerWebExchange;
 import java.time.ZonedDateTime;
 import java.util.UUID;
-import com.example.broadcast.service.BroadcastService;
-import com.example.broadcast.util.Constants.BroadcastStatus;
 
 @RestController
 @RequestMapping("/api/sse")
@@ -34,8 +38,8 @@ public class SseController {
     @Value("${broadcast.pod.id:pod-local}")
     private String podId;
 
-    // MODIFIED: Return type is now Flux<ServerSentEvent<String>> to match the service layer.
     @GetMapping(value = "/connect", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @RateLimiter(name = "sseConnectLimiter", fallbackMethod = "connectFallback")
     public Flux<ServerSentEvent<String>> connect(
             @RequestParam String userId,
             @RequestParam(required = false) String sessionId,
@@ -54,21 +58,28 @@ public class SseController {
                 .podId(podId)
                 .connectionStatus(BroadcastStatus.ACTIVE.name())
                 .connectedAt(ZonedDateTime.now())
-                .lastHeartbeat(ZonedDateTime.now()) // Set initial heartbeat time
+                .lastHeartbeat(ZonedDateTime.now())
                 .build();
         userSessionRepository.save(session);
         cacheService.registerUserConnection(userId, sessionId, podId);
         
-        // MODIFIED: The service method now also requires the sessionId.
         Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, sessionId);
         log.info("SSE connection established for user: {}, session: {}", userId, sessionId);
         
         return eventStream;
     }
-
-    // REMOVED: The client-poll heartbeat endpoint is no longer necessary.
-    // The server-push heartbeat over the SSE stream handles keeping the connection alive.
-    // The new server-side cleanup task handles stale sessions.
+    
+    // MODIFIED: This fallback method now logs a clean WARN message instead of a full stack trace.
+    public Flux<ServerSentEvent<String>> connectFallback(String userId, String sessionId, ServerWebExchange exchange, RequestNotPermitted ex) {
+        // Log a concise warning message. The exception message from Resilience4j is informative.
+        log.warn("Connection rate limit exceeded for user: {}. IP: {}. Details: {}", 
+            userId, 
+            exchange.getRequest().getRemoteAddress(), 
+            ex.getMessage());
+        
+        // Return the error Flux to send the 429 response to the client, but without generating a new exception here.
+        return Flux.error(new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Connection rate limit exceeded. Please try again later."));
+    }
 
     @PostMapping("/disconnect")
     public ResponseEntity<String> disconnect(
@@ -77,7 +88,6 @@ public class SseController {
         
         log.info("Disconnect request from user: {}, session: {}", userId, sessionId);
         
-        // MODIFIED: The service now needs the sessionId to correctly remove the specific stream.
         sseService.removeEventStream(userId, sessionId);
         int updated = userSessionRepository.markSessionInactive(sessionId, podId);
         
@@ -101,8 +111,6 @@ public class SseController {
         stats.put("sseConnectedUsers", sseConnectedUsers);
         stats.put("podId", podId);
         stats.put("timestamp", ZonedDateTime.now());
-        log.info("SSE stats: total={}, pod={}, sse={}", 
-                totalActiveUsers, podActiveUsers, sseConnectedUsers);
         return ResponseEntity.ok(stats);
     }
 

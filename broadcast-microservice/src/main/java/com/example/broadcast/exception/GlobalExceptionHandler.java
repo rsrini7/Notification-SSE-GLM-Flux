@@ -6,8 +6,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.server.ServerWebExchange;
 
 import java.time.ZonedDateTime;
 import java.util.stream.Collectors;
@@ -48,7 +49,6 @@ public class GlobalExceptionHandler {
                 .getAllErrors().stream()
                 .map(error -> error.getDefaultMessage())
                 .collect(Collectors.joining(", "));
-
         ErrorResponse errorResponse = new ErrorResponse(
                 ZonedDateTime.now(),
                 HttpStatus.BAD_REQUEST.value(),
@@ -58,6 +58,27 @@ public class GlobalExceptionHandler {
         );
         log.warn("Validation error: {}", errors);
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException ex, ServerWebExchange exchange) {
+        ErrorResponse errorResponse = new ErrorResponse(
+                ZonedDateTime.now(),
+                ex.getStatusCode().value(),
+                ex.getStatusCode().toString(),
+                ex.getReason(),
+                exchange.getRequest().getPath().toString()
+        );
+
+        // MODIFIED: Simplified the log message and removed the incorrect method call.
+        if (ex.getStatusCode().is4xxClientError()) {
+            log.warn("Client error: {} on path '{}' - Reason: {}", ex.getStatusCode().value(), exchange.getRequest().getPath(), ex.getReason());
+        } 
+        else if (ex.getStatusCode().is5xxServerError()) {
+            log.error("Server error occurred on path {}:", exchange.getRequest().getPath(), ex);
+        }
+
+        return new ResponseEntity<>(errorResponse, ex.getStatusCode());
     }
 
     @ExceptionHandler(Exception.class)
