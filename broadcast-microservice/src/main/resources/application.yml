@@ -110,9 +110,9 @@ resilience4j:
         timeoutDuration: 0               # Don't wait for permission, fail immediately.
         registerHealthIndicator: true    # Expose status in the health endpoint.
       sseConnectLimiter:
-        limitForPeriod: 20              # Allow 20 new connection attempts...
+        limitForPeriod: 15              # Allow 15 new connection attempts...
         limitRefreshPeriod: 1m          # ...per 1 minute window.
-        timeoutDuration: 0              # Fail immediately if the limit is exceeded.
+        timeoutDuration: 2s              # Fail after 2 seconds if the limit is exceeded.
         registerHealthIndicator: true
   circuitbreaker:
     instances:
