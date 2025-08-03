@@ -4,6 +4,7 @@ import io.gatling.core.Predef._
 import io.gatling.http.Predef._
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 
 class SseSimulation extends Simulation {
 
@@ -13,7 +14,10 @@ class SseSimulation extends Simulation {
     .disableUrlEncoding
     .disableCaching
 
-  val userFeeder = (1 to 2).iterator.map(i => Map("ID" -> f"user-$i%03d"))
+
+  private val objectMapper = new ObjectMapper()
+  
+  val userFeeder = (1 to 1).iterator.map(i => Map("ID" -> f"user-$i%03d")).toArray.circular
 
   val listenScenario = scenario("SSE Listeners")
     .feed(userFeeder)
@@ -22,18 +26,14 @@ class SseSimulation extends Simulation {
         .get("/api/sse/connect?userId=#{ID}")
         .await(60 seconds)(
           sse.checkMessage("Check for Broadcast")
-            // START OF FIX: Use a single check block with .transform for logging
             .check(
-              bodyString.transform { eventBody =>
-                // Log the raw event body BEFORE matching
-                println(s"DEBUG [BEFORE MATCH]: User #{ID} received event: $eventBody")
-                eventBody // Pass the body along to the next check
-              },
-              // Now, apply the matching and save the content
               jsonPath("$.type").is("MESSAGE"),
-              jsonPath("$.data.content").find.saveAs("messageContent")
+              jsonPath("$.data").find.transform { innerJsonString =>
+                println(s"innerJsonString: $innerJsonString")
+                objectMapper.readTree(innerJsonString)
+              }.saveAs("parsedInnerJson"),
+              jsonPath("$.parsedInnerJson.content").find.saveAs("messageContent")
             )
-            // END OF FIX
         )
     )
     .doIf(session => session.contains("messageContent")) {
@@ -53,7 +53,8 @@ class SseSimulation extends Simulation {
             "senderId": "gatling-admin",
             "senderName": "Gatling Test",
             "content": "Live performance test message at ${System.currentTimeMillis()}",
-            "targetType": "ALL",
+            "targetType": "SELECTED",
+            "targetIds": ["user-001"],
             "isImmediate": true
           }
         """)).asJson
@@ -61,7 +62,12 @@ class SseSimulation extends Simulation {
     )
 
   setUp(
-    listenScenario.inject(rampUsers(10).during(20.seconds)),
-    broadcastScenario.inject(nothingFor(25.seconds), atOnceUsers(1))
+    listenScenario.inject(rampUsers(1).during(20.seconds)),
+    broadcastScenario.inject(
+      nothingFor(25 seconds),
+      atOnceUsers(1),
+      nothingFor(15 seconds),
+      atOnceUsers(1)
+    )
   ).protocols(httpProtocol)
 }

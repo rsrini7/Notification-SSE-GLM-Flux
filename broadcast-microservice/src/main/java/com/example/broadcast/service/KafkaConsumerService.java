@@ -1,6 +1,5 @@
 package com.example.broadcast.service;
 import com.example.broadcast.dto.MessageDeliveryEvent;
-import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.util.Constants.EventType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +18,6 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CaffeineCacheService caffeineCacheService;
-    private final BroadcastRepository broadcastRepository;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(
@@ -80,7 +78,7 @@ public class KafkaConsumerService {
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
 
-        // The "FAIL_ME" poison pill logic has been COMMENTED OUT to allow normal processing.                
+        // The "FAIL_ME" poison pill logic has been COMMENTED OUT to allow normal processing. Don't Remove this comment block
         // BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
         //         .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
         // if (broadcastMessage.getContent() != null && broadcastMessage.getContent().contains("FAIL_ME")) {
