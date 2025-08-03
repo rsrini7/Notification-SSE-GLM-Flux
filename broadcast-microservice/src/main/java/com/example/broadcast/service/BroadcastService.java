@@ -26,9 +26,9 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import com.example.broadcast.util.Constants.BroadcastStatus;
 import com.example.broadcast.util.Constants.EventType;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -60,6 +60,7 @@ public class BroadcastService {
                 .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
+
         if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
             log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());
             broadcast.setStatus(BroadcastStatus.EXPIRED.name());
@@ -84,41 +85,46 @@ public class BroadcastService {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
         
-        // START OF FIX: Change status and call the new `update` method instead of `save`.
-        // This prevents creating a new duplicate broadcast record every minute.
         broadcast.setStatus(BroadcastStatus.ACTIVE.name());
         broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
         broadcastRepository.update(broadcast);
-        // END OF FIX
 
         triggerBroadcast(broadcast);
     }
 
+    // START OF FIX: This method was logically flawed.
+    // It now uses a single, consistent list of users for both database inserts and Kafka events.
     private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
+        // This now serves as the single source of truth for targeted users.
         List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
         int totalTargeted = userBroadcasts.size();
 
-        BroadcastStatistics initialStats = BroadcastStatistics.builder()
-                .broadcastId(broadcast.getId())
-                .totalTargeted(totalTargeted)
-                .totalDelivered(0)
-                .totalRead(0)
-                .totalFailed(0)
-                .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .build();
-        broadcastStatisticsRepository.save(initialStats);
+        if (totalTargeted > 0) {
+            log.info("Broadcast {} targeting {} users.", broadcast.getId(), totalTargeted);
+            
+            // 1. Create the statistics record.
+            BroadcastStatistics initialStats = BroadcastStatistics.builder()
+                    .broadcastId(broadcast.getId())
+                    .totalTargeted(totalTargeted)
+                    .totalDelivered(0)
+                    .totalRead(0)
+                    .totalFailed(0)
+                    .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                    .build();
+            broadcastStatisticsRepository.save(initialStats);
 
-        if (!userBroadcasts.isEmpty()) {
+            // 2. Save the user-specific message records to the database.
             userBroadcastRepository.batchInsert(userBroadcasts);
-        }
 
-        List<String> targetUserIds = userBroadcasts.stream()
-            .map(UserBroadcastMessage::getUserId)
-            .collect(Collectors.toList());
-        sendBroadcastEvent(broadcast, targetUserIds, EventType.CREATED.name());
-        log.info("Broadcast triggered successfully with ID: {}, targeting {} users", broadcast.getId(), totalTargeted);
+            // 3. Send a Kafka event for each user record that was just created.
+            sendBroadcastEvent(broadcast, userBroadcasts, EventType.CREATED.name());
+        } else {
+            log.warn("Broadcast {} created, but no users were targeted after filtering.", broadcast.getId());
+        }
+        
         return buildBroadcastResponse(broadcast, totalTargeted);
     }
+    // END OF FIX
 
     public BroadcastResponse getBroadcast(Long id) {
         return broadcastRepository.findBroadcastWithStatsById(id)
@@ -145,11 +151,7 @@ public class BroadcastService {
         broadcastRepository.update(broadcast);
         
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
-        List<String> targetUsers = userBroadcasts.stream()
-                .map(UserBroadcastMessage::getUserId)
-                .distinct()
-                .collect(Collectors.toList());
-        sendBroadcastEvent(broadcast, targetUsers, EventType.CANCELLED.name());
+        sendBroadcastEvent(broadcast, userBroadcasts, EventType.CANCELLED.name());
         log.info("Broadcast cancelled: {}", id);
     }
 
@@ -162,11 +164,7 @@ public class BroadcastService {
             broadcastRepository.update(broadcast);
             log.info("Broadcast expired: {}", broadcastId);
             List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);
-            List<String> targetUsers = userBroadcasts.stream()
-                    .map(UserBroadcastMessage::getUserId)
-                    .distinct()
-                    .collect(Collectors.toList());
-            sendBroadcastEvent(broadcast, targetUsers, EventType.EXPIRED.name());
+            sendBroadcastEvent(broadcast, userBroadcasts, EventType.EXPIRED.name());
         }
     }
 
@@ -214,12 +212,13 @@ public class BroadcastService {
         return userPreferencesRepository.findAllUserIds();
     }
 
-    private void sendBroadcastEvent(BroadcastMessage broadcast, List<String> targetUsers, String eventType) {
-        targetUsers.forEach(userId -> {
+    // START OF FIX: Overload sendBroadcastEvent to accept a list of UserBroadcastMessage
+    private void sendBroadcastEvent(BroadcastMessage broadcast, List<UserBroadcastMessage> targetUsers, String eventType) {
+        targetUsers.forEach(userMessage -> {
             MessageDeliveryEvent event = MessageDeliveryEvent.builder()
                     .eventId(UUID.randomUUID().toString())
                     .broadcastId(broadcast.getId())
-                    .userId(userId)
+                    .userId(userMessage.getUserId())
                     .eventType(eventType)
                     .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
                     .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
@@ -228,6 +227,7 @@ public class BroadcastService {
             sendBroadcastEventAfterCommit(event);
         });
     }
+    // END OF FIX
 
     private void sendBroadcastEventAfterCommit(MessageDeliveryEvent event) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
