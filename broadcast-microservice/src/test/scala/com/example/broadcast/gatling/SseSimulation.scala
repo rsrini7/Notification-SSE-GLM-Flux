@@ -13,19 +13,24 @@ class SseSimulation extends Simulation {
     .disableUrlEncoding
     .disableCaching
 
+  val userFeeder = (1 to 50).iterator.map(i => Map("ID" -> f"user-$i%03d"))
+
   val listenScenario = scenario("SSE Listeners")
+    .feed(userFeeder)
     .exec(
       sse("Connect and Listen")
-        .get("/api/sse/connect?userId=gatling-user-#{ID}")
+        .get("/api/sse/connect?userId=#{ID}")
         .await(30 seconds)(
           sse.checkMessage("Check for Broadcast")
             .matching(jsonPath("$.type").is("MESSAGE"))
             .check(jsonPath("$.data.content").find.saveAs("messageContent"))
         )
     )
-    .exec { session =>
-      println(s"User gatling-user-#{ID} received broadcast: ${session("messageContent").as[String]}")
-      session
+    .doIf(session => session.contains("messageContent")) {
+      exec { session =>
+        println(s"User ${session("ID").as[String]} received broadcast: ${session("messageContent").as[String]}")
+        session
+      }
     }
 
   val broadcastScenario = scenario("SSE Broadcaster")
@@ -46,7 +51,7 @@ class SseSimulation extends Simulation {
     )
 
   setUp(
-    listenScenario.inject(rampUsers(10).during(10.seconds)),
-    broadcastScenario.inject(nothingFor(15.seconds), atOnceUsers(1))
+    listenScenario.inject(rampUsers(50).during(20.seconds)),
+    broadcastScenario.inject(nothingFor(25.seconds), atOnceUsers(1))
   ).protocols(httpProtocol)
 }
