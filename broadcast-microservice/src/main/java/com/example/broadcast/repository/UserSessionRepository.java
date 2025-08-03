@@ -102,17 +102,7 @@ public class UserSessionRepository {
         return jdbcTemplate.query(sql, sessionRowMapper, podId);
     }
 
-    /**
-     * Update session heartbeat
-     */
-    public int updateHeartbeat(String sessionId, String podId) {
-        String sql = """
-            UPDATE user_sessions 
-            SET last_heartbeat = CURRENT_TIMESTAMP 
-            WHERE session_id = ? AND pod_id = ?
-            """;
-        return jdbcTemplate.update(sql, sessionId, podId);
-    }
+    // REMOVED: updateHeartbeat is no longer needed as the client will not be polling.
 
     /**
      * Mark session as inactive
@@ -126,6 +116,24 @@ public class UserSessionRepository {
             """;
         return jdbcTemplate.update(sql, sessionId, podId);
     }
+    
+    /**
+     * NEW: Marks all active sessions for a given list of user IDs as INACTIVE.
+     * This is used by the cleanup service to handle dropped connections.
+     * @param userIds The list of user IDs whose sessions should be marked inactive.
+     * @return The number of rows affected.
+     */
+    public int markSessionsInactiveForUsers(List<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return 0;
+        }
+        String sql = String.format(
+            "UPDATE user_sessions SET connection_status = 'INACTIVE', disconnected_at = CURRENT_TIMESTAMP WHERE connection_status = 'ACTIVE' AND user_id IN (%s)",
+            String.join(",", java.util.Collections.nCopies(userIds.size(), "?"))
+        );
+        return jdbcTemplate.update(sql, userIds.toArray());
+    }
+
 
     /**
      * Get active user count by pod
@@ -149,42 +157,15 @@ public class UserSessionRepository {
         return jdbcTemplate.queryForObject(sql, Long.class);
     }
 
-    /**
-     * Clean up expired sessions (older than 1 hour)
-     */
-    public int cleanupExpiredSessions() {
-        String sql = """
-            UPDATE user_sessions 
-            SET connection_status = 'EXPIRED', 
-                disconnected_at = CURRENT_TIMESTAMP 
-            WHERE connection_status = 'ACTIVE' 
-            AND last_heartbeat < DATEADD('HOUR', -1, CURRENT_TIMESTAMP)
-            """;
-        return jdbcTemplate.update(sql);
-    }
-
-    /**
-     * Get sessions that need heartbeat (older than 5 minutes)
-     */
-    public List<UserSession> getSessionsNeedingHeartbeat() {
-        String sql = """
-            SELECT * FROM user_sessions 
-            WHERE connection_status = 'ACTIVE' 
-            AND last_heartbeat < DATEADD('MINUTE', -5, CURRENT_TIMESTAMP)
-            ORDER BY last_heartbeat ASC
-            """;
-        return jdbcTemplate.query(sql, sessionRowMapper);
-    }
+    // REMOVED: cleanupExpiredSessions is no longer needed. The new cleanup logic in SseService is more reliable.
     
     /**
-     * New method to find all active user IDs.
-     * This is used by the SseService cleanup task to prevent memory leaks.
+     * Get all user IDs that are currently marked as active in the database.
      */
     public List<String> findAllActiveUserIds() {
-        String sql = "SELECT user_id FROM user_sessions WHERE connection_status = 'ACTIVE'";
+        String sql = "SELECT DISTINCT user_id FROM user_sessions WHERE connection_status = 'ACTIVE'";
         return jdbcTemplate.queryForList(sql, String.class);
     }
-
 
     /**
      * Batch insert sessions for high-performance operations

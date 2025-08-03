@@ -34,7 +34,6 @@ import com.example.broadcast.util.Constants.EventType;
 import com.example.broadcast.util.Constants.SseEventType;
 import com.example.broadcast.util.Constants.ReadStatus;
 
-
 @Service
 @Slf4j
 public class SseService {
@@ -47,11 +46,15 @@ public class SseService {
     
     @Value("${broadcast.sse.heartbeat-interval:30000}")
     private long heartbeatInterval;
-    private final Map<String, Sinks.Many<String>> userSinks = new ConcurrentHashMap<>();
     
+    // UPDATED: The key is now the unique sessionId to support multiple connections from the same user.
+    private final Map<String, Sinks.Many<String>> userSinks = new ConcurrentHashMap<>();
+    private final Map<String, String> userSessionMap = new ConcurrentHashMap<>(); // Maps userId to sessionId for quick lookup
+
+
     private Disposable heartbeatSubscription;
     private Disposable cleanupSubscription;
-
+    
     public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository, ObjectMapper objectMapper, BroadcastRepository broadcastRepository, BroadcastStatisticsRepository broadcastStatisticsRepository) {
         this.userBroadcastRepository = userBroadcastRepository;
         this.userSessionRepository = userSessionRepository;
@@ -77,27 +80,42 @@ public class SseService {
         log.info("Disposed of SSE scheduled tasks.");
     }
 
-    public Flux<String> createEventStream(String userId) {
-        log.debug("Creating SSE event stream for user: {}", userId);
+    public Flux<String> createEventStream(String userId, String sessionId) {
+        log.debug("Creating SSE event stream for user: {}, session: {}", userId, sessionId);
         Sinks.Many<String> sink = Sinks.many().multicast().onBackpressureBuffer();
-        userSinks.put(userId, sink);
         
+        // Use sessionId as the unique key
+        userSinks.put(sessionId, sink);
+        userSessionMap.put(userId, sessionId);
+
         sendPendingMessages(userId, sink);
         sendEvent(userId, Map.of(
                 "type", SseEventType.CONNECTED.name(),
                 "timestamp", ZonedDateTime.now(),
-                "message", "SSE connection established"
+                "message", "SSE connection established with session " + sessionId
         ));
         
         return sink.asFlux()
                 .doOnCancel(() -> {
-                    log.debug("SSE stream cancelled for user: {}", userId);
-                    userSinks.remove(userId);
+                    log.debug("SSE stream cancelled for user: {}, session: {}", userId, sessionId);
+                    removeEventStream(userId, sessionId);
                 })
                 .doOnError(throwable -> {
-                    log.error("SSE stream error for user {}: {}", userId, throwable.getMessage());
-                    userSinks.remove(userId);
+                    log.error("SSE stream error for user {}, session {}: {}", userId, sessionId, throwable.getMessage());
+                    removeEventStream(userId, sessionId);
+                })
+                .doOnTerminate(() -> {
+                    log.debug("SSE stream terminated for user: {}, session: {}", userId, sessionId);
+                    removeEventStream(userId, sessionId);
                 });
+    }
+
+    // NEW: Method to cleanly remove sinks and mappings.
+    public void removeEventStream(String userId, String sessionId) {
+        userSinks.remove(sessionId);
+        // Only remove the user-session mapping if it matches the current session
+        // This prevents a new connection from being accidentally removed by an old one's cleanup
+        userSessionMap.remove(userId, sessionId);
     }
 
     public void handleMessageEvent(MessageDeliveryEvent event) {
@@ -144,11 +162,16 @@ public class SseService {
     }
 
     public void sendEvent(String userId, Map<String, Object> event) {
-        Sinks.Many<String> sink = userSinks.get(userId);
-        if (sink != null) {
-            sendEventToSink(sink, event);
+        String sessionId = userSessionMap.get(userId);
+        if (sessionId != null) {
+            Sinks.Many<String> sink = userSinks.get(sessionId);
+            if (sink != null) {
+                sendEventToSink(sink, event);
+            } else {
+                log.debug("No active sink for session ID: {}, user: {}", sessionId, userId);
+            }
         } else {
-            log.debug("No active sink for user: {}", userId);
+            log.debug("No active session mapping for user: {}", userId);
         }
     }
 
@@ -166,7 +189,7 @@ public class SseService {
         try {
             List<UserBroadcastMessage> messages = userBroadcastRepository.findPendingMessagesByBroadcastId(userId, broadcastId);
             if (!messages.isEmpty()) {
-                UserBroadcastMessage message = messages.get(0); // Should only be one
+                UserBroadcastMessage message = messages.get(0);
                 buildUserBroadcastResponse(message).ifPresent(response -> {
                     sendEvent(userId, Map.of(
                             "type", SseEventType.MESSAGE.name(),
@@ -178,9 +201,7 @@ public class SseService {
                     log.info("Message delivered to online user: {}, broadcast: {}", userId, broadcastId);
                 });
             } else {
-                // FIX: This warning is now sufficient, as the DltService ensures the record is ready for processing.
-                // No need for complex fallback logic here.
-                log.warn("Could not find PENDING message for user {} and broadcast {}. This may happen if the message was delivered by another instance right before this one processed it.", userId, broadcastId);
+                log.warn("Could not find PENDING message for user {} and broadcast {}. It might have already been delivered.", userId, broadcastId);
             }
         } catch (Exception e) {
             log.error("Error delivering message to user {}: {}", userId, e.getMessage());
@@ -226,15 +247,7 @@ public class SseService {
                             "timestamp", ZonedDateTime.now(),
                             "message", "Connection alive"
                     );
-
-                    userSinks.forEach((userId, sink) -> {
-                        try {
-                            sendEventToSink(sink, heartbeat);
-                        } catch (Exception e) {
-                            log.warn("Failed to send heartbeat to user {}: {}", userId, e.getMessage());
-                        }
-                    });
-                    
+                    userSinks.values().forEach(sink -> sendEventToSink(sink, heartbeat));
                     log.debug("Heartbeat sent to {} connected users", userSinks.size());
                 } catch (Exception e) {
                     log.error("Error in heartbeat task: {}", e.getMessage());
@@ -243,34 +256,28 @@ public class SseService {
             .subscribe();
     }
 
+    // UPDATED: The cleanup logic is now more robust. It finds users who are marked as active in the database
+    // but for whom we no longer have an active SSE connection (a sink), and marks them as inactive.
     private void startCleanup() {
         cleanupSubscription = Flux.interval(Duration.ofSeconds(60), Schedulers.parallel())
             .doOnNext(tick -> {
                  try {
-                    int cleanedSessions = userSessionRepository.cleanupExpiredSessions();
-                    if (cleanedSessions > 0) {
-                        log.info("Cleaned up {} expired user sessions from the database.", cleanedSessions);
-                    }
-
                     List<String> activeDbUsers = userSessionRepository.findAllActiveUserIds();
-                    List<String> zombieSinks = userSinks.keySet().stream()
-                        .filter(userId -> !activeDbUsers.contains(userId))
+                    
+                    List<String> staleUsers = activeDbUsers.stream()
+                        .filter(userId -> !isUserConnected(userId))
                         .collect(Collectors.toList());
 
-                    if (!zombieSinks.isEmpty()) {
-                        log.warn("Found {} zombie SSE sinks to clean up: {}", zombieSinks.size(), zombieSinks);
-                        zombieSinks.forEach(userId -> {
-                            Sinks.Many<String> sink = userSinks.remove(userId);
-                            if (sink != null) {
-                                sink.tryEmitComplete();
-                            }
-                        });
+                    if (!staleUsers.isEmpty()) {
+                        log.warn("Found {} stale user sessions in DB to clean up: {}", staleUsers.size(), staleUsers);
+                        int cleanedCount = userSessionRepository.markSessionsInactiveForUsers(staleUsers);
+                        log.info("Marked {} user sessions as INACTIVE.", cleanedCount);
                     }
                     
                     log.debug("Cleanup completed. Active sinks: {}", userSinks.size());
-                } catch (Exception e) {
+                 } catch (Exception e) {
                     log.error("Error in cleanup task: {}", e.getMessage());
-                }
+                 }
             })
             .subscribe();
     }
@@ -280,6 +287,7 @@ public class SseService {
     }
 
     public boolean isUserConnected(String userId) {
-        return userSinks.containsKey(userId);
+        String sessionId = userSessionMap.get(userId);
+        return sessionId != null && userSinks.containsKey(sessionId);
     }
 }

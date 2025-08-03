@@ -18,7 +18,6 @@ import java.time.ZonedDateTime;
 import java.util.UUID;
 import com.example.broadcast.service.BroadcastService;
 import org.springframework.http.HttpStatus;
-
 import com.example.broadcast.util.Constants.BroadcastStatus;
 
 /**
@@ -51,12 +50,11 @@ public class SseController {
         
         log.info("SSE connection request from user: {}, session: {}, IP: {}", 
                 userId, sessionId, exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
-        // Generate session ID if not provided
+        
         if (sessionId == null || sessionId.trim().isEmpty()) {
             sessionId = UUID.randomUUID().toString();
         }
         
-        // Create or update user session
         UserSession session = UserSession.builder()
                 .userId(userId)
                 .sessionId(sessionId)
@@ -68,31 +66,15 @@ public class SseController {
         userSessionRepository.save(session);
         caffeineCacheService.registerUserConnection(userId, sessionId, podId);
         
-        // Create reactive SSE connection
-        Flux<String> eventStream = sseService.createEventStream(userId);
+        Flux<String> eventStream = sseService.createEventStream(userId, sessionId);
         log.info("SSE connection established for user: {}, session: {}", userId, sessionId);
         
         return eventStream;
     }
 
-    /**
-     * Handle user heartbeat to keep connection alive
-     * POST /api/sse/heartbeat?userId={userId}&sessionId={sessionId}
-     */
-    @PostMapping("/heartbeat")
-    public ResponseEntity<String> heartbeat(
-            @RequestParam String userId,
-            @RequestParam String sessionId) {
-        log.debug("Heartbeat received from user: {}, session: {}", userId, sessionId);
-        // Update session heartbeat
-        int updated = userSessionRepository.updateHeartbeat(sessionId, podId);
-        if (updated > 0) {
-            return ResponseEntity.ok("Heartbeat updated");
-        } else {
-            log.warn("Session not found for heartbeat: user={}, session={}", userId, sessionId);
-            return ResponseEntity.notFound().build();
-        }
-    }
+    // REMOVED: The client-poll heartbeat endpoint is no longer necessary.
+    // The server-push heartbeat over the SSE stream handles keeping the connection alive.
+    // The new server-side cleanup task handles stale sessions.
 
     /**
      * Disconnect SSE connection
@@ -104,8 +86,10 @@ public class SseController {
             @RequestParam String sessionId) {
         
         log.info("Disconnect request from user: {}, session: {}", userId, sessionId);
-        // Mark session as inactive
+        
+        sseService.removeEventStream(userId, sessionId);
         int updated = userSessionRepository.markSessionInactive(sessionId, podId);
+        
         if (updated > 0) {
             caffeineCacheService.unregisterUserConnection(userId, sessionId);
             return ResponseEntity.ok("Disconnected successfully");
@@ -122,16 +106,12 @@ public class SseController {
     @GetMapping("/stats")
     public ResponseEntity<java.util.Map<String, Object>> getStats() {
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
-        // Get total active users
         long totalActiveUsers = userSessionRepository.getTotalActiveUserCount();
         stats.put("totalActiveUsers", totalActiveUsers);
-        // Get active users for this pod
         long podActiveUsers = userSessionRepository.getActiveUserCountByPod(podId);
         stats.put("podActiveUsers", podActiveUsers);
-        // Get SSE connected users
         int sseConnectedUsers = sseService.getConnectedUserCount();
         stats.put("sseConnectedUsers", sseConnectedUsers);
-        // Get pod information
         stats.put("podId", podId);
         stats.put("timestamp", ZonedDateTime.now());
         log.info("SSE stats: total={}, pod={}, sse={}", 
