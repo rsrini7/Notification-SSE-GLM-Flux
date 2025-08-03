@@ -1,26 +1,22 @@
-// START OF FIX: Add a package declaration
 package com.example.broadcast.gatling
-// END OF FIX
 
 import io.gatling.core.Predef._
 import io.gatling.http.Predef._
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 class SseSimulation extends Simulation {
 
-  // 1. Configure the connection to your server
   val httpProtocol = http
-    .baseUrl("https://localhost:8081") // Target Spring Boot directly
+    .baseUrl("https://localhost:8081")
     .acceptHeader("text/event-stream")
-    .disableUrlEncoding // k6 was connecting directly, so should this
+    .disableUrlEncoding
     .disableCaching
 
-  // 2. Define the "listener" behavior
   val listenScenario = scenario("SSE Listeners")
     .exec(
       sse("Connect and Listen")
-        .connect("/api/sse/connect?userId=gatling-user-#{ID}")
-        // Check for a message containing "Live performance test"
+        .get("/api/sse/connect?userId=gatling-user-#{ID}")
         .await(30 seconds)(
           sse.checkMessage("Check for Broadcast")
             .matching(jsonPath("$.type").is("MESSAGE"))
@@ -28,12 +24,10 @@ class SseSimulation extends Simulation {
         )
     )
     .exec { session =>
-      // This block executes after a message is received
       println(s"User gatling-user-#{ID} received broadcast: ${session("messageContent").as[String]}")
       session
     }
 
-  // 3. Define the "broadcaster" behavior
   val broadcastScenario = scenario("SSE Broadcaster")
     .exec(
       http("Create Broadcast")
@@ -51,11 +45,8 @@ class SseSimulation extends Simulation {
         .check(status.is(200))
     )
 
-  // 4. Define the load simulation
   setUp(
-    // Start 10 listeners over 10 seconds
     listenScenario.inject(rampUsers(10).during(10.seconds)),
-    // After 15 seconds, start 1 broadcaster user that runs once
     broadcastScenario.inject(nothingFor(15.seconds), atOnceUsers(1))
   ).protocols(httpProtocol)
 }
