@@ -20,6 +20,9 @@ interface SseConnectionState {
   reconnectAttempt: number;
 }
 
+// MODIFIED: List of event types the frontend will listen for.
+const SSE_EVENT_TYPES = ['MESSAGE', 'READ_RECEIPT', 'MESSAGE_REMOVED', 'CONNECTED', 'HEARTBEAT'];
+
 export const useSseConnection = (options: UseSseConnectionOptions) => {
   const {
     userId,
@@ -47,7 +50,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const sessionIdRef = useRef<string | null>(null);
-
   const disconnectRef = useRef<() => void>();
 
   const onConnectRef = useRef(onConnect);
@@ -66,13 +68,16 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }, []);
 
-  // REMOVED: The client-side polling heartbeat logic has been removed entirely.
-  // The server-pushed heartbeat over the SSE stream is sufficient.
-
   const disconnect = useCallback(() => {
     const wasConnected = eventSourceRef.current?.readyState === EventSource.OPEN;
 
     if (eventSourceRef.current) {
+      // MODIFIED: Remove all specific event listeners before closing.
+      SSE_EVENT_TYPES.forEach(type => {
+        if (eventSourceRef.current) {
+          eventSourceRef.current.removeEventListener(type, handleSseMessage as EventListener);
+        }
+      });
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
@@ -84,7 +89,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     reconnectAttemptsRef.current = 0;
 
     if (sessionIdRef.current && wasConnected) {
-      // Use navigator.sendBeacon for a more reliable disconnect signal
       if (navigator.sendBeacon) {
         navigator.sendBeacon(`${baseUrl}/api/sse/disconnect?userId=${userId}&sessionId=${sessionIdRef.current}`);
       } else {
@@ -100,15 +104,25 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     sessionIdRef.current = null;
     onDisconnectRef.current?.();
 
-    setState(prev => ({
-      ...prev,
-      connected: false,
-      connecting: false,
-      sessionId: null,
-      error: null,
-      reconnectAttempt: 0
-    }));
+    setState(prev => ({ ...prev, connected: false, connecting: false, sessionId: null, error: null, reconnectAttempt: 0 }));
   }, [userId, baseUrl]);
+  
+  // MODIFIED: A single handler for all incoming named events.
+  const handleSseMessage = useCallback((event: MessageEvent) => {
+    try {
+      // The event `type` is now provided by the SSE 'event:' field.
+      // The `data` is the JSON payload.
+      const eventType = event.type.toUpperCase();
+      const data = event.data ? JSON.parse(event.data) : {};
+      
+      // We reconstruct the object shape that the useBroadcastMessages hook expects.
+      onMessageRef.current?.({ type: eventType, data: data });
+    } catch (error) {
+      console.error('Error parsing SSE event data:', error);
+      onErrorRef.current?.(error);
+    }
+  }, []);
+
 
   useEffect(() => {
     disconnectRef.current = disconnect;
@@ -120,14 +134,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
     
     const isReconnecting = reconnectAttemptsRef.current > 0;
-    console.log(isReconnecting ? `SSE Reconnection Attempt: ${reconnectAttemptsRef.current}` : `SSE Connection: Attempting to connect for user ${userId}...`);
-
-    setState(prev => ({ 
-        ...prev, 
-        connecting: true, 
-        error: isReconnecting ? `Connection lost. Reconnecting... (Attempt ${reconnectAttemptsRef.current})` : null,
-        reconnectAttempt: reconnectAttemptsRef.current
-    }));
+    setState(prev => ({ ...prev, connecting: true, error: isReconnecting ? `Reconnecting... (Attempt ${reconnectAttemptsRef.current})` : null, reconnectAttempt: reconnectAttemptsRef.current }));
     reconnectAttemptsRef.current++;
 
     const newSessionId = generateSessionId();
@@ -140,18 +147,13 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       eventSourceRef.current.onopen = () => {
         setState(prev => ({ ...prev, connected: true, connecting: false, sessionId: newSessionId, error: null, reconnectAttempt: 0 }));
         onConnectRef.current?.();
-        console.log(`SSE Connection: Connected for user ${userId} with session ${newSessionId}`);
         reconnectAttemptsRef.current = 0;
       };
 
-      eventSourceRef.current.onmessage = (event) => {
-        try {
-          if (event.data) onMessageRef.current?.(JSON.parse(event.data));
-        } catch (error) {
-          console.error('Error parsing SSE event:', error);
-          onErrorRef.current?.(error);
-        }
-      };
+      // MODIFIED: Instead of a single .onmessage, we add listeners for each specific event type.
+      SSE_EVENT_TYPES.forEach(type => {
+        eventSourceRef.current?.addEventListener(type, handleSseMessage as EventListener);
+      });
 
       eventSourceRef.current.onerror = (event: Event) => {
         console.error(`SSE connection error for user ${userId}:`, event);
@@ -159,15 +161,12 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         onDisconnectRef.current?.();
         onErrorRef.current?.(event);
         
-        eventSourceRef.current?.close(); // Ensure the old connection is closed before reconnecting
+        eventSourceRef.current?.close();
 
         if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
           const delay = Math.min(MAX_RECONNECT_DELAY, BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptsRef.current));
-          const jitter = delay * 0.1 * Math.random();
-          const reconnectDelay = delay + jitter;
-          console.log(`SSE Connection: Reconnecting in ${reconnectDelay.toFixed(2)}ms for user ${userId}`);
-          reconnectTimeoutRef.current = setTimeout(connect, reconnectDelay);
+          reconnectTimeoutRef.current = setTimeout(connect, delay);
         } else {
           console.error(`SSE Connection: Max reconnection attempts reached for user ${userId}.`);
           setState(prev => ({ ...prev, error: 'Max reconnection attempts reached.' }));
@@ -178,7 +177,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       setState(prev => ({ ...prev, connected: false, connecting: false, error: 'Failed to connect' }));
       onErrorRef.current?.(error);
     }
-  }, [userId, baseUrl, generateSessionId]);
+  }, [userId, baseUrl, generateSessionId, handleSseMessage]);
 
   const markAsRead = useCallback(async (messageId: number) => {
     if (sessionIdRef.current) {
@@ -187,7 +186,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       } catch (error) {
         console.error('Failed to mark message as read:', error);
         onErrorRef.current?.(error);
-        throw error; // Re-throw to allow calling component to handle it
+        throw error;
       }
     }
   }, [userId, baseUrl]);
@@ -201,12 +200,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     };
   }, [autoConnect, userId, connect]);
 
-  return {
-    ...state,
-    connect,
-    disconnect,
-    markAsRead,
-  };
+  return { ...state, connect, disconnect, markAsRead };
 };
 
 export default useSseConnection;

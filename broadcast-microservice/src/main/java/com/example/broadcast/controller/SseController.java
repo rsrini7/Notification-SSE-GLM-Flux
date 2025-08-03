@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent; // MODIFIED: Import ServerSentEvent
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
@@ -17,13 +18,8 @@ import org.springframework.web.server.ServerWebExchange;
 import java.time.ZonedDateTime;
 import java.util.UUID;
 import com.example.broadcast.service.BroadcastService;
-import org.springframework.http.HttpStatus;
 import com.example.broadcast.util.Constants.BroadcastStatus;
 
-/**
- * REST Controller for Server-Sent Events (SSE)
- * Provides real-time message delivery to connected users
- */
 @RestController
 @RequestMapping("/api/sse")
 @RequiredArgsConstructor
@@ -38,12 +34,9 @@ public class SseController {
     @Value("${broadcast.pod.id:pod-local}")
     private String podId;
 
-    /**
-     * Establish SSE connection for a user
-     * GET /api/sse/connect?userId={userId}
-     */
+    // MODIFIED: Return type is now Flux<ServerSentEvent<String>> to match the service layer.
     @GetMapping(value = "/connect", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> connect(
+    public Flux<ServerSentEvent<String>> connect(
             @RequestParam String userId,
             @RequestParam(required = false) String sessionId,
             ServerWebExchange exchange) {
@@ -61,12 +54,13 @@ public class SseController {
                 .podId(podId)
                 .connectionStatus(BroadcastStatus.ACTIVE.name())
                 .connectedAt(ZonedDateTime.now())
-                .lastHeartbeat(ZonedDateTime.now())
+                .lastHeartbeat(ZonedDateTime.now()) // Set initial heartbeat time
                 .build();
         userSessionRepository.save(session);
         caffeineCacheService.registerUserConnection(userId, sessionId, podId);
         
-        Flux<String> eventStream = sseService.createEventStream(userId, sessionId);
+        // MODIFIED: The service method now also requires the sessionId.
+        Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, sessionId);
         log.info("SSE connection established for user: {}, session: {}", userId, sessionId);
         
         return eventStream;
@@ -76,10 +70,6 @@ public class SseController {
     // The server-push heartbeat over the SSE stream handles keeping the connection alive.
     // The new server-side cleanup task handles stale sessions.
 
-    /**
-     * Disconnect SSE connection
-     * POST /api/sse/disconnect?userId={userId}&sessionId={sessionId}
-     */
     @PostMapping("/disconnect")
     public ResponseEntity<String> disconnect(
             @RequestParam String userId,
@@ -87,6 +77,7 @@ public class SseController {
         
         log.info("Disconnect request from user: {}, session: {}", userId, sessionId);
         
+        // MODIFIED: The service now needs the sessionId to correctly remove the specific stream.
         sseService.removeEventStream(userId, sessionId);
         int updated = userSessionRepository.markSessionInactive(sessionId, podId);
         
@@ -99,10 +90,6 @@ public class SseController {
         }
     }
 
-    /**
-     * Get connection statistics
-     * GET /api/sse/stats
-     */
     @GetMapping("/stats")
     public ResponseEntity<java.util.Map<String, Object>> getStats() {
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
@@ -119,32 +106,17 @@ public class SseController {
         return ResponseEntity.ok(stats);
     }
 
-    /**
-     * Check if user is connected
-     * GET /api/sse/connected/{userId}
-     */
     @GetMapping("/connected/{userId}")
     public ResponseEntity<Boolean> isUserConnected(@PathVariable String userId) {
         boolean connected = sseService.isUserConnected(userId);
         return ResponseEntity.ok(connected);
     }
 
-    /**
-     * Mark message as read
-     * POST /api/sse/read?userId={userId}&messageId={messageId}
-     */
     @PostMapping("/read")
     public ResponseEntity<String> markMessageAsRead(
             @RequestParam String userId,
             @RequestParam Long messageId) {
-        try {
-            broadcastService.markMessageAsRead(userId, messageId);
-        } catch (Exception e) {
-            log.error("Error marking message as read: user={}, message={}", userId, messageId, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error marking message as read");
-        }
-        
-        log.info("Marking message as read: user={}, message={}", userId, messageId);
+        broadcastService.markMessageAsRead(userId, messageId);
         return ResponseEntity.ok("Message marked as read");
     }
 }

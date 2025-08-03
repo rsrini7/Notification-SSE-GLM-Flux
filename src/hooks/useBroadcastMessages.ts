@@ -13,20 +13,18 @@ interface UseBroadcastMessagesOptions {
 export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const {
     userId,
-    // START OF FIX: Default to a relative path.
     baseUrl = '',
-    // END OF FIX
     autoConnect = true
   } = options;
+
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-  
+
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
       const serverMessages = await userService.getUserMessages(userId);
-      // Filter out already expired messages on initial fetch
       const now = new Date().getTime();
       const validMessages = serverMessages.filter(msg => 
         !msg.expiresAt || new Date(msg.expiresAt).getTime() > now
@@ -43,19 +41,23 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [userId, toast]);
 
-  const handleSseEvent = useCallback((event: any) => {
+  // MODIFIED: This handler is now corrected to properly handle the event structure.
+  const handleSseEvent = useCallback((event: { type: string; data: any }) => {
+    // The payload is now in event.data
+    const payload = event.data;
+
     switch (event.type) {
       case 'MESSAGE':
-        console.log(`Message event received for user: ${userId}`, event);
-        if (event.data) {
+        if (payload) {
           setMessages(prev => {
-            const exists = prev.some(msg => msg.id === event.data.id);
+            const exists = prev.some(msg => msg.id === payload.id);
             if (!exists) {
               toast({
                 title: 'New Message',
-                description: `From ${event.data.senderName}: ${event.data.content.substring(0, 30)}...`,
+                description: `From ${payload.senderName}: ${payload.content.substring(0, 30)}...`,
               });
-              return [event.data, ...prev];
+              // We add the payload directly to the state
+              return [payload, ...prev];
             }
             return prev;
           });
@@ -63,18 +65,16 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
       
       case 'READ_RECEIPT':
-        console.log(`Read receipt event received for user: ${userId}`, event);
         setMessages(prev => prev.map(msg => 
-          msg.broadcastId === event.data.broadcastId 
+          msg.broadcastId === payload.broadcastId 
             ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() }
             : msg
         ));
         break;
       
       case 'MESSAGE_REMOVED':
-        console.log(`Message removed event received for user: ${userId}`, event);
-        if (event.data && event.data.broadcastId) {
-            setMessages(prev => prev.filter(msg => msg.broadcastId !== event.data.broadcastId));
+        if (payload && payload.broadcastId) {
+            setMessages(prev => prev.filter(msg => msg.broadcastId !== payload.broadcastId));
             toast({
                 title: 'Message Removed',
                 description: 'A broadcast message has been removed.',
@@ -83,15 +83,17 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
 
       case 'CONNECTED':
-         console.log(`Connected event received for user: ${userId}`, event);
+        console.log(`SSE Connection Confirmed via Event for user: ${userId}`, payload);
         break;
+
       case 'HEARTBEAT':
-         console.log(`Heartbeat received for user: ${userId}`, event);
+        console.log(`Heartbeat received for user: ${userId}`, payload);
         break;
+
       default:
         console.log('Unhandled SSE event type:', event.type);
     }
-  }, [toast]);
+  }, [toast, userId]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -105,7 +107,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
             if (activeMessages.length !== prevMessages.length) {
                 return activeMessages;
             }
-
             return prevMessages;
         });
     }, 60000);
@@ -144,70 +145,26 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
           ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() }
           : msg
       ));
-      toast({ title: 'Message Read', description: 'Message marked as read' });
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to mark message as read. Please try again.', variant: 'destructive' });
+     toast({ title: 'Error', description: 'Failed to mark message as read. Please try again.', variant: 'destructive' });
     }
   }, [sseConnection, toast]);
-
-  const markAllAsRead = useCallback(async () => {
-    const unreadMessages = messages.filter(msg => msg.readStatus === 'UNREAD');
-    try {
-        await Promise.all(unreadMessages.map(message => sseConnection.markAsRead(message.id)));
-        setMessages(prev => prev.map(msg => 
-            msg.readStatus === 'UNREAD' 
-            ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() } 
-            : msg
-        ));
-        toast({
-            title: 'All Messages Read',
-            description: 'All unread messages have been marked as read.',
-        });
-    } catch (error) {
-        toast({
-            title: 'Error',
-            description: 'Could not mark all messages as read. Please try again.',
-            variant: 'destructive',
-        });
-    }
-  }, [messages, sseConnection, toast]);
-
+  
   const stats = useMemo(() => {
     const total = messages.length;
     const unread = messages.filter(msg => msg.readStatus === 'UNREAD').length;
     const read = total - unread;
-    return { total, unread, read, readRate: total > 0 ? (read / total) * 100 : 0 };
+    return { total, unread, read };
   }, [messages]);
-
-  const getMessagesByStatus = useCallback((status: 'READ' | 'UNREAD') => {
-    return messages.filter(msg => msg.readStatus === status);
-  }, [messages]);
-
-  const getMessagesByPriority = useCallback((priority: string) => {
-    return messages.filter(msg => msg.priority === priority);
-  }, [messages]);
-
-  const searchMessages = useCallback((query: string) => {
-    const lowercaseQuery = query.toLowerCase();
-    return messages.filter(msg => 
-      msg.content.toLowerCase().includes(lowercaseQuery) ||
-      msg.senderName.toLowerCase().includes(lowercaseQuery) ||
-      msg.category.toLowerCase().includes(lowercaseQuery)
-    );
-  }, [messages]);
-
+  
   return {
     messages,
     loading,
-    stats, // Return the memoized stats
+    stats,
     sseConnection,
     actions: {
       markAsRead,
-      markAllAsRead,
       refresh: fetchMessages,
-      getMessagesByStatus,
-      getMessagesByPriority,
-      searchMessages
     }
   };
 };

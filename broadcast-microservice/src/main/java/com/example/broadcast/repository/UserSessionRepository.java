@@ -11,10 +11,6 @@ import java.util.List;
 import java.util.Optional;
 import java.time.ZoneOffset;
 
-/**
- * Repository for user session operations using Spring JDBC
- * Used for tracking user connections and pod assignments
- */
 @Repository
 public class UserSessionRepository {
 
@@ -41,9 +37,6 @@ public class UserSessionRepository {
         }
     };
 
-    /**
-     * Create or update user session
-     */
     public UserSession save(UserSession session) {
         String sql = """
             MERGE INTO user_sessions AS t
@@ -76,53 +69,22 @@ public class UserSessionRepository {
         return session;
     }
 
-    /**
-     * Find session by user ID
-     */
     public Optional<UserSession> findByUserId(String userId) {
-        String sql = """
-            SELECT * FROM user_sessions 
-            WHERE user_id = ? AND connection_status = 'ACTIVE'
-            ORDER BY last_heartbeat DESC
-            LIMIT 1
-            """;
+        String sql = "SELECT * FROM user_sessions WHERE user_id = ? AND connection_status = 'ACTIVE' ORDER BY last_heartbeat DESC LIMIT 1";
         List<UserSession> results = jdbcTemplate.query(sql, sessionRowMapper, userId);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
-    /**
-     * Find sessions by pod ID
-     */
     public List<UserSession> findByPodId(String podId) {
-        String sql = """
-            SELECT * FROM user_sessions 
-            WHERE pod_id = ? AND connection_status = 'ACTIVE'
-            ORDER BY connected_at DESC
-            """;
+        String sql = "SELECT * FROM user_sessions WHERE pod_id = ? AND connection_status = 'ACTIVE' ORDER BY connected_at DESC";
         return jdbcTemplate.query(sql, sessionRowMapper, podId);
     }
 
-    // REMOVED: updateHeartbeat is no longer needed as the client will not be polling.
-
-    /**
-     * Mark session as inactive
-     */
     public int markSessionInactive(String sessionId, String podId) {
-        String sql = """
-            UPDATE user_sessions 
-            SET connection_status = 'INACTIVE', 
-                disconnected_at = CURRENT_TIMESTAMP 
-            WHERE session_id = ? AND pod_id = ?
-            """;
+        String sql = "UPDATE user_sessions SET connection_status = 'INACTIVE', disconnected_at = CURRENT_TIMESTAMP WHERE session_id = ? AND pod_id = ?";
         return jdbcTemplate.update(sql, sessionId, podId);
     }
     
-    /**
-     * NEW: Marks all active sessions for a given list of user IDs as INACTIVE.
-     * This is used by the cleanup service to handle dropped connections.
-     * @param userIds The list of user IDs whose sessions should be marked inactive.
-     * @return The number of rows affected.
-     */
     public int markSessionsInactiveForUsers(List<String> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return 0;
@@ -134,49 +96,23 @@ public class UserSessionRepository {
         return jdbcTemplate.update(sql, userIds.toArray());
     }
 
-
-    /**
-     * Get active user count by pod
-     */
     public long getActiveUserCountByPod(String podId) {
-        String sql = """
-            SELECT COUNT(*) FROM user_sessions 
-            WHERE pod_id = ? AND connection_status = 'ACTIVE'
-            """;
+        String sql = "SELECT COUNT(*) FROM user_sessions WHERE pod_id = ? AND connection_status = 'ACTIVE'";
         return jdbcTemplate.queryForObject(sql, Long.class, podId);
     }
 
-    /**
-     * Get total active user count
-     */
     public long getTotalActiveUserCount() {
-        String sql = """
-            SELECT COUNT(*) FROM user_sessions 
-            WHERE connection_status = 'ACTIVE'
-            """;
+        String sql = "SELECT COUNT(*) FROM user_sessions WHERE connection_status = 'ACTIVE'";
         return jdbcTemplate.queryForObject(sql, Long.class);
     }
-
-    // REMOVED: cleanupExpiredSessions is no longer needed. The new cleanup logic in SseService is more reliable.
     
-    /**
-     * Get all user IDs that are currently marked as active in the database.
-     */
     public List<String> findAllActiveUserIds() {
         String sql = "SELECT DISTINCT user_id FROM user_sessions WHERE connection_status = 'ACTIVE'";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
-    /**
-     * Batch insert sessions for high-performance operations
-     */
     public void batchInsert(List<UserSession> sessions) {
-        String sql = """
-            INSERT INTO user_sessions 
-            (user_id, session_id, pod_id, connection_status, connected_at, last_heartbeat)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """;
-        
+        String sql = "INSERT INTO user_sessions (user_id, session_id, pod_id, connection_status, connected_at, last_heartbeat) VALUES (?, ?, ?, ?, ?, ?)";
         jdbcTemplate.batchUpdate(sql, sessions, sessions.size(), (ps, session) -> {
             ps.setString(1, session.getUserId());
             ps.setString(2, session.getSessionId());
