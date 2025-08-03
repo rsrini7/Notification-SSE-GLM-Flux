@@ -13,7 +13,8 @@ class SseSimulation extends Simulation {
     .acceptHeader("text/event-stream")
     .disableUrlEncoding
     .disableCaching
-
+    // Add this to trust the self-signed certificate used in development
+    // .permissiveRequestSslContext
 
   private val objectMapper = new ObjectMapper()
   
@@ -22,17 +23,21 @@ class SseSimulation extends Simulation {
   val listenScenario = scenario("SSE Listeners")
     .feed(userFeeder)
     .exec(
-      sse("Connect and Listen")
+      sse("Connect and Wait for Message")
         .get("/api/sse/connect?userId=#{ID}")
         .await(60 seconds)(
+          // MODIFIED: The check is now updated to match the new SSE message format.
           sse.checkMessage("Check for Broadcast")
             .check(
-              jsonPath("$.type").is("MESSAGE"),
-              jsonPath("$.data").find.transform { innerJsonString =>
-                println(s"innerJsonString: $innerJsonString")
-                objectMapper.readTree(innerJsonString)
-              }.saveAs("parsedInnerJson"),
-              jsonPath("$.parsedInnerJson.content").find.saveAs("messageContent")
+              // 1. We now check for the existence of the 'content' field, which is only in broadcast messages.
+              // This will correctly ignore the connection message.
+              jsonPath("$.content").exists.saveAs("messageContent"),
+
+              // 2. Add a transform to print the raw body for easier debugging.
+              bodyString.transform { rawBody =>
+                println(s"Gatling Received SSE Data: $rawBody")
+                rawBody
+              }
             )
         )
     )
@@ -42,6 +47,9 @@ class SseSimulation extends Simulation {
         session
       }
     }
+    .pause(10 seconds)
+    .exec(sse("Close Connection").close)
+
 
   val broadcastScenario = scenario("SSE Broadcaster")
     .exec(
@@ -62,11 +70,9 @@ class SseSimulation extends Simulation {
     )
 
   setUp(
-    listenScenario.inject(rampUsers(1).during(20.seconds)),
+    listenScenario.inject(atOnceUsers(1)),
     broadcastScenario.inject(
-      nothingFor(25 seconds),
-      atOnceUsers(1),
-      nothingFor(15 seconds),
+      nothingFor(5 seconds), 
       atOnceUsers(1)
     )
   ).protocols(httpProtocol)

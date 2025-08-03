@@ -33,7 +33,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Failed to fetch messages',
+        description: `Failed to fetch messages for ${userId}`,
         variant: 'destructive',
       });
     } finally {
@@ -41,11 +41,8 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [userId, toast]);
 
-  // MODIFIED: This handler is now corrected to properly handle the event structure.
   const handleSseEvent = useCallback((event: { type: string; data: any }) => {
-    // The payload is now in event.data
     const payload = event.data;
-
     switch (event.type) {
       case 'MESSAGE':
         if (payload) {
@@ -56,7 +53,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
                 title: 'New Message',
                 description: `From ${payload.senderName}: ${payload.content.substring(0, 30)}...`,
               });
-              // We add the payload directly to the state
               return [payload, ...prev];
             }
             return prev;
@@ -103,29 +99,30 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
                 if (!message.expiresAt) return true;
                 return new Date(message.expiresAt).getTime() > now;
             });
-
             if (activeMessages.length !== prevMessages.length) {
                 return activeMessages;
             }
             return prevMessages;
         });
     }, 60000);
-
     return () => clearInterval(intervalId);
   }, []);
 
+  // MODIFIED: Added userId to toast descriptions and to the dependency array.
   const onConnect = useCallback(() => {
-    toast({ title: 'Connected', description: 'Real-time updates enabled' });
+    toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
     fetchMessages();
-  }, [toast, fetchMessages]);
+  }, [toast, fetchMessages, userId]);
 
+  // MODIFIED: Added userId to toast descriptions and to the dependency array.
   const onDisconnect = useCallback(() => {
-    toast({ title: 'Disconnected', description: 'Real-time updates disabled', variant: 'destructive' });
-  }, [toast]);
+    toast({ title: 'Disconnected', description: `Real-time updates disabled for ${userId}`, variant: 'destructive' });
+  }, [toast, userId]);
 
+  // MODIFIED: Added userId to toast descriptions and to the dependency array.
   const onError = useCallback(() => {
-    toast({ title: 'Connection Error', description: 'Failed to connect to real-time updates', variant: 'destructive' });
-  }, [toast]);
+    toast({ title: 'Connection Error', description: `Failed to connect for ${userId}`, variant: 'destructive' });
+  }, [toast, userId]);
 
   const sseConnection = useSseConnection({
     userId,
@@ -146,9 +143,9 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
           : msg
       ));
     } catch (error) {
-     toast({ title: 'Error', description: 'Failed to mark message as read. Please try again.', variant: 'destructive' });
+     toast({ title: 'Error', description: `Failed to mark message as read for ${userId}.`, variant: 'destructive' });
     }
-  }, [sseConnection, toast]);
+  }, [sseConnection, toast, userId]);
   
   const stats = useMemo(() => {
     const total = messages.length;
