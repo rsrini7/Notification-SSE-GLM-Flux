@@ -46,6 +46,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const handleSseEvent = useCallback((event: any) => {
     switch (event.type) {
       case 'MESSAGE':
+        console.log(`Message event received for user: ${userId}`, event);
         if (event.data) {
           setMessages(prev => {
             const exists = prev.some(msg => msg.id === event.data.id);
@@ -62,6 +63,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
       
       case 'READ_RECEIPT':
+        console.log(`Read receipt event received for user: ${userId}`, event);
         setMessages(prev => prev.map(msg => 
           msg.broadcastId === event.data.broadcastId 
             ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() }
@@ -70,6 +72,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
       
       case 'MESSAGE_REMOVED':
+        console.log(`Message removed event received for user: ${userId}`, event);
         if (event.data && event.data.broadcastId) {
             setMessages(prev => prev.filter(msg => msg.broadcastId !== event.data.broadcastId));
             toast({
@@ -80,8 +83,10 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
 
       case 'CONNECTED':
+         console.log(`Connected event received for user: ${userId}`, event);
         break;
       case 'HEARTBEAT':
+         console.log(`Heartbeat received for user: ${userId}`, event);
         break;
       default:
         console.log('Unhandled SSE event type:', event.type);
