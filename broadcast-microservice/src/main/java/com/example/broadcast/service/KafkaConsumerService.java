@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 public class KafkaConsumerService {
 
     private final SseService sseService;
-    private final CaffeineCacheService caffeineCacheService;
+    private final CacheService cacheService;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(
@@ -86,25 +86,25 @@ public class KafkaConsumerService {
         //     throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");
         // }
         
-        boolean isOnline = caffeineCacheService.isUserOnline(event.getUserId()) || sseService.isUserConnected(event.getUserId());
+        boolean isOnline = cacheService.isUserOnline(event.getUserId()) || sseService.isUserConnected(event.getUserId());
         if (isOnline) {
             sseService.handleMessageEvent(event);
             log.info("Broadcast event for online user {} forwarded to SSE service.", event.getUserId());
         } else {
             log.info("User {} is offline, message remains pending", event.getUserId());
-            caffeineCacheService.cachePendingEvent(event);
+            cacheService.cachePendingEvent(event);
         }
     }
 
     private void handleMessageRead(MessageDeliveryEvent event) {
         log.info("Handling message read event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
         sseService.handleMessageEvent(event);
-        caffeineCacheService.updateMessageReadStatus(event.getUserId(), event.getBroadcastId());
+        cacheService.updateMessageReadStatus(event.getUserId(), event.getBroadcastId());
     }
 
     private void handleBroadcastCancelled(MessageDeliveryEvent event) {
         log.info("Handling broadcast cancelled event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
-        caffeineCacheService.removePendingEvent(event.getUserId(), event.getBroadcastId());
+        cacheService.removePendingEvent(event.getUserId(), event.getBroadcastId());
         sseService.handleMessageEvent(event);
     }
 

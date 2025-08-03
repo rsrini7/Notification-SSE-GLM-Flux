@@ -4,13 +4,13 @@ package com.example.broadcast.controller;
 import com.example.broadcast.model.UserSession;
 import com.example.broadcast.repository.UserSessionRepository;
 import com.example.broadcast.service.SseService;
-import com.example.broadcast.service.CaffeineCacheService;
+import com.example.broadcast.service.CacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.codec.ServerSentEvent; // MODIFIED: Import ServerSentEvent
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
@@ -29,7 +29,7 @@ public class SseController {
     private final SseService sseService;
     private final UserSessionRepository userSessionRepository;
     private final BroadcastService broadcastService;
-    private final CaffeineCacheService caffeineCacheService;
+    private final CacheService cacheService;
     
     @Value("${broadcast.pod.id:pod-local}")
     private String podId;
@@ -57,7 +57,7 @@ public class SseController {
                 .lastHeartbeat(ZonedDateTime.now()) // Set initial heartbeat time
                 .build();
         userSessionRepository.save(session);
-        caffeineCacheService.registerUserConnection(userId, sessionId, podId);
+        cacheService.registerUserConnection(userId, sessionId, podId);
         
         // MODIFIED: The service method now also requires the sessionId.
         Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, sessionId);
@@ -82,7 +82,7 @@ public class SseController {
         int updated = userSessionRepository.markSessionInactive(sessionId, podId);
         
         if (updated > 0) {
-            caffeineCacheService.unregisterUserConnection(userId, sessionId);
+            cacheService.unregisterUserConnection(userId, sessionId);
             return ResponseEntity.ok("Disconnected successfully");
         } else {
             log.warn("Session not found for disconnect: user={}, session={}", userId, sessionId);

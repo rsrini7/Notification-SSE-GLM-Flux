@@ -1,7 +1,7 @@
 package com.example.broadcast.health;
 
 import com.example.broadcast.service.SseService;
-import com.example.broadcast.service.CaffeineCacheService;
+import com.example.broadcast.service.CacheService;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -18,14 +18,14 @@ import java.util.Map;
 public class BroadcastHealthIndicator implements HealthIndicator {
 
     private final SseService sseService;
-    private final CaffeineCacheService caffeineCacheService;
+    private final CacheService cacheService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public BroadcastHealthIndicator(SseService sseService, 
-                                  CaffeineCacheService caffeineCacheService,
+                                  CacheService cacheService,
                                   KafkaTemplate<String, Object> kafkaTemplate) {
         this.sseService = sseService;
-        this.caffeineCacheService = caffeineCacheService;
+        this.cacheService = cacheService;
         this.kafkaTemplate = kafkaTemplate;
     }
 
@@ -77,7 +77,7 @@ public class BroadcastHealthIndicator implements HealthIndicator {
      */
     private boolean checkCacheHealth(Map<String, Object> details) {
         try {
-            Map<String, Object> cacheStats = caffeineCacheService.getCacheStats();
+            Map<String, Object> cacheStats = cacheService.getCacheStats();
             details.put("cacheStats", cacheStats);
             details.put("cacheStatus", "UP");
             
@@ -125,7 +125,7 @@ public class BroadcastHealthIndicator implements HealthIndicator {
         
         // Cache Health
         Map<String, Object> cacheHealth = new HashMap<>();
-        cacheHealth.put("stats", caffeineCacheService.getCacheStats());
+        cacheHealth.put("stats", cacheService.getCacheStats());
         cacheHealth.put("status", "UP");
         health.put("cache", cacheHealth);
         
