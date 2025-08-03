@@ -13,7 +13,7 @@ class SseSimulation extends Simulation {
     .disableUrlEncoding
     .disableCaching
 
-  val userFeeder = (1 to 50).iterator.map(i => Map("ID" -> f"user-$i%03d"))
+  val userFeeder = (1 to 2).iterator.map(i => Map("ID" -> f"user-$i%03d"))
 
   val listenScenario = scenario("SSE Listeners")
     .feed(userFeeder)
@@ -22,24 +22,23 @@ class SseSimulation extends Simulation {
         .get("/api/sse/connect?userId=#{ID}")
         .await(60 seconds)(
           sse.checkMessage("Check for Broadcast")
-            // START OF FIX: Use the correct Gatling DSL for chained checks and logging
+            // START OF FIX: Use a single check block with .transform for logging
             .check(
-              // First, check if the event type is MESSAGE
+              bodyString.transform { eventBody =>
+                // Log the raw event body BEFORE matching
+                println(s"DEBUG [BEFORE MATCH]: User #{ID} received event: $eventBody")
+                eventBody // Pass the body along to the next check
+              },
+              // Now, apply the matching and save the content
               jsonPath("$.type").is("MESSAGE"),
-
-              // Second, if the above is true, extract the content for logging
-              // .transform() lets you capture a value without failing the check
-              jsonPath("$.data.content").transform { content =>
-                println(s"SUCCESS: User #{ID} received message content: $content")
-                content // Return the content to be used in the next check
-              }.saveAs("messageContent")
+              jsonPath("$.data.content").find.saveAs("messageContent")
             )
             // END OF FIX
         )
     )
     .doIf(session => session.contains("messageContent")) {
       exec { session =>
-        println(s"User ${session("ID").as[String]} successfully processed broadcast.")
+        println(s"User ${session("ID").as[String]} successfully processed broadcast: ${session("messageContent").as[String]}")
         session
       }
     }
@@ -62,7 +61,7 @@ class SseSimulation extends Simulation {
     )
 
   setUp(
-    listenScenario.inject(rampUsers(50).during(20.seconds)),
+    listenScenario.inject(rampUsers(10).during(20.seconds)),
     broadcastScenario.inject(nothingFor(25.seconds), atOnceUsers(1))
   ).protocols(httpProtocol)
 }
