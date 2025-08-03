@@ -43,8 +43,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
 
   // MODIFIED: Increased max attempts for more resilience
   const MAX_RECONNECT_ATTEMPTS = 10;
-  const BASE_RECONNECT_DELAY = 5000;
-  const MAX_RECONNECT_DELAY = 120000;
+  const BASE_RECONNECT_DELAY = 3000;
+  const MAX_RECONNECT_DELAY = 300000;
 
   const reconnectAttemptsRef = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
