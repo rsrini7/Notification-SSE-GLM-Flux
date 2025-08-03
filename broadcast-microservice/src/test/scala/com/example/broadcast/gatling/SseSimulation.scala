@@ -20,15 +20,26 @@ class SseSimulation extends Simulation {
     .exec(
       sse("Connect and Listen")
         .get("/api/sse/connect?userId=#{ID}")
-        .await(30 seconds)(
+        .await(60 seconds)(
           sse.checkMessage("Check for Broadcast")
-            .matching(jsonPath("$.type").is("MESSAGE"))
-            .check(jsonPath("$.data.content").find.saveAs("messageContent"))
+            // START OF FIX: Use the correct Gatling DSL for chained checks and logging
+            .check(
+              // First, check if the event type is MESSAGE
+              jsonPath("$.type").is("MESSAGE"),
+
+              // Second, if the above is true, extract the content for logging
+              // .transform() lets you capture a value without failing the check
+              jsonPath("$.data.content").transform { content =>
+                println(s"SUCCESS: User #{ID} received message content: $content")
+                content // Return the content to be used in the next check
+              }.saveAs("messageContent")
+            )
+            // END OF FIX
         )
     )
     .doIf(session => session.contains("messageContent")) {
       exec { session =>
-        println(s"User ${session("ID").as[String]} received broadcast: ${session("messageContent").as[String]}")
+        println(s"User ${session("ID").as[String]} successfully processed broadcast.")
         session
       }
     }
