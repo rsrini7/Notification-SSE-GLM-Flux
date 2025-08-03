@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
-@Profile("!redis")
+@Profile("!redis") //TODO: Gemfire check
 @RequiredArgsConstructor
 @Slf4j
 public class DefaultCacheService implements CacheService {
