@@ -146,7 +146,7 @@ VITE_API_BASE_URL=http://localhost:8081
 
 ```bash
 mvn spring-boot:run -Dspring-boot.run.profiles=redis
-mvn clean package && java -Dspring.profiles.active=redis -jar target/broadcast-microservice-1.0.0.jar
+mvn clean package && java "-Dspring.profiles.active=redis" -jar target/broadcast-microservice-1.0.0.jar
 ```
 
 ### Performance Testing
@@ -169,6 +169,12 @@ mvn gatling:test
 - Use the browser's Network tab to debug API calls
 - Check the console for detailed error messages
 - Use React DevTools for component debugging
+
+### Startup Tips
+
+- **Redis Profile**: Use `mvn spring-boot:run -Dspring-boot.run.profiles=redis` to start with Redis profile.
+- **PostgreSQL Profile**: Use `mvn spring-boot:run -Dspring-boot.run.profiles=dev-pg` to start with PostgreSQL profile.
+- **Database Initialization**: For first-time setup, set `spring.sql.init.mode=always` in `application.yml`. After initial schema creation, change to `spring.sql.init.mode=never` and ensure `schema.sql` comment `SET MODE PostgreSQL;` for PostgreSQL then uncomment for h2.
 
 ## License
 
