@@ -132,6 +132,21 @@ CREATE TABLE IF NOT EXISTS dlt_messages (
 );
 -- Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_dlt_failed_at ON dlt_messages (failed_at);
+
+
+-- START OF CHANGE: Add the outbox table for the Transactional Outbox pattern
+CREATE TABLE IF NOT EXISTS outbox_events (
+    id UUID PRIMARY KEY,
+    aggregate_type VARCHAR(255) NOT NULL,
+    aggregate_id VARCHAR(255) NOT NULL,
+    event_type VARCHAR(255) NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_outbox_created_at ON outbox_events (created_at);
+-- END OF CHANGE
+
 -- Create sequence for ID generation
 CREATE SEQUENCE IF NOT EXISTS broadcast_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS user_broadcast_seq START WITH 1 INCREMENT BY 1;

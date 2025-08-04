@@ -7,21 +7,22 @@ import com.example.broadcast.dto.UserBroadcastResponse;
 import com.example.broadcast.exception.ResourceNotFoundException;
 import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.BroadcastStatistics;
+import com.example.broadcast.model.OutboxEvent;
 import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.BroadcastStatisticsRepository;
+import com.example.broadcast.repository.OutboxRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserPreferencesRepository;
 import com.example.broadcast.exception.UserServiceUnavailableException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -37,12 +38,13 @@ public class BroadcastService {
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
     private final BroadcastTargetingService broadcastTargetingService;
     private final UserPreferencesRepository userPreferencesRepository;
     private final UserService userService;
-    @Value("${broadcast.kafka.topic.name:broadcast-events}")
-    private String broadcastTopicName;
+    // START OF CHANGE: Inject OutboxRepository and ObjectMapper
+    private final OutboxRepository outboxRepository;
+    private final ObjectMapper objectMapper;
+    // END OF CHANGE
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
@@ -60,7 +62,7 @@ public class BroadcastService {
                 .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
-
+        
         if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
             log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());
             broadcast.setStatus(BroadcastStatus.EXPIRED.name());
@@ -92,17 +94,12 @@ public class BroadcastService {
         triggerBroadcast(broadcast);
     }
 
-    // START OF FIX: This method was logically flawed.
-    // It now uses a single, consistent list of users for both database inserts and Kafka events.
     private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
-        // This now serves as the single source of truth for targeted users.
         List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
         int totalTargeted = userBroadcasts.size();
 
         if (totalTargeted > 0) {
             log.info("Broadcast {} targeting {} users.", broadcast.getId(), totalTargeted);
-            
-            // 1. Create the statistics record.
             BroadcastStatistics initialStats = BroadcastStatistics.builder()
                     .broadcastId(broadcast.getId())
                     .totalTargeted(totalTargeted)
@@ -112,20 +109,131 @@ public class BroadcastService {
                     .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                     .build();
             broadcastStatisticsRepository.save(initialStats);
-
-            // 2. Save the user-specific message records to the database.
             userBroadcastRepository.batchInsert(userBroadcasts);
 
-            // 3. Send a Kafka event for each user record that was just created.
-            sendBroadcastEvent(broadcast, userBroadcasts, EventType.CREATED.name());
+            // START OF CHANGE: Write events to the outbox table instead of sending to Kafka
+            for (UserBroadcastMessage userMessage : userBroadcasts) {
+                MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .broadcastId(broadcast.getId())
+                    .userId(userMessage.getUserId())
+                    .eventType(EventType.CREATED.name())
+                    .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                    .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                    .message("Broadcast CREATED")
+                    .build();
+                
+                saveToOutbox(eventPayload);
+            }
+            // END OF CHANGE
         } else {
             log.warn("Broadcast {} created, but no users were targeted after filtering.", broadcast.getId());
         }
         
         return buildBroadcastResponse(broadcast, totalTargeted);
     }
-    // END OF FIX
+    
+    @Transactional
+    public void markMessageAsRead(String userId, Long messageId) {
+        log.info("Marking message as read: user={}, message={}", userId, messageId);
+        UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
+        
+        if (!userId.equals(userMessage.getUserId())) {
+            throw new ResourceNotFoundException("Message does not belong to user: " + userId);
+        }
+        
+        userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
+        broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
+        
+        // START OF CHANGE: Write READ event to the outbox table
+        MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
+            .eventId(UUID.randomUUID().toString())
+            .broadcastId(userMessage.getBroadcastId())
+            .userId(userId)
+            .eventType(EventType.READ.name())
+            .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+            .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+            .message("User marked message as read")
+            .build();
+            
+        saveToOutbox(eventPayload);
+        // END OF CHANGE
+    }
 
+    // START OF CHANGE: Add a helper method to create and save an OutboxEvent
+    private void saveToOutbox(MessageDeliveryEvent payload) {
+        try {
+            String payloadJson = objectMapper.writeValueAsString(payload);
+            OutboxEvent outboxEvent = OutboxEvent.builder()
+                    .id(UUID.randomUUID())
+                    .aggregateType("broadcast")
+                    .aggregateId(payload.getUserId()) // Use userId as aggregateId for partitioning
+                    .eventType(payload.getEventType())
+                    .payload(payloadJson)
+                    .build();
+            outboxRepository.save(outboxEvent);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize event payload for outbox", e);
+            // In a real application, you might want a more robust error handling strategy here.
+            throw new RuntimeException("Failed to serialize event payload", e);
+        }
+    }
+    // END OF CHANGE
+
+    // ... (other methods like getBroadcast, cancelBroadcast, etc. are largely unchanged but need to use the outbox)
+    
+    @Transactional
+    public void cancelBroadcast(Long id) {
+        BroadcastMessage broadcast = broadcastRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
+        
+        broadcast.setStatus(BroadcastStatus.CANCELLED.name());
+        broadcastRepository.update(broadcast);
+        
+        List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
+        for (UserBroadcastMessage userMessage : userBroadcasts) {
+            MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .broadcastId(broadcast.getId())
+                .userId(userMessage.getUserId())
+                .eventType(EventType.CANCELLED.name())
+                .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                .message("Broadcast CANCELLED")
+                .build();
+            saveToOutbox(eventPayload);
+        }
+        log.info("Broadcast cancelled: {}", id);
+    }
+
+    @Transactional
+    public void expireBroadcast(Long broadcastId) {
+        BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
+        
+        if (BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) {
+            broadcast.setStatus(BroadcastStatus.EXPIRED.name());
+            broadcastRepository.update(broadcast);
+            log.info("Broadcast expired: {}", broadcastId);
+            List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);
+            for (UserBroadcastMessage userMessage : userBroadcasts) {
+                MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .broadcastId(broadcast.getId())
+                    .userId(userMessage.getUserId())
+                    .eventType(EventType.EXPIRED.name())
+                    .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                    .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                    .message("Broadcast EXPIRED")
+                    .build();
+                saveToOutbox(eventPayload);
+            }
+        }
+    }
+
+    // ... (rest of the file is unchanged)
+    
     public BroadcastResponse getBroadcast(Long id) {
         return broadcastRepository.findBroadcastWithStatsById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
@@ -143,31 +251,6 @@ public class BroadcastService {
         return broadcastRepository.findAllBroadcastsWithStats();
     }
 
-    @Transactional
-    public void cancelBroadcast(Long id) {
-        BroadcastMessage broadcast = broadcastRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
-        broadcast.setStatus(BroadcastStatus.CANCELLED.name());
-        broadcastRepository.update(broadcast);
-        
-        List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
-        sendBroadcastEvent(broadcast, userBroadcasts, EventType.CANCELLED.name());
-        log.info("Broadcast cancelled: {}", id);
-    }
-
-    @Transactional
-    public void expireBroadcast(Long broadcastId) {
-        BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
-                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
-        if (BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) {
-            broadcast.setStatus(BroadcastStatus.EXPIRED.name());
-            broadcastRepository.update(broadcast);
-            log.info("Broadcast expired: {}", broadcastId);
-            List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);
-            sendBroadcastEvent(broadcast, userBroadcasts, EventType.EXPIRED.name());
-        }
-    }
-
     public List<UserBroadcastResponse> getUserMessages(String userId) {
         log.info("Getting messages for user: {}", userId);
         return userBroadcastRepository.findUserMessagesByUserId(userId);
@@ -176,29 +259,6 @@ public class BroadcastService {
     public List<UserBroadcastResponse> getUnreadMessages(String userId) {
         log.info("Getting unread messages for user: {}", userId);
         return userBroadcastRepository.findUnreadMessagesByUserId(userId);
-    }
-
-    @Transactional
-    public void markMessageAsRead(String userId, Long messageId) {
-        log.info("Marking message as read: user={}, message={}", userId, messageId);
-        UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
-                .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
-        if (!userId.equals(userMessage.getUserId())) {
-            throw new ResourceNotFoundException("Message does not belong to user: " + userId);
-        }
-        
-        userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
-        broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
-        MessageDeliveryEvent event = MessageDeliveryEvent.builder()
-            .eventId(UUID.randomUUID().toString())
-            .broadcastId(userMessage.getBroadcastId())
-            .userId(userId)
-            .eventType(EventType.READ.name())
-            .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
-            .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-            .message("User marked message as read")
-            .build();
-        sendBroadcastEventAfterCommit(event);
     }
 
     @CircuitBreaker(name = "userService", fallbackMethod = "fallbackGetAllUserIds")
@@ -210,39 +270,6 @@ public class BroadcastService {
     public List<String> fallbackGetAllUserIds(Throwable t) {
         log.warn("UserService is unavailable, falling back to user preferences for the user list. Error: {}", t.getMessage());
         return userPreferencesRepository.findAllUserIds();
-    }
-
-    // START OF FIX: Overload sendBroadcastEvent to accept a list of UserBroadcastMessage
-    private void sendBroadcastEvent(BroadcastMessage broadcast, List<UserBroadcastMessage> targetUsers, String eventType) {
-        targetUsers.forEach(userMessage -> {
-            MessageDeliveryEvent event = MessageDeliveryEvent.builder()
-                    .eventId(UUID.randomUUID().toString())
-                    .broadcastId(broadcast.getId())
-                    .userId(userMessage.getUserId())
-                    .eventType(eventType)
-                    .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
-                    .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-                    .message("Broadcast " + eventType.toLowerCase())
-                    .build();
-            sendBroadcastEventAfterCommit(event);
-        });
-    }
-    // END OF FIX
-
-    private void sendBroadcastEventAfterCommit(MessageDeliveryEvent event) {
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                kafkaTemplate.send(broadcastTopicName, event.getUserId(), event)
-                    .whenComplete((result, ex) -> {
-                        if (ex == null) {
-                            log.debug("Event sent successfully to Kafka topic '{}' after commit: {}", broadcastTopicName, event.getEventId());
-                        } else {
-                            log.error("Failed to send event to Kafka after commit: {}", ex.getMessage());
-                        }
-                    });
-            }
-        });
     }
 
     private BroadcastResponse buildBroadcastResponse(BroadcastMessage broadcast, int totalTargeted) {
