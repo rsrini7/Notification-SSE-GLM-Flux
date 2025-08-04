@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set; // Import Set
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -55,7 +56,9 @@ public class SseService {
     private long heartbeatInterval;
     
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
-    private final Map<String, String> userSessionMap = new ConcurrentHashMap<>();
+    // START OF FIX: Change data structure to support multiple sessions per user
+    private final Map<String, Set<String>> userSessionMap = new ConcurrentHashMap<>();
+    // END OF FIX
 
     private Disposable serverHeartbeatSubscription;
     
@@ -82,24 +85,7 @@ public class SseService {
         }
     }
 
-    // START OF FIX: Remove the entire updateActiveSessionHeartbeats method.
-    // This method was incorrectly updating heartbeats for disconnected ("ghost") sessions,
-    // which prevented the cleanupStaleSessions task from ever finding them.
-    /*
-    @Scheduled(fixedRateString = "${broadcast.sse.heartbeat-interval:30000}")
-    @Transactional
-    public void updateActiveSessionHeartbeats() {
-        if (userSinks.isEmpty()) {
-            return;
-        }
-        List<String> activeSessionIdsOnThisPod = new ArrayList<>(userSinks.keySet());
-        int updatedCount = userSessionRepository.updateHeartbeatsForActiveSessions(activeSessionIdsOnThisPod);
-        log.debug("Pod [{}]: Updated heartbeat for {} active local sessions.", podId, updatedCount);
-    }
-    */
-    // END OF FIX
-
-    @Scheduled(fixedRate = 60000) // Runs every minute
+    @Scheduled(fixedRate = 60000)
     @Transactional
     public void cleanupStaleSessions() {
          try {
@@ -124,7 +110,15 @@ public class SseService {
                         sink.tryEmitComplete();
                         log.info("Removed stale in-memory sink for session: {}", staleSession.getSessionId());
                     }
-                    userSessionMap.remove(staleSession.getUserId(), staleSession.getSessionId());
+                    // START OF FIX: Correctly remove from the new data structure
+                    Set<String> sessions = userSessionMap.get(staleSession.getUserId());
+                    if (sessions != null) {
+                        sessions.remove(staleSession.getSessionId());
+                        if (sessions.isEmpty()) {
+                            userSessionMap.remove(staleSession.getUserId());
+                        }
+                    }
+                    // END OF FIX
                 }
             }
             
@@ -152,7 +146,9 @@ public class SseService {
         Sinks.Many<ServerSentEvent<String>> sink = Sinks.many().multicast().onBackpressureBuffer();
         
         userSinks.put(sessionId, sink);
-        userSessionMap.put(userId, sessionId);
+        // START OF FIX: Add the new session to the user's set of sessions
+        userSessionMap.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
+        // END OF FIX
 
         sendPendingMessages(userId);
         
@@ -174,10 +170,20 @@ public class SseService {
 
     @Transactional
     public void removeEventStream(String userId, String sessionId) {
-        if (sessionId != null && sessionId.equals(userSessionMap.get(userId))) {
+        // START OF FIX: Correctly remove a single session from the user's set
+        Set<String> sessions = userSessionMap.get(userId);
+        boolean wasRemoved = false;
+        if (sessions != null) {
+            wasRemoved = sessions.remove(sessionId);
+            if (sessions.isEmpty()) {
+                userSessionMap.remove(userId);
+            }
+        }
+        // END OF FIX
+        
+        // Only proceed with DB/cache cleanup if the session was actually found and removed from the map
+        if (wasRemoved) {
             userSinks.remove(sessionId);
-            userSessionMap.remove(userId, sessionId);
-            
             int updated = userSessionRepository.markSessionInactive(sessionId, podId);
             if (updated > 0) {
                 cacheService.unregisterUserConnection(userId, sessionId);
@@ -214,17 +220,28 @@ public class SseService {
     }
 
     public void sendEvent(String userId, ServerSentEvent<String> event) {
-        String sessionId = userSessionMap.get(userId);
-        if (sessionId != null) {
-            Sinks.Many<ServerSentEvent<String>> sink = userSinks.get(sessionId);
-            if (sink != null) {
-                Sinks.EmitResult result = sink.tryEmitNext(event);
-                if (result.isFailure()) {
-                    log.warn("Failed to emit SSE event for user {}, session {}. Result: {}. Proactively cleaning up stale connection.", userId, sessionId, result);
-                    removeEventStream(userId, sessionId);
+        // START OF FIX: Iterate over ALL sessions for the given user
+        Set<String> sessionIds = userSessionMap.get(userId);
+        if (sessionIds != null && !sessionIds.isEmpty()) {
+            for (String sessionId : sessionIds) {
+                Sinks.Many<ServerSentEvent<String>> sink = userSinks.get(sessionId);
+                if (sink != null) {
+                    Sinks.EmitResult result = sink.tryEmitNext(event);
+                    if (result.isFailure()) {
+                        log.warn("Failed to emit SSE event for user {}, session {}. Result: {}. Proactively cleaning up stale connection.", userId, sessionId, result);
+                        // Call a separate, non-transactional method to avoid issues if sendEvent is called from within a transaction
+                        cleanupFailedSessionAsync(userId, sessionId);
+                    }
                 }
             }
         }
+        // END OF FIX
+    }
+    
+    // Helper method to avoid transactional conflicts
+    private void cleanupFailedSessionAsync(String userId, String sessionId) {
+        // Run on a different thread to avoid blocking and potential transactional deadlocks
+        Schedulers.boundedElastic().schedule(() -> removeEventStream(userId, sessionId));
     }
 
     @Transactional
@@ -308,7 +325,9 @@ public class SseService {
     }
 
     public boolean isUserConnected(String userId) {
-        String sessionId = userSessionMap.get(userId);
-        return sessionId != null && userSinks.containsKey(sessionId);
+        // START OF FIX: Check if the user has any active sessions
+        Set<String> sessions = userSessionMap.get(userId);
+        return sessions != null && !sessions.isEmpty();
+        // END OF FIX
     }
 }
