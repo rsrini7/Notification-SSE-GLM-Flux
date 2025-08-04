@@ -1,8 +1,5 @@
 import axios from 'axios';
-
-// START OF FIX: Make the base URL relative so the Vite proxy can handle all requests.
 const API_BASE_URL = ''; 
-// END OF FIX
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -16,7 +13,7 @@ export interface DltMessage {
   originalTopic: string;
   exceptionMessage: string;
   failedAt: string;
-  originalMessagePayload: string; 
+  originalMessagePayload: string;
 }
 
 export interface BroadcastMessage {
@@ -76,7 +73,9 @@ export interface BroadcastRequest {
   isImmediate: boolean;
 }
 
+
 export const broadcastService = {
+  // ... (keep existing broadcastService methods)
   getBroadcasts: async (filter = 'all'): Promise<BroadcastMessage[]> => {
     const response = await api.get(`/api/broadcasts?filter=${filter}`);
     return response.data;
@@ -101,7 +100,9 @@ export const broadcastService = {
     return response.data;
   },
 };
+
 export const userService = {
+  // ... (keep existing userService methods)
   getUserMessages: async (userId: string): Promise<UserBroadcastMessage[]> => {
     const response = await api.get(`/api/user/messages?userId=${userId}`);
     return response.data;
@@ -114,7 +115,9 @@ export const userService = {
     return response.data;
   },
 };
+
 export const dltService = {
+  // ... (keep existing dltService methods)
   getDltMessages: async (): Promise<DltMessage[]> => {
     const response = await api.get('/api/dlt/messages');
     return response.data;
@@ -122,14 +125,24 @@ export const dltService = {
   redriveDltMessage: async (id: string): Promise<void> => {
     await api.post(`/api/dlt/redrive/${id}`);
   },
-  // This is the "soft delete" from the application's perspective.
   deleteDltMessage: async (id: string): Promise<void> => {
     await api.delete(`/api/dlt/delete/${id}`);
   },
-  // NEW: This is the "hard delete" that also purges from Kafka.
   purgeDltMessage: async (id: string): Promise<void> => {
     await api.delete(`/api/dlt/purge/${id}`);
   },
 };
+
+// START OF CHANGE: Add a new service for testing endpoints
+export const testingService = {
+  getKafkaFailureStatus: async (): Promise<{ enabled: boolean }> => {
+    const response = await api.get('/api/testing/kafka-consumer-failure');
+    return response.data;
+  },
+  setKafkaFailureStatus: async (enabled: boolean): Promise<void> => {
+    await api.post('/api/testing/kafka-consumer-failure', { enabled });
+  },
+};
+// END OF CHANGE
 
 export default api;

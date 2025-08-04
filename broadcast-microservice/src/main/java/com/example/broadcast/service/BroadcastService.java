@@ -1,5 +1,6 @@
 package com.example.broadcast.service;
 
+// ... (imports are unchanged)
 import com.example.broadcast.dto.BroadcastRequest;
 import com.example.broadcast.dto.BroadcastResponse;
 import com.example.broadcast.dto.MessageDeliveryEvent;
@@ -30,6 +31,7 @@ import java.util.UUID;
 import com.example.broadcast.util.Constants.BroadcastStatus;
 import com.example.broadcast.util.Constants.EventType;
 
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -41,11 +43,10 @@ public class BroadcastService {
     private final BroadcastTargetingService broadcastTargetingService;
     private final UserPreferencesRepository userPreferencesRepository;
     private final UserService userService;
-    // START OF CHANGE: Inject OutboxRepository and ObjectMapper
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
-    // END OF CHANGE
 
+    // ... (createBroadcast and processScheduledBroadcast are unchanged)
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
@@ -111,7 +112,6 @@ public class BroadcastService {
             broadcastStatisticsRepository.save(initialStats);
             userBroadcastRepository.batchInsert(userBroadcasts);
 
-            // START OF CHANGE: Write events to the outbox table instead of sending to Kafka
             for (UserBroadcastMessage userMessage : userBroadcasts) {
                 MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
                     .eventId(UUID.randomUUID().toString())
@@ -120,12 +120,13 @@ public class BroadcastService {
                     .eventType(EventType.CREATED.name())
                     .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
                     .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-                    .message("Broadcast CREATED")
+                    // START OF FIX: Use the actual broadcast content in the event message
+                    .message(broadcast.getContent())
+                    // END OF FIX
                     .build();
                 
                 saveToOutbox(eventPayload);
             }
-            // END OF CHANGE
         } else {
             log.warn("Broadcast {} created, but no users were targeted after filtering.", broadcast.getId());
         }
@@ -133,6 +134,7 @@ public class BroadcastService {
         return buildBroadcastResponse(broadcast, totalTargeted);
     }
     
+    // ... (rest of the file is unchanged)
     @Transactional
     public void markMessageAsRead(String userId, Long messageId) {
         log.info("Marking message as read: user={}, message={}", userId, messageId);
@@ -146,7 +148,6 @@ public class BroadcastService {
         userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
         broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
         
-        // START OF CHANGE: Write READ event to the outbox table
         MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
             .eventId(UUID.randomUUID().toString())
             .broadcastId(userMessage.getBroadcastId())
@@ -158,30 +159,24 @@ public class BroadcastService {
             .build();
             
         saveToOutbox(eventPayload);
-        // END OF CHANGE
     }
 
-    // START OF CHANGE: Add a helper method to create and save an OutboxEvent
     private void saveToOutbox(MessageDeliveryEvent payload) {
         try {
             String payloadJson = objectMapper.writeValueAsString(payload);
             OutboxEvent outboxEvent = OutboxEvent.builder()
                     .id(UUID.randomUUID())
                     .aggregateType("broadcast")
-                    .aggregateId(payload.getUserId()) // Use userId as aggregateId for partitioning
+                    .aggregateId(payload.getUserId()) 
                     .eventType(payload.getEventType())
                     .payload(payloadJson)
                     .build();
             outboxRepository.save(outboxEvent);
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize event payload for outbox", e);
-            // In a real application, you might want a more robust error handling strategy here.
             throw new RuntimeException("Failed to serialize event payload", e);
         }
     }
-    // END OF CHANGE
-
-    // ... (other methods like getBroadcast, cancelBroadcast, etc. are largely unchanged but need to use the outbox)
     
     @Transactional
     public void cancelBroadcast(Long id) {
@@ -231,8 +226,6 @@ public class BroadcastService {
             }
         }
     }
-
-    // ... (rest of the file is unchanged)
     
     public BroadcastResponse getBroadcast(Long id) {
         return broadcastRepository.findBroadcastWithStatsById(id)

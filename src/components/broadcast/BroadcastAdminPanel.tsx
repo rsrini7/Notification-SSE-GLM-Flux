@@ -2,15 +2,17 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { useToast } from '../../hooks/use-toast';
-import { broadcastService, type BroadcastMessage, type BroadcastStats, type BroadcastRequest } from '../../services/api';
-
-// NEW: Import the new child components
+// START OF CHANGE: Import the new testingService and UI components
+import { broadcastService, testingService, type BroadcastMessage, type BroadcastStats, type BroadcastRequest } from '../../services/api';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Label } from '../ui/label';
+import { Switch } from '../ui/switch';
+import { BeakerIcon } from 'lucide-react'; // Using a different icon for clarity
+// END OF CHANGE
 import BroadcastCreationForm from './BroadcastCreationForm';
 import BroadcastManagementList from './BroadcastManagementList';
 import BroadcastStatisticsView from './BroadcastStatisticsView';
-// --- START OF CHANGES ---
-import DltManagementPanel from './DltManagementPanel'; // Import the new DLT panel
-// --- END OF CHANGES ---
+import DltManagementPanel from './DltManagementPanel';
 
 
 const BroadcastAdminPanel: React.FC = () => {
@@ -22,8 +24,44 @@ const BroadcastAdminPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState('create');
   const [manageFilter, setManageFilter] = useState('all');
   const { toast } = useToast();
+  
+  // START OF CHANGE: Add state and handlers for the test mode switch
+  const [isFailureModeEnabled, setFailureModeEnabled] = useState(false);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const status = await testingService.getKafkaFailureStatus();
+        setFailureModeEnabled(status.enabled);
+      } catch {
+        console.error("Could not fetch testing status from backend.");
+      }
+    };
+    fetchStatus();
+  }, []);
+
+  const handleToggleFailureMode = async (enabled: boolean) => {
+    try {
+      await testingService.setKafkaFailureStatus(enabled);
+      setFailureModeEnabled(enabled);
+      toast({
+        title: `Test Mode ${enabled ? 'Enabled' : 'Disabled'}`,
+        description: `Backend will now ${enabled ? 'simulate transient failures' : 'process normally'}.`,
+        variant: enabled ? 'destructive' : 'default',
+      });
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to update test mode status.',
+        variant: 'destructive',
+      });
+    }
+  };
+  // END OF CHANGE
+
 
   const fetchBroadcasts = useCallback(async (filter = 'all') => {
+    // ... (rest of the component is unchanged)
     setLoading(true);
     try {
       const data = await broadcastService.getBroadcasts(filter);
@@ -113,7 +151,7 @@ const BroadcastAdminPanel: React.FC = () => {
       setDeliveryDetails([]);
     }
   }, [selectedBroadcast, fetchBroadcastStats, fetchDeliveryDetails]);
-  
+
   const refreshStats = useCallback(() => {
     fetchBroadcasts('all');
     if (selectedBroadcast) {
@@ -125,8 +163,7 @@ const BroadcastAdminPanel: React.FC = () => {
         description: "Statistics and broadcast data have been updated.",
     });
   }, [selectedBroadcast, fetchBroadcasts, fetchBroadcastStats, fetchDeliveryDetails, toast]);
-
-
+  
   return (
     <div className="container mx-auto p-6 space-y-8">
       <div className="flex items-center justify-between">
@@ -139,16 +176,42 @@ const BroadcastAdminPanel: React.FC = () => {
         </Badge>
       </div>
 
+      {/* START OF CHANGE: Add higher-contrast text/icon colors */}
+      <Card className="border border-yellow-300 bg-yellow-500 dark:bg-yellow-900/120">
+        <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-yellow-800 dark:text-yellow-700">
+                {/* Added specific text color to the icon */}
+                <BeakerIcon className="h-5 w-5 text-yellow-800 dark:text-yellow-900" />
+                DLQ Test Mode
+            </CardTitle>
+        </CardHeader>
+        <CardContent>
+            <div className="flex items-center space-x-2">
+                <Switch
+                    id="kafka-failure-mode"
+                    checked={isFailureModeEnabled}
+                    onCheckedChange={handleToggleFailureMode}
+                    aria-label="Toggle Kafka consumer failure mode"
+                />
+                {/* Added darker text color and font-medium to the label */}
+                <Label htmlFor="kafka-failure-mode" className="flex-grow font-medium text-yellow-600 dark:text-yellow-900">
+                    Enable Kafka Consumer Failure Mode
+                </Label>
+            </div>
+            {/* Adjusted text color for better readability */}
+            <p className="text-xs text-yellow-900 dark:text-yellow-800 mt-2">
+                When enabled, messages containing "FAIL_ONCE" will be rejected to test the DLQ redrive functionality.
+            </p>
+        </CardContent>
+      </Card>
+      {/* END OF CHANGE */}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
-        {/* --- START OF CHANGES --- */}
         <TabsList className="grid w-full grid-cols-4"> 
-        {/* --- END OF CHANGES --- */}
           <TabsTrigger value="create">Create Broadcast</TabsTrigger>
           <TabsTrigger value="manage">Manage Broadcasts</TabsTrigger>
           <TabsTrigger value="stats">Statistics</TabsTrigger>
-          {/* --- START OF CHANGES --- */}
           <TabsTrigger value="dlt">DLQ Management</TabsTrigger>
-          {/* --- END OF CHANGES --- */}
         </TabsList>
 
         <TabsContent value="create">
@@ -183,11 +246,9 @@ const BroadcastAdminPanel: React.FC = () => {
             />
         </TabsContent>
         
-        {/* --- START OF CHANGES --- */}
         <TabsContent value="dlt">
             <DltManagementPanel />
         </TabsContent>
-        {/* --- END OF CHANGES --- */}
       </Tabs>
     </div>
   );

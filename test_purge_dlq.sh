@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# A script to send a message with a guaranteed business logic error
-# (an invalid eventType) to reliably test the DLQ mechanism.
+# A script to send a message that causes a NullPointerException,
+# which is not handled gracefully and will reliably trigger the DLQ.
 
 # --- Configuration ---
 TOPIC_NAME="broadcast-events"
 USER_KEY="user-001"
-# This payload is valid JSON, but the "eventType" will be rejected by the service.
-INVALID_PAYLOAD='{"eventId":"invalid-event-type-'"$(date +%s)"'","broadcastId":123,"userId":"'"$USER_KEY"'","eventType":"INVALID_EVENT_TYPE","message":"This message will fail processing."}'
+# This payload will cause a NullPointerException when the service calls EventType.valueOf(null)
+INVALID_PAYLOAD='{"eventId":"npe-failure-'"$(date +%s)"'","broadcastId":123,"userId":"'"$USER_KEY"'","eventType":null,"message":"This message will cause an NPE."}'
 
 
 # --- Script Logic ---
@@ -20,7 +20,7 @@ if [ -z "$KAFKA_CONTAINER_ID" ]; then
 fi
 
 echo "✅ Found Kafka container with ID: $KAFKA_CONTAINER_ID"
-echo "✉️  Sending message with invalid eventType for user '$USER_KEY' to topic '$TOP_NAME'..."
+echo "✉️  Sending message with null eventType for user '$USER_KEY' to topic '$TOPIC_NAME'..."
 echo "   Payload: $INVALID_PAYLOAD"
 
 # Pipe the key-value pair to the kafka-console-producer.

@@ -212,9 +212,17 @@ public class SseService {
 
     @Transactional
     public void deliverMessageToUser(String userId, Long broadcastId) {
-        userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcastId)
-            .filter(msg -> msg.getDeliveryStatus().equals(DeliveryStatus.PENDING.name()))
-            .flatMap(this::buildUserBroadcastResponse)
+        // START OF CHANGE: Find the message first or throw an exception.
+        UserBroadcastMessage message = userBroadcastRepository
+                .findByUserIdAndBroadcastId(userId, broadcastId)
+                .filter(msg -> msg.getDeliveryStatus().equals(DeliveryStatus.PENDING.name()))
+                .orElseThrow(() -> new IllegalStateException(
+                        "Cannot deliver message. No PENDING UserBroadcastMessage found for user " + userId + " and broadcast " + broadcastId
+                ));
+        // END OF CHANGE
+        
+        // The original flatMap/ifPresent is now replaced with this direct logic:
+        buildUserBroadcastResponse(message)
             .ifPresent(response -> {
                 try {
                     String payload = objectMapper.writeValueAsString(response);
@@ -226,9 +234,6 @@ public class SseService {
                     
                     sendEvent(userId, sse);
                     
-                    // IMPORTANT: Only update DB and statistics *after* a successful send attempt.
-                    // The sendEvent method is now synchronous and will clean up on failure,
-                    // so we can be more confident the user is connected at this point.
                     if (isUserConnected(userId)) {
                         userBroadcastRepository.updateDeliveryStatus(response.getId(), DeliveryStatus.DELIVERED.name());
                         broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);

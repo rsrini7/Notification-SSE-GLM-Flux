@@ -1,4 +1,5 @@
 package com.example.broadcast.service;
+
 import com.example.broadcast.dto.MessageDeliveryEvent;
 import com.example.broadcast.util.Constants.EventType;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,6 +12,10 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -19,6 +24,11 @@ public class KafkaConsumerService {
     private final SseService sseService;
     private final CacheService cacheService;
     private final ObjectMapper objectMapper;
+    // START OF CHANGE: Inject the new testing configuration service
+    private final TestingConfigurationService testingConfigService;
+    // END OF CHANGE
+    
+    private static final Set<String> FAILED_ONCE_EVENT_IDS = Collections.synchronizedSet(new HashSet<>());
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}",
@@ -36,8 +46,19 @@ public class KafkaConsumerService {
             MessageDeliveryEvent event = objectMapper.readValue(payload, MessageDeliveryEvent.class);
             log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                     event.getEventId(), topic, partition, offset);
-            handleEvent(event);
 
+            // START OF CHANGE: Gate the failure logic behind the test flag
+            if (testingConfigService.isKafkaConsumerFailureEnabled() && "FAIL_ONCE".equals(event.getMessage())) {
+                if (!FAILED_ONCE_EVENT_IDS.contains(event.getEventId())) {
+                    FAILED_ONCE_EVENT_IDS.add(event.getEventId());
+                    log.warn("Poison pill 'FAIL_ONCE' detected while test mode is enabled. Simulating transient failure for eventId: {}", event.getEventId());
+                    throw new RuntimeException("Simulating a transient, recoverable error for DLT redrive testing.");
+                }
+                log.info("Successfully redriving eventId: {}. The transient error is now resolved.", event.getEventId());
+            }
+            // END OF CHANGE
+
+            handleEvent(event);
             acknowledgment.acknowledge();
 
         } catch (Exception e) {
@@ -47,13 +68,12 @@ public class KafkaConsumerService {
     }
 
     private void handleEvent(MessageDeliveryEvent event) {
-        // START OF REFACTORING: Use constants instead of hardcoded strings
         EventType eventType;
         try {
             eventType = EventType.valueOf(event.getEventType());
-        } catch (IllegalArgumentException e) {
-            log.warn("Unknown event type: {}", event.getEventType());
-            return;
+        } catch (Exception e) {
+            log.warn("Unknown or null event type: {}", event.getEventType());
+            throw new IllegalArgumentException("Invalid event type received", e);
         }
 
         switch (eventType) {
@@ -72,19 +92,11 @@ public class KafkaConsumerService {
             default:
                 log.warn("Unhandled event type: {}", event.getEventType());
         }
-        // END OF REFACTORING
     }
 
+    // ... (rest of the file is unchanged)
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
-
-        // The "FAIL_ME" poison pill logic has been COMMENTED OUT to allow normal processing. Don't Remove this comment block
-        // BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
-        //         .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
-        // if (broadcastMessage.getContent() != null && broadcastMessage.getContent().contains("FAIL_ME")) {
-        //     log.warn("Poison pill 'FAIL_ME' detected in broadcast message content. Simulating processing failure.");
-        //     throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");
-        // }
         
         boolean isOnline = cacheService.isUserOnline(event.getUserId()) || sseService.isUserConnected(event.getUserId());
         if (isOnline) {
