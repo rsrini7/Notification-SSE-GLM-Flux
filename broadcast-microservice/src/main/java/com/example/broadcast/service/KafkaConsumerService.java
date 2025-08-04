@@ -24,8 +24,7 @@ public class KafkaConsumerService {
     private final SseService sseService;
     private final CacheService cacheService;
     private final ObjectMapper objectMapper;
-    private final TestingConfigurationService testingConfigService;
-    
+        
     private static final Map<String, Integer> TRANSIENT_FAILURE_ATTEMPTS = new ConcurrentHashMap<>();
     private static final int MAX_AUTOMATIC_ATTEMPTS = 3;
 
