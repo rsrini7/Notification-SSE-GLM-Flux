@@ -82,6 +82,10 @@ public class SseService {
         }
     }
 
+    // START OF FIX: Remove the entire updateActiveSessionHeartbeats method.
+    // This method was incorrectly updating heartbeats for disconnected ("ghost") sessions,
+    // which prevented the cleanupStaleSessions task from ever finding them.
+    /*
     @Scheduled(fixedRateString = "${broadcast.sse.heartbeat-interval:30000}")
     @Transactional
     public void updateActiveSessionHeartbeats() {
@@ -92,24 +96,22 @@ public class SseService {
         int updatedCount = userSessionRepository.updateHeartbeatsForActiveSessions(activeSessionIdsOnThisPod);
         log.debug("Pod [{}]: Updated heartbeat for {} active local sessions.", podId, updatedCount);
     }
+    */
+    // END OF FIX
 
-    // START OF FIX: Enhanced cleanup logic for stale sessions
     @Scheduled(fixedRate = 60000) // Runs every minute
     @Transactional
     public void cleanupStaleSessions() {
          try {
-            // A session is stale if its last heartbeat is older than 3 intervals (e.g., 90 seconds)
             long staleThresholdSeconds = (heartbeatInterval / 1000) * 3;
             ZonedDateTime threshold = ZonedDateTime.now().minusSeconds(staleThresholdSeconds);
             
-            // 1. Find all stale sessions from the central database
             List<UserSession> allStaleSessions = userSessionRepository.findStaleSessions(threshold);
 
             if (allStaleSessions.isEmpty()) {
-                return; // Nothing to do
+                return;
             }
 
-            // 2. Proactively clean up this pod's in-memory resources for its stale sessions
             List<UserSession> staleSessionsOnThisPod = allStaleSessions.stream()
                     .filter(session -> podId.equals(session.getPodId()))
                     .collect(Collectors.toList());
@@ -119,14 +121,13 @@ public class SseService {
                 for (UserSession staleSession : staleSessionsOnThisPod) {
                     Sinks.Many<ServerSentEvent<String>> sink = userSinks.remove(staleSession.getSessionId());
                     if (sink != null) {
-                        sink.tryEmitComplete(); // Terminate the stream
+                        sink.tryEmitComplete();
                         log.info("Removed stale in-memory sink for session: {}", staleSession.getSessionId());
                     }
                     userSessionMap.remove(staleSession.getUserId(), staleSession.getSessionId());
                 }
             }
             
-            // 3. Perform the database and cache cleanup for ALL stale sessions cluster-wide
             log.warn("Found {} total stale sessions cluster-wide to mark as INACTIVE.", allStaleSessions.size());
             List<String> staleUserIds = allStaleSessions.stream()
                     .map(UserSession::getUserId)
@@ -145,7 +146,6 @@ public class SseService {
             log.error("Error during stale session cleanup task: {}", e.getMessage(), e);
         }
     }
-    // END OF FIX
     
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String sessionId) {
         log.debug("Creating SSE event stream for user: {}, session: {}", userId, sessionId);
