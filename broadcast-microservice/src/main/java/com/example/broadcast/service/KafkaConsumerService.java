@@ -1,6 +1,7 @@
 package com.example.broadcast.service;
 
 import com.example.broadcast.dto.MessageDeliveryEvent;
+import com.example.broadcast.exception.MessageProcessingException;
 import com.example.broadcast.util.Constants.EventType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -23,10 +24,11 @@ public class KafkaConsumerService {
     private final SseService sseService;
     private final CacheService cacheService;
     private final ObjectMapper objectMapper;
+    private final TestingConfigurationService testingConfigService;
     
     private static final Map<String, Integer> TRANSIENT_FAILURE_ATTEMPTS = new ConcurrentHashMap<>();
-    private static final int MAX_AUTOMATIC_ATTEMPTS = 3; // 1 initial + 2 retries
-    
+    private static final int MAX_AUTOMATIC_ATTEMPTS = 3;
+
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}",
             groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}",
@@ -38,26 +40,24 @@ public class KafkaConsumerService {
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
-
+        
+        MessageDeliveryEvent event = null;
         try {
-            MessageDeliveryEvent event = objectMapper.readValue(payload, MessageDeliveryEvent.class);
+            event = objectMapper.readValue(payload, MessageDeliveryEvent.class);
             log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                     event.getEventId(), topic, partition, offset);
 
             if (event.isTransientFailure()) {
                 int attempts = TRANSIENT_FAILURE_ATTEMPTS.getOrDefault(event.getEventId(), 0);
                 
-                // Fail for the initial attempt and all configured automatic retries.
                 if (attempts < MAX_AUTOMATIC_ATTEMPTS) {
                     TRANSIENT_FAILURE_ATTEMPTS.put(event.getEventId(), attempts + 1);
                     log.warn("Transient failure flag detected for eventId: {}. Simulating failure, attempt {}/{}", 
                              event.getEventId(), attempts + 1, MAX_AUTOMATIC_ATTEMPTS);
                     throw new RuntimeException("Simulating a transient, recoverable error for DLT redrive testing.");
                 } else {
-                    // If we've already failed 3 times, this must be a manual redrive from the DLQ.
                     log.info("Successfully redriving eventId with transient failure flag: {}. Attempts ({}) exceeded max.", 
                              event.getEventId(), attempts);
-                    // Clean up the map to allow this message to be tested again in the future.
                     TRANSIENT_FAILURE_ATTEMPTS.remove(event.getEventId());
                 }
             }
@@ -67,7 +67,9 @@ public class KafkaConsumerService {
 
         } catch (Exception e) {
             log.error("Failed to process message from topic {}. Root cause: {}", topic, e.getMessage());
-            throw new RuntimeException("Failed to process message", e);
+            // START OF CHANGE: Throw our new custom exception, passing the failed event.
+            throw new MessageProcessingException("Failed to process message", e, event);
+            // END OF CHANGE
         }
     }
 

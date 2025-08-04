@@ -52,23 +52,41 @@ public class DltService {
             @Header(KafkaHeaders.DLT_ORIGINAL_TOPIC) String originalTopic,
             @Header(KafkaHeaders.DLT_ORIGINAL_PARTITION) int originalPartition,
             @Header(KafkaHeaders.DLT_ORIGINAL_OFFSET) long originalOffset,
-            @Header(KafkaHeaders.DLT_EXCEPTION_MESSAGE) String exceptionMessage) {
+            // START OF CHANGE: We now also receive the full exception object
+            @Header(KafkaHeaders.DLT_EXCEPTION_FQCN) String exceptionFqcn,
+            @Header(KafkaHeaders.DLT_EXCEPTION_MESSAGE) String exceptionMessage,
+            @Header(KafkaHeaders.DLT_EXCEPTION_STACKTRACE) String exceptionStacktrace) {
         
         String payloadString = new String(payload, StandardCharsets.UTF_8);
         String id = UUID.randomUUID().toString();
-        log.error("DLT Received Message. Saving to database with ID: {}, From Topic: {}, Reason: {}", id, originalTopic, exceptionMessage);
+        
+        // START OF CHANGE: Build a more informative title
+        String displayTitle = "Failed to process message"; // Default title
+        try {
+            MessageDeliveryEvent event = objectMapper.readValue(payloadString, MessageDeliveryEvent.class);
+            if (event.getUserId() != null && event.getBroadcastId() != null) {
+                displayTitle = String.format("Failed event '%s' for user %s (Broadcast: %d)",
+                    event.getEventType(), event.getUserId(), event.getBroadcastId());
+            }
+        } catch (JsonProcessingException e) {
+            log.warn("Could not parse DLT message payload to extract details for title.");
+            displayTitle = exceptionMessage; // Fallback to the raw exception message
+        }
+        // END OF CHANGE
+        
+        log.error("DLT Received Message. Saving to database with ID: {}, From Topic: {}, Reason: {}", id, originalTopic, displayTitle);
         DltMessage dltMessage = DltMessage.builder()
                 .id(id)
                 .originalTopic(originalTopic)
                 .originalPartition(originalPartition)
                 .originalOffset(originalOffset)
-                .exceptionMessage(exceptionMessage)
+                .exceptionMessage(displayTitle) // Use our new user-friendly title
                 .failedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .originalMessagePayload(payloadString)
                 .build();
         dltRepository.save(dltMessage);
     }
-
+    
     public Collection<DltMessage> getDltMessages() {
         return dltRepository.findAll();
     }
@@ -138,7 +156,6 @@ public class DltService {
         log.info("Sent tombstone message to Kafka topic {} with key {} to purge the message.", dltTopicName, messageKey);
     }
 
-    // START OF CHANGE: Add new method to purge all DLT messages
     @Transactional
     public void purgeAllMessages() {
         Collection<DltMessage> messagesToPurge = dltRepository.findAll();
@@ -158,5 +175,4 @@ public class DltService {
         dltRepository.deleteAll();
         log.info("Purged all DLT messages from the database and sent tombstone records to Kafka.");
     }
-    // END OF CHANGE
 }
