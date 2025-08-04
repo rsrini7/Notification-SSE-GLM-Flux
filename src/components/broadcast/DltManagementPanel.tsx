@@ -115,7 +115,7 @@ const DltManagementPanel: React.FC = () => {
                             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                             Refresh
                         </Button>
-                        <Button variant="destructive" size="sm" onClick={handlePurgeAll} disabled={loading || dltMessages.length === 0}>
+                        <Button variant="outline" className="bg-red-400 text-white" size="sm" onClick={handlePurgeAll} disabled={loading || dltMessages.length === 0}>
                             <Flame className="h-4 w-4 mr-2" />
                             Purge All
                         </Button>
