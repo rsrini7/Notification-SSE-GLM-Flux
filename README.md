@@ -260,7 +260,7 @@ This project is part of the Broadcast Messaging System.
 ```mermaid
 graph TD
     subgraph "User Interface"
-        ReactUI[("React UI")]
+        ReactUI["React UI"]
     end
 
     subgraph "Backend Microservice"
@@ -269,12 +269,12 @@ graph TD
     end
 
     subgraph "Data Stores"
-        H2DB[(h2 Database)]
+        H2DB[h2 Database]
         CaffeineCache["Caffeine Cache"]
     end
 
     subgraph "Messaging System"
-        Kafka[((Kafka Event Stream))]
+        Kafka[Kafka Event Stream]
     end
 
     AdminUI[Admin UI]
@@ -553,8 +553,8 @@ graph TD
         end
 
         subgraph "src/lib/utils.ts"
-            utils_ts_cn[cn()]
-            utils_ts_formatDate[formatDate()]
+            utils_ts_cn[cn]
+            utils_ts_formatDate[formatDate]
             click utils_ts_cn "src/lib/utils.ts"
         end
     end
