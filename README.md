@@ -453,12 +453,12 @@ graph TD
 
     subgraph "Frontend Application"
         B -- "HTTP/S" --> C(React Frontend)
-        click C "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/App.tsx"
+        click C "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/App.tsx"
     end
 
     subgraph "Backend Services"
         C -- "HTTP SSE" --> D(Broadcast Microservice)
-        click D "broadcast-microservice/src/main/java/com/example/broadcast/BroadcastApplication.java"
+        click D "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/BroadcastApplication.java"
         D -- "Kafka Messages" --> E(Kafka Broker)
         E -- "DLQ Messages" --> F(Kafka DLQ Topic)
         D -- "DB Operations" --> G(PostgreSQL Database)
@@ -501,18 +501,18 @@ graph TD
 ### Code Map
 ```mermaid
 graph TD
-    subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/"
-        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/App.tsx"
+    subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/App.tsx"
             App_tsx_App[App Component]
-            click App_tsx_App "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/App.tsx"
+            click App_tsx_App "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/App.tsx"
         end
 
-        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main.tsx"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/main.tsx"
             main_tsx_ReactDOM[ReactDOM.createRoot]
-            click main_tsx_ReactDOM "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main.tsx"
+            click main_tsx_ReactDOM "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/main.tsx"
         end
 
-        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/services/api.ts"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/services/api.ts"
             api_ts_axios[axios instance]
             api_ts_getBroadcasts[getBroadcasts]
             api_ts_createBroadcast[createBroadcast]
@@ -524,38 +524,38 @@ graph TD
             api_ts_redriveDltMessage[redriveDltMessage]
             api_ts_deleteDltMessage[deleteDltMessage]
             api_ts_purgeDltMessage[purgeDltMessage]
-            click api_ts_axios "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/services/api.ts"
+            click api_ts_axios "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/services/api.ts"
         end
 
-        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/hooks/useSseConnection.ts"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/hooks/useSseConnection.ts"
             useSseConnection_ts_useSseConnection[useSseConnection]
-            click useSseConnection_ts_useSseConnection "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/hooks/useSseConnection.ts"
+            click useSseConnection_ts_useSseConnection "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/hooks/useSseConnection.ts"
         end
 
-        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/hooks/useBroadcastMessages.ts"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/hooks/useBroadcastMessages.ts"
             useBroadcastMessages_ts_useBroadcastMessages[useBroadcastMessages]
-            click useBroadcastMessages_ts_useBroadcastMessages "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/hooks/useBroadcastMessages.ts"
+            click useBroadcastMessages_ts_useBroadcastMessages "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/hooks/useBroadcastMessages.ts"
         end
 
-        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/BroadcastAdminPanel.tsx"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/components/broadcast/BroadcastAdminPanel.tsx"
             BroadcastAdminPanel_tsx_BroadcastAdminPanel[BroadcastAdminPanel Component]
-            click BroadcastAdminPanel_tsx_BroadcastAdminPanel "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/BroadcastAdminPanel.tsx"
+            click BroadcastAdminPanel_tsx_BroadcastAdminPanel "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/components/broadcast/BroadcastAdminPanel.tsx"
         end
 
-        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/BroadcastUserPanel.tsx"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/components/broadcast/BroadcastUserPanel.tsx"
             BroadcastUserPanel_tsx_BroadcastUserPanel[BroadcastUserPanel Component]
-            click BroadcastUserPanel_tsx_BroadcastUserPanel "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/BroadcastUserPanel.tsx"
+            click BroadcastUserPanel_tsx_BroadcastUserPanel "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/components/broadcast/BroadcastUserPanel.tsx"
         end
 
-        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/DltManagementPanel.tsx"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/components/broadcast/DltManagementPanel.tsx"
             DltManagementPanel_tsx_DltManagementPanel[DltManagementPanel Component]
-            click DltManagementPanel_tsx_DltManagementPanel "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/DltManagementPanel.tsx"
+            click DltManagementPanel_tsx_DltManagementPanel "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/components/broadcast/DltManagementPanel.tsx"
         end
 
-        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/lib/utils.ts"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/lib/utils.ts"
             utils_ts_cn[cn]
             utils_ts_formatDate[formatDate]
-            click utils_ts_cn "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/lib/utils.ts"
+            click utils_ts_cn "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/src/lib/utils.ts"
         end
     end
 
