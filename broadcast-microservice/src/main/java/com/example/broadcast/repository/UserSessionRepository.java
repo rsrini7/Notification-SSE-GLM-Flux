@@ -72,7 +72,6 @@ public class UserSessionRepository {
         return session;
     }
 
-    // START OF CHANGE: New methods for heartbeat and stale session detection
     public int updateHeartbeatsForActiveSessions(List<String> sessionIds) {
         if (sessionIds == null || sessionIds.isEmpty()) {
             return 0;
@@ -88,7 +87,6 @@ public class UserSessionRepository {
         String sql = "SELECT * FROM user_sessions WHERE connection_status = 'ACTIVE' AND last_heartbeat < ?";
         return jdbcTemplate.query(sql, sessionRowMapper, threshold.toOffsetDateTime());
     }
-    // END OF CHANGE
 
     public Optional<UserSession> findByUserId(String userId) {
         String sql = "SELECT * FROM user_sessions WHERE user_id = ? AND connection_status = 'ACTIVE' ORDER BY last_heartbeat DESC LIMIT 1";

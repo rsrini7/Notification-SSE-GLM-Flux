@@ -2,13 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { useToast } from '../../hooks/use-toast';
-// START OF CHANGE: Import the new testingService and UI components
 import { broadcastService, testingService, type BroadcastMessage, type BroadcastStats, type BroadcastRequest } from '../../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { BeakerIcon } from 'lucide-react'; // Using a different icon for clarity
-// END OF CHANGE
 import BroadcastCreationForm from './BroadcastCreationForm';
 import BroadcastManagementList from './BroadcastManagementList';
 import BroadcastStatisticsView from './BroadcastStatisticsView';
@@ -25,7 +23,6 @@ const BroadcastAdminPanel: React.FC = () => {
   const [manageFilter, setManageFilter] = useState('all');
   const { toast } = useToast();
   
-  // START OF CHANGE: Add state and handlers for the test mode switch
   const [isFailureModeEnabled, setFailureModeEnabled] = useState(false);
 
   useEffect(() => {
@@ -57,11 +54,9 @@ const BroadcastAdminPanel: React.FC = () => {
       });
     }
   };
-  // END OF CHANGE
 
 
   const fetchBroadcasts = useCallback(async (filter = 'all') => {
-    // ... (rest of the component is unchanged)
     setLoading(true);
     try {
       const data = await broadcastService.getBroadcasts(filter);
@@ -100,7 +95,6 @@ const BroadcastAdminPanel: React.FC = () => {
     }
   }, []);
 
-  // START OF CHANGE: Update the createBroadcast function
   const createBroadcast = async (payload: BroadcastRequest) => {
     setLoading(true);
     try {
@@ -110,7 +104,6 @@ const BroadcastAdminPanel: React.FC = () => {
         title: 'Success',
         description: 'Broadcast created successfully',
       });
-      // After creating, re-fetch the test mode status, which should now be disabled.
       const status = await testingService.getKafkaFailureStatus();
       setFailureModeEnabled(status.enabled);
       setActiveTab('manage');
@@ -124,7 +117,6 @@ const BroadcastAdminPanel: React.FC = () => {
       setLoading(false);
     }
   };
-  // END OF CHANGE
 
   const cancelBroadcast = async (broadcastId: string) => {
     try {

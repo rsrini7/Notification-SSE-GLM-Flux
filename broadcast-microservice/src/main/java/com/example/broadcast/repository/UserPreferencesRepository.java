@@ -47,7 +47,6 @@ public class UserPreferencesRepository {
     }
 
     public UserPreferences save(UserPreferences preferences) {
-        // START OF FIX: Replaced ON CONFLICT with a standard MERGE statement compatible with both H2 and PostgreSQL 15+
         String sql = """
             MERGE INTO user_preferences t
             USING (VALUES (?, ?, ?, ?, ?, ?, ?, ?))
@@ -76,7 +75,6 @@ public class UserPreferencesRepository {
                 preferences.getQuietHoursStart(),
                 preferences.getQuietHoursEnd(),
                 preferences.getTimezone());
-        // END OF FIX
         
         return preferences;
     }

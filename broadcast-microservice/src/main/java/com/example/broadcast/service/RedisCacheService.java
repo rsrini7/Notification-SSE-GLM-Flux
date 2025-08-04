@@ -143,14 +143,11 @@ public class RedisCacheService implements CacheService {
         List<PendingEventInfo> pendingEvents = pendingEventsRedisTemplate.opsForValue().get(PENDING_EVENTS_KEY_PREFIX + userId);
         if (pendingEvents == null) return List.of();
 
-        // START OF FIX: Added the 9th argument (false) to the constructor call.
         return pendingEvents.stream()
                 .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null, false))
                 .collect(Collectors.toList());
-        // END OF FIX
     }
 
-    // ... (rest of the file is unchanged)
     @Override
     public void removePendingEvent(String userId, Long broadcastId) {
         String key = PENDING_EVENTS_KEY_PREFIX + userId;

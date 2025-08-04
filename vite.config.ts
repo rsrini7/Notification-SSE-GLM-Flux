@@ -33,9 +33,7 @@ export default defineConfig({
   ],
   server: {
     port: 3000,
-    // START OF CHANGE: Expose the server to the network
-    host: true, 
-    // END OF CHANGE
+    host: true,
     https: {
       key: fs.readFileSync('./localhost-key.pem'),
       cert: fs.readFileSync('./localhost.pem'),

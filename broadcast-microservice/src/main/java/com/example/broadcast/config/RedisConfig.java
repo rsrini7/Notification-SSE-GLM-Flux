@@ -17,22 +17,6 @@ import java.util.List;
 @Profile("redis")
 public class RedisConfig {
 
-    // START OF CHANGE: The conflicting bean has been removed.
-    // Spring Boot's RedisAutoConfiguration will now provide the 'stringRedisTemplate' bean.
-    /*
-    @Bean
-    public RedisTemplate<String, String> stringRedisTemplate(RedisConnectionFactory connectionFactory) {
-        RedisTemplate<String, String> template = new RedisTemplate<>();
-        template.setConnectionFactory(connectionFactory);
-        StringRedisSerializer stringSerializer = new StringRedisSerializer();
-        template.setKeySerializer(stringSerializer);
-        template.setValueSerializer(stringSerializer);
-        template.setHashKeySerializer(stringSerializer);
-        template.setHashValueSerializer(stringSerializer);
-        return template;
-    }
-    */
-    // END OF CHANGE
 
     @Bean
     public RedisTemplate<String, UserConnectionInfo> userConnectionInfoRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {

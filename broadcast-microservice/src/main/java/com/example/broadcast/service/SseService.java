@@ -192,7 +192,6 @@ public class SseService {
         }
     }
 
-    // START OF FIX: This method now contains the critical self-healing logic.
     public void sendEvent(String userId, ServerSentEvent<String> event) {
         String sessionId = userSessionMap.get(userId);
         if (sessionId != null) {
@@ -208,20 +207,16 @@ public class SseService {
             }
         }
     }
-    // END OF FIX
 
     @Transactional
     public void deliverMessageToUser(String userId, Long broadcastId) {
-        // START OF CHANGE: Find the message first or throw an exception.
         UserBroadcastMessage message = userBroadcastRepository
                 .findByUserIdAndBroadcastId(userId, broadcastId)
                 .filter(msg -> msg.getDeliveryStatus().equals(DeliveryStatus.PENDING.name()))
                 .orElseThrow(() -> new IllegalStateException(
                         "Cannot deliver message. No PENDING UserBroadcastMessage found for user " + userId + " and broadcast " + broadcastId
                 ));
-        // END OF CHANGE
         
-        // The original flatMap/ifPresent is now replaced with this direct logic:
         buildUserBroadcastResponse(message)
             .ifPresent(response -> {
                 try {

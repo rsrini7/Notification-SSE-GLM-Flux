@@ -40,6 +40,7 @@ public class UserBroadcastRepository {
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
             .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
             .build();
+            
     private final RowMapper<UserBroadcastResponse> userBroadcastResponseRowMapper = (rs, rowNum) -> UserBroadcastResponse.builder()
             .id(rs.getLong("id"))
             .broadcastId(rs.getLong("broadcast_id"))
@@ -58,6 +59,7 @@ public class UserBroadcastRepository {
                     rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .expiresAt(rs.getTimestamp("expires_at") != null ? rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .build();
+
     public UserBroadcastMessage save(UserBroadcastMessage userBroadcast) {
         String sql = """
             INSERT INTO user_broadcast_messages 
@@ -86,7 +88,6 @@ public class UserBroadcastRepository {
             return ps;
         }, keyHolder);
         
-        // START OF FIX: Handle both PostgreSQL (lowercase "id") and H2 (uppercase "ID") generated keys
         if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
             Map<String, Object> keys = keyHolder.getKeyList().get(0);
             Number id = (Number) keys.get("id"); // Check for Postgres's lowercase 'id' first
@@ -103,12 +104,10 @@ public class UserBroadcastRepository {
         } else {
             throw new RuntimeException("Failed to retrieve generated key for user broadcast.");
         }
-        // END OF FIX
         
         return userBroadcast;
     }
     
-    // ... (rest of the file is unchanged) ...
     public Optional<UserBroadcastMessage> findById(Long id) {
         String sql = "SELECT * FROM user_broadcast_messages WHERE id = ?";
         return jdbcTemplate.query(sql, userBroadcastRowMapper, id).stream().findFirst();

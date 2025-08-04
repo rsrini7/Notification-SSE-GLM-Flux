@@ -133,7 +133,6 @@ export const dltService = {
   },
 };
 
-// START OF CHANGE: Add a new service for testing endpoints
 export const testingService = {
   getKafkaFailureStatus: async (): Promise<{ enabled: boolean }> => {
     const response = await api.get('/api/testing/kafka-consumer-failure');
@@ -143,6 +142,5 @@ export const testingService = {
     await api.post('/api/testing/kafka-consumer-failure', { enabled });
   },
 };
-// END OF CHANGE
 
 export default api;

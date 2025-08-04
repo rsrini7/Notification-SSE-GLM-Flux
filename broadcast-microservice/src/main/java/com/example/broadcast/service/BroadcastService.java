@@ -45,11 +45,8 @@ public class BroadcastService {
     private final UserService userService;
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
-    // START OF CHANGE: Inject the testing configuration service
     private final TestingConfigurationService testingConfigService;
-    // END OF CHANGE
     
-    // ... (createBroadcast and processScheduledBroadcast are unchanged)
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
@@ -99,14 +96,12 @@ public class BroadcastService {
     }
 
     private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
-        // START OF CHANGE: Check if failure mode is enabled
         boolean shouldFail = testingConfigService.isKafkaConsumerFailureEnabled();
         if (shouldFail) {
             log.info("Kafka failure mode is enabled. This broadcast will be marked for transient failure.");
             // Automatically disable the flag after using it once.
             testingConfigService.setKafkaConsumerFailureEnabled(false);
         }
-        // END OF CHANGE
 
         List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
         int totalTargeted = userBroadcasts.size();
@@ -133,9 +128,7 @@ public class BroadcastService {
                     .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
                     .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                     .message(broadcast.getContent())
-                    // START OF CHANGE: Set the failure flag on the event if needed
                     .transientFailure(shouldFail)
-                    // END OF CHANGE
                     .build();
                 
                 saveToOutbox(eventPayload);
@@ -147,7 +140,6 @@ public class BroadcastService {
         return buildBroadcastResponse(broadcast, totalTargeted);
     }
     
-    // ... (rest of the file is unchanged)
     @Transactional
     public void markMessageAsRead(String userId, Long messageId) {
         log.info("Marking message as read: user={}, message={}", userId, messageId);

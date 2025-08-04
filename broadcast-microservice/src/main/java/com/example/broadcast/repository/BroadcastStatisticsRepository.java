@@ -5,8 +5,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.Types;
 import java.util.List;
 import java.util.Optional;
 import java.time.ZoneOffset;
@@ -31,7 +29,6 @@ public class BroadcastStatisticsRepository {
     }
 
     public void save(BroadcastStatistics stats) {
-        // START OF FIX: Replaced ON CONFLICT with a standard MERGE statement compatible with both H2 and PostgreSQL 15+
         String sql = """
             MERGE INTO broadcast_statistics t
             USING (VALUES (?, ?, ?, ?, ?, ?))
@@ -56,7 +53,6 @@ public class BroadcastStatisticsRepository {
                 stats.getTotalFailed(),
                 stats.getCalculatedAt() != null ? stats.getCalculatedAt().toOffsetDateTime() : null
         );
-        // END OF FIX
     }
 
     public Optional<BroadcastStatistics> findByBroadcastId(Long broadcastId) {

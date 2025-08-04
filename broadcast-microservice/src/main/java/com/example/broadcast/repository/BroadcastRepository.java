@@ -45,6 +45,7 @@ public class BroadcastRepository {
             .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
             .status(rs.getString("status"))
             .build();
+
     private final RowMapper<BroadcastResponse> broadcastResponseRowMapper = (rs, rowNum) -> BroadcastResponse.builder()
             .id(rs.getLong("id"))
             .senderId(rs.getString("sender_id"))
@@ -64,12 +65,14 @@ public class BroadcastRepository {
             .totalDelivered(rs.getInt("total_delivered"))
             .totalRead(rs.getInt("total_read"))
             .build();
+
     public BroadcastMessage save(BroadcastMessage broadcast) {
         String sql = """
             INSERT INTO broadcast_messages 
             (sender_id, sender_name, content, target_type, target_ids, priority, category, scheduled_at, expires_at, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
+        
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
@@ -96,7 +99,6 @@ public class BroadcastRepository {
             return ps;
         }, keyHolder);
         
-        // START OF FIX: Handle both PostgreSQL (lowercase "id") and H2 (uppercase "ID") generated keys
         if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
             Map<String, Object> keys = keyHolder.getKeyList().get(0);
             Number id = (Number) keys.get("id"); // Check for Postgres's lowercase 'id' first
@@ -113,12 +115,10 @@ public class BroadcastRepository {
         } else {
             throw new RuntimeException("Failed to retrieve generated key for broadcast.");
         }
-        // END OF FIX
         
         return broadcast;
     }
 
-    // ... (rest of the file is unchanged)
     public BroadcastMessage update(BroadcastMessage broadcast) {
         String sql = """
             UPDATE broadcast_messages SET

@@ -28,7 +28,6 @@ public class DltRepository {
     public void save(DltMessage dltMessage) {
         String sql = "INSERT INTO dlt_messages (id, original_topic, original_partition, original_offset, exception_message, original_message_payload, failed_at) VALUES (?, ?, ?, ?, ?, ?, ?)";
         
-        // START OF FIX: Convert ZonedDateTime
         jdbcTemplate.update(sql,
                 dltMessage.getId(),
                 dltMessage.getOriginalTopic(),
@@ -37,7 +36,6 @@ public class DltRepository {
                 dltMessage.getExceptionMessage(),
                 dltMessage.getOriginalMessagePayload(),
                 dltMessage.getFailedAt().toOffsetDateTime());
-        // END OF FIX
     }
 
     public List<DltMessage> findAll() {

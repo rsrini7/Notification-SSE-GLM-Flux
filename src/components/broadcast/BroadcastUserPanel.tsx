@@ -45,7 +45,6 @@ const BroadcastUserPanel: React.FC = () => {
     }
   };
 
-  // START OF CHANGE: Simplified addAllUsers function for HTTP/2 environment
   const addAllUsers = () => {
     const usersToAdd = allUsers.filter(u => !users.includes(u));
     if (usersToAdd.length > 0) {
@@ -61,9 +60,7 @@ const BroadcastUserPanel: React.FC = () => {
       });
     }
   };
-  // END OF CHANGE
 
-  // START OF CHANGE: Add removeAllUsers function
   const removeAllUsers = () => {
     if (users.length > 0) {
       setUsers([]);
@@ -73,7 +70,6 @@ const BroadcastUserPanel: React.FC = () => {
       });
     }
   };
-  // END OF CHANGE
 
   const removeUser = useCallback((userIdToRemove: string) => {
     setUsers(users => users.filter(user => user !== userIdToRemove));

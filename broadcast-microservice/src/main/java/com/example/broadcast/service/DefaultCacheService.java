@@ -116,14 +116,11 @@ public class DefaultCacheService implements CacheService {
         List<PendingEventInfo> pendingEvents = pendingEventsCache.getIfPresent(userId);
         if (pendingEvents == null) return List.of();
         
-        // START OF FIX: Added the 9th argument (false) to the constructor call.
         return pendingEvents.stream()
             .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null, false))
             .collect(Collectors.toList());
-        // END OF FIX
     }
     
-    // ... (rest of the file is unchanged)
     @Override
     public void removePendingEvent(String userId, Long broadcastId) {
          List<PendingEventInfo> pendingEvents = pendingEventsCache.getIfPresent(userId);
