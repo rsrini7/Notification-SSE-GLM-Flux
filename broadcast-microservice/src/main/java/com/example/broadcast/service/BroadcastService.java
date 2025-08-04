@@ -27,8 +27,8 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
 
-import com.example.broadcast.util.Constants;
 import com.example.broadcast.util.Constants.BroadcastStatus;
+import com.example.broadcast.util.Constants.DeliveryStatus;
 import com.example.broadcast.util.Constants.EventType;
 
 @Service
@@ -45,9 +45,6 @@ public class BroadcastService {
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
     private final TestingConfigurationService testingConfigService;
-    // START OF FIX: Remove MessageStatusService dependency, its responsibility is now in UserMessageService
-    // private final MessageStatusService messageStatusService;
-    // END OF FIX
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
@@ -141,20 +138,6 @@ public class BroadcastService {
         return buildBroadcastResponse(broadcast, totalTargeted);
     }
     
-    // START OF FIX: Remove this redundant and problematic method.
-    /*
-    @Transactional
-    public void markMessageAsReadAndPublishEvent(String userId, Long messageId) {
-        UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
-                .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
-
-        if (Constants.ReadStatus.UNREAD.name().equals(userMessage.getReadStatus())) {
-            messageStatusService.publishReadEvent(userMessage.getBroadcastId(), userId);
-        }
-    }
-    */
-    // END OF FIX
-
     private void saveToOutbox(MessageDeliveryEvent payload) {
         try {
             String payloadJson = objectMapper.writeValueAsString(payload);
@@ -180,6 +163,11 @@ public class BroadcastService {
         broadcast.setStatus(BroadcastStatus.CANCELLED.name());
         broadcastRepository.update(broadcast);
         
+        // START OF FIX: Batch update all PENDING user messages to SUPERSEDED.
+        int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(id, DeliveryStatus.SUPERSEDED.name());
+        log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
+        // END OF FIX
+
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
         for (UserBroadcastMessage userMessage : userBroadcasts) {
             MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
@@ -204,6 +192,12 @@ public class BroadcastService {
         if (BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) {
             broadcast.setStatus(BroadcastStatus.EXPIRED.name());
             broadcastRepository.update(broadcast);
+
+            // START OF FIX: Batch update all PENDING user messages to SUPERSEDED.
+            int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(broadcastId, DeliveryStatus.SUPERSEDED.name());
+            log.info("Updated {} pending user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
+            // END OF FIX
+
             log.info("Broadcast expired: {}", broadcastId);
             List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);
             for (UserBroadcastMessage userMessage : userBroadcasts) {

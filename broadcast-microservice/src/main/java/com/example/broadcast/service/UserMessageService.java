@@ -21,9 +21,7 @@ public class UserMessageService {
 
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
-    // START OF FIX: Inject the MessageStatusService to handle event publishing
     private final MessageStatusService messageStatusService;
-    // END OF FIX
 
     public List<UserBroadcastResponse> getUserMessages(String userId) {
         log.info("Getting messages for user: {}", userId);
@@ -35,7 +33,6 @@ public class UserMessageService {
         return userBroadcastRepository.findUserMessagesByUserId(userId);
     }
 
-    // START OF FIX: Consolidate all "mark as read" logic into this single transactional method.
     @Transactional
     public void markMessageAsRead(String userId, Long messageId) {
         log.info("Attempting to mark message as read: user={}, message={}", userId, messageId);
@@ -62,5 +59,4 @@ public class UserMessageService {
             log.warn("Message {} was already read for user {}. No action taken.", messageId, userId);
         }
     }
-    // END OF FIX
 }

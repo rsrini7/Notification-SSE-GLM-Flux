@@ -180,12 +180,10 @@ public class UserBroadcastRepository {
         return jdbcTemplate.update(sql, status, id);
     }
     
-    // START OF FIX: This query is now atomic. It will only update the row if the read_status is still UNREAD.
     public int markAsRead(Long id, ZonedDateTime readAt) {
         String sql = "UPDATE user_broadcast_messages SET read_status = 'READ', read_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND read_status = 'UNREAD'";
         return jdbcTemplate.update(sql, readAt.toOffsetDateTime(), id);
     }
-    // END OF FIX
 
     public void batchInsert(List<UserBroadcastMessage> userBroadcasts) {
         String sql = """
@@ -211,4 +209,15 @@ public class UserBroadcastRepository {
             }
         });
     }
+
+    // START OF FIX: Add a method to batch update the status of pending messages for a broadcast.
+    public int updatePendingStatusesByBroadcastId(Long broadcastId, String newStatus) {
+        String sql = """
+            UPDATE user_broadcast_messages 
+            SET delivery_status = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE broadcast_id = ? AND delivery_status = 'PENDING'
+        """;
+        return jdbcTemplate.update(sql, newStatus, broadcastId);
+    }
+    // END OF FIX
 }
