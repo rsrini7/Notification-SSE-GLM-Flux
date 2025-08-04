@@ -44,7 +44,6 @@ public class DltController {
         return ResponseEntity.noContent().build();
     }
     
-    // NEW: Endpoint to purge a message from both the DB and Kafka.
     @DeleteMapping("/purge/{id}")
     public ResponseEntity<Void> purgeMessage(@PathVariable String id) {
         try {
@@ -57,4 +56,12 @@ public class DltController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         }
     }
+    
+    // START OF CHANGE: Add new endpoint to purge all DLT messages
+    @DeleteMapping("/purge-all")
+    public ResponseEntity<Void> purgeAllMessages() {
+        dltService.purgeAllMessages();
+        return ResponseEntity.noContent().build();
+    }
+    // END OF CHANGE
 }

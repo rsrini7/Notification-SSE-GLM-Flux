@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from '../ui/alert';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
 import { useToast } from '../../hooks/use-toast';
 import { dltService, type DltMessage } from '../../services/api';
-import { AlertCircle, ArchiveRestore, Trash2, RefreshCw, ServerCrash, Flame } from 'lucide-react'; // Added Flame icon for Purge
+import { AlertCircle, ArchiveRestore, RefreshCw, ServerCrash, Flame } from 'lucide-react';
 
 const DltManagementPanel: React.FC = () => {
     const [dltMessages, setDltMessages] = useState<DltMessage[]>([]);
@@ -51,25 +51,6 @@ const DltManagementPanel: React.FC = () => {
         }
     };
 
-    const handleDelete = async (id: string) => {
-        try {
-            await dltService.deleteDltMessage(id);
-            toast({
-                title: "Success",
-                description: "Message has been deleted from the database.",
-            });
-            fetchDltMessages();
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred.';
-            toast({
-                title: "Error",
-                description: `Failed to delete message: ${errorMessage}`,
-                variant: "destructive",
-            });
-        }
-    };
-
-    // NEW: Handler for the Purge action
     const handlePurge = async (id: string) => {
         if (!window.confirm("Are you sure you want to permanently purge this message from both the database and Kafka? This action cannot be undone.")) {
             return;
@@ -90,6 +71,29 @@ const DltManagementPanel: React.FC = () => {
             });
         }
     };
+
+    // START OF CHANGE: New handler for the "Purge All" action
+    const handlePurgeAll = async () => {
+        if (!window.confirm(`Are you sure you want to permanently purge all ${dltMessages.length} messages from the DLT? This action cannot be undone.`)) {
+            return;
+        }
+        try {
+            await dltService.purgeAllDltMessages();
+            toast({
+                title: "Success",
+                description: "All DLT messages have been purged.",
+            });
+            fetchDltMessages();
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred.';
+            toast({
+                title: "Error",
+                description: `Failed to purge all messages: ${errorMessage}`,
+                variant: "destructive",
+            });
+        }
+    };
+    // END OF CHANGE
     
     const formatJsonPayload = (payload: string) => {
         try {
@@ -105,10 +109,18 @@ const DltManagementPanel: React.FC = () => {
             <CardHeader>
                 <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2"><ServerCrash className="h-5 w-5" />Dead Letter Topic Management</CardTitle>
-                    <Button variant="outline" size="sm" onClick={fetchDltMessages} disabled={loading}>
-                        <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                        Refresh
-                    </Button>
+                    {/* START OF CHANGE: Add Purge All button */}
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={fetchDltMessages} disabled={loading}>
+                            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                            Refresh
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={handlePurgeAll} disabled={loading || dltMessages.length === 0}>
+                            <Flame className="h-4 w-4 mr-2" />
+                            Purge All
+                        </Button>
+                    </div>
+                    {/* END OF CHANGE */}
                 </div>
                 <CardDescription>View, reprocess, or delete messages that failed processing.</CardDescription>
             </CardHeader>
@@ -151,15 +163,12 @@ const DltManagementPanel: React.FC = () => {
                                                     <ArchiveRestore className="h-4 w-4 mr-2" />
                                                     Redrive
                                                 </Button>
-                                                <Button variant="outline" size="sm" onClick={() => handleDelete(msg.id)}>
-                                                    <Trash2 className="h-4 w-4 mr-2" />
-                                                    Delete
-                                                </Button>
-                                                {/* NEW: Purge Button */}
+                                                {/* START OF CHANGE: Remove the single "Delete" button and replace it with "Purge" */}
                                                 <Button variant="destructive" size="sm" onClick={() => handlePurge(msg.id)}>
                                                     <Flame className="h-4 w-4 mr-2" />
                                                     Purge
                                                 </Button>
+                                                {/* END OF CHANGE */}
                                             </div>
                                         </div>
                                     </AccordionContent>

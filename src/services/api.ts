@@ -131,6 +131,11 @@ export const dltService = {
   purgeDltMessage: async (id: string): Promise<void> => {
     await api.delete(`/api/dlt/purge/${id}`);
   },
+  // START OF CHANGE: Add a new function to call the purge-all endpoint
+  purgeAllDltMessages: async (): Promise<void> => {
+    await api.delete('/api/dlt/purge-all');
+  },
+  // END OF CHANGE
 };
 
 export const testingService = {
@@ -140,7 +145,8 @@ export const testingService = {
   },
   setKafkaFailureStatus: async (enabled: boolean): Promise<void> => {
     await api.post('/api/testing/kafka-consumer-failure', { enabled });
-  },
+  },  
 };
+
 
 export default api;

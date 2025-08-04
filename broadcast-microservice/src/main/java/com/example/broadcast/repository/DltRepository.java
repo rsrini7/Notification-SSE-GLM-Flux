@@ -27,7 +27,6 @@ public class DltRepository {
 
     public void save(DltMessage dltMessage) {
         String sql = "INSERT INTO dlt_messages (id, original_topic, original_partition, original_offset, exception_message, original_message_payload, failed_at) VALUES (?, ?, ?, ?, ?, ?, ?)";
-        
         jdbcTemplate.update(sql,
                 dltMessage.getId(),
                 dltMessage.getOriginalTopic(),
@@ -52,4 +51,11 @@ public class DltRepository {
         String sql = "DELETE FROM dlt_messages WHERE id = ?";
         jdbcTemplate.update(sql, id);
     }
+    
+    // START OF CHANGE: Add a method to delete all records.
+    public void deleteAll() {
+        String sql = "DELETE FROM dlt_messages";
+        jdbcTemplate.update(sql);
+    }
+    // END OF CHANGE
 }

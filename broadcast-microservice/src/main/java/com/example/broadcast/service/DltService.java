@@ -93,17 +93,14 @@ public class DltService {
         dltRepository.deleteById(id);
     }
 
-    // START OF FIX: This method now checks the status of the parent broadcast.
     private void prepareDatabaseForRedrive(MessageDeliveryEvent payload) {
         BroadcastMessage parentBroadcast = broadcastRepository.findById(payload.getBroadcastId())
             .orElseThrow(() -> new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") has been deleted."));
 
-        // Check if the broadcast is in a non-active state.
         if (!Constants.BroadcastStatus.ACTIVE.name().equals(parentBroadcast.getStatus())) {
             log.error("Cannot redrive message for broadcast ID {}. The broadcast is no longer ACTIVE (current status: {}).", payload.getBroadcastId(), parentBroadcast.getStatus());
             throw new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") is " + parentBroadcast.getStatus() + ".");
         }
-        // END OF FIX
 
         Optional<UserBroadcastMessage> existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(
             payload.getUserId(), payload.getBroadcastId()
@@ -140,4 +137,26 @@ public class DltService {
         kafkaTemplate.send(dltTopicName, messageKey, null);
         log.info("Sent tombstone message to Kafka topic {} with key {} to purge the message.", dltTopicName, messageKey);
     }
+
+    // START OF CHANGE: Add new method to purge all DLT messages
+    @Transactional
+    public void purgeAllMessages() {
+        Collection<DltMessage> messagesToPurge = dltRepository.findAll();
+        if (messagesToPurge.isEmpty()) {
+            log.info("No DLT messages to purge.");
+            return;
+        }
+
+        log.info("Purging all {} messages from the DLT.", messagesToPurge.size());
+
+        for (DltMessage dltMessage : messagesToPurge) {
+            String messageKey = dltMessage.getId();
+            String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
+            kafkaTemplate.send(dltTopicName, messageKey, null);
+        }
+
+        dltRepository.deleteAll();
+        log.info("Purged all DLT messages from the database and sent tombstone records to Kafka.");
+    }
+    // END OF CHANGE
 }
