@@ -31,35 +31,32 @@ public class BroadcastStatisticsRepository {
     }
 
     public void save(BroadcastStatistics stats) {
-        // START OF FIX: Replaced H2-specific MERGE with PostgreSQL-compatible INSERT ON CONFLICT
+        // START OF FIX: Replaced ON CONFLICT with a standard MERGE statement compatible with both H2 and PostgreSQL 15+
         String sql = """
-            INSERT INTO broadcast_statistics (broadcast_id, total_targeted, total_delivered, total_read, total_failed, calculated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT (broadcast_id) DO UPDATE SET
-                total_targeted = EXCLUDED.total_targeted,
-                total_delivered = EXCLUDED.total_delivered,
-                total_read = EXCLUDED.total_read,
-                total_failed = EXCLUDED.total_failed,
-                calculated_at = EXCLUDED.calculated_at
-        """;
+            MERGE INTO broadcast_statistics t
+            USING (VALUES (?, ?, ?, ?, ?, ?))
+                AS s(broadcast_id, total_targeted, total_delivered, total_read, total_failed, calculated_at)
+            ON t.broadcast_id = s.broadcast_id
+            WHEN MATCHED THEN
+                UPDATE SET total_targeted = s.total_targeted,
+                           total_delivered = s.total_delivered,
+                           total_read = s.total_read,
+                           total_failed = s.total_failed,
+                           calculated_at = s.calculated_at
+            WHEN NOT MATCHED THEN
+                INSERT (broadcast_id, total_targeted, total_delivered, total_read, total_failed, calculated_at)
+                VALUES (s.broadcast_id, s.total_targeted, s.total_delivered, s.total_read, s.total_failed, s.calculated_at)
+            """;
+        
+        jdbcTemplate.update(sql,
+                stats.getBroadcastId(),
+                stats.getTotalTargeted(),
+                stats.getTotalDelivered(),
+                stats.getTotalRead(),
+                stats.getTotalFailed(),
+                stats.getCalculatedAt() != null ? stats.getCalculatedAt().toOffsetDateTime() : null
+        );
         // END OF FIX
-
-        jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(sql);
-            ps.setLong(1, stats.getBroadcastId());
-            ps.setInt(2, stats.getTotalTargeted());
-            ps.setInt(3, stats.getTotalDelivered());
-            ps.setInt(4, stats.getTotalRead());
-            ps.setInt(5, stats.getTotalFailed());
-
-            if (stats.getCalculatedAt() != null) {
-                ps.setObject(6, stats.getCalculatedAt().toOffsetDateTime());
-            } else {
-                ps.setNull(6, Types.TIMESTAMP_WITH_TIMEZONE);
-            }
-
-            return ps;
-        });
     }
 
     public Optional<BroadcastStatistics> findByBroadcastId(Long broadcastId) {

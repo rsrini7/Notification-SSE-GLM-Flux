@@ -47,23 +47,25 @@ public class UserPreferencesRepository {
     }
 
     public UserPreferences save(UserPreferences preferences) {
-        // START OF FIX: Replaced MySQL-specific ON DUPLICATE KEY UPDATE with PostgreSQL's ON CONFLICT
+        // START OF FIX: Replaced ON CONFLICT with a standard MERGE statement compatible with both H2 and PostgreSQL 15+
         String sql = """
-            INSERT INTO user_preferences 
-            (user_id, notification_enabled, email_notifications, push_notifications, 
-             preferred_categories, quiet_hours_start, quiet_hours_end, timezone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (user_id) DO UPDATE SET
-                notification_enabled = EXCLUDED.notification_enabled,
-                email_notifications = EXCLUDED.email_notifications,
-                push_notifications = EXCLUDED.push_notifications,
-                preferred_categories = EXCLUDED.preferred_categories,
-                quiet_hours_start = EXCLUDED.quiet_hours_start,
-                quiet_hours_end = EXCLUDED.quiet_hours_end,
-                timezone = EXCLUDED.timezone,
-                updated_at = CURRENT_TIMESTAMP
+            MERGE INTO user_preferences t
+            USING (VALUES (?, ?, ?, ?, ?, ?, ?, ?))
+                AS s(user_id, notification_enabled, email_notifications, push_notifications, preferred_categories, quiet_hours_start, quiet_hours_end, timezone)
+            ON t.user_id = s.user_id
+            WHEN MATCHED THEN
+                UPDATE SET notification_enabled = s.notification_enabled,
+                           email_notifications = s.email_notifications,
+                           push_notifications = s.push_notifications,
+                           preferred_categories = s.preferred_categories,
+                           quiet_hours_start = s.quiet_hours_start,
+                           quiet_hours_end = s.quiet_hours_end,
+                           timezone = s.timezone,
+                           updated_at = CURRENT_TIMESTAMP
+            WHEN NOT MATCHED THEN
+                INSERT (user_id, notification_enabled, email_notifications, push_notifications, preferred_categories, quiet_hours_start, quiet_hours_end, timezone)
+                VALUES (s.user_id, s.notification_enabled, s.email_notifications, s.push_notifications, s.preferred_categories, s.quiet_hours_start, s.quiet_hours_end, s.timezone)
             """;
-        // END OF FIX
         
         jdbcTemplate.update(sql,
                 preferences.getUserId(),
@@ -74,6 +76,8 @@ public class UserPreferencesRepository {
                 preferences.getQuietHoursStart(),
                 preferences.getQuietHoursEnd(),
                 preferences.getTimezone());
+        // END OF FIX
+        
         return preferences;
     }
 
