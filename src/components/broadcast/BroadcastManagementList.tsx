@@ -55,10 +55,10 @@ const BroadcastManagementList: React.FC<BroadcastManagementListProps> = ({
                 </div>
                 <CardDescription>View and manage existing broadcast messages</CardDescription>
                 <Tabs value={manageFilter} onValueChange={setManageFilter} className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="all">All</TabsTrigger>
-                        <TabsTrigger value="active">Active</TabsTrigger>
-                        <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-4 max-w-2xl mx-auto bg-gray-200">
+                        <TabsTrigger className='data-[state=active]:bg-yellow-400' value="all">All</TabsTrigger>
+                        <TabsTrigger className='data-[state=active]:bg-yellow-400' value="active">Active</TabsTrigger>
+                        <TabsTrigger className='data-[state=active]:bg-yellow-400' value="scheduled">Scheduled</TabsTrigger>
                     </TabsList>
                 </Tabs>
             </CardHeader>

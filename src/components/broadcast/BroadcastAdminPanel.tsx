@@ -200,11 +200,11 @@ const BroadcastAdminPanel: React.FC = () => {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
-        <TabsList className="grid w-full grid-cols-4"> 
-          <TabsTrigger value="create">Create Broadcast</TabsTrigger>
-          <TabsTrigger value="manage">Manage Broadcasts</TabsTrigger>
-          <TabsTrigger value="stats">Statistics</TabsTrigger>
-          <TabsTrigger value="dlt">DLQ Management</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl mx-auto bg-gray-200"> 
+          <TabsTrigger className='data-[state=active]:bg-yellow-400' value="create">Create Broadcast</TabsTrigger>
+          <TabsTrigger className='data-[state=active]:bg-yellow-400' value="manage">Manage Broadcasts</TabsTrigger>
+          <TabsTrigger className='data-[state=active]:bg-yellow-400' value="stats">Statistics</TabsTrigger>
+          <TabsTrigger className='data-[state=active]:bg-yellow-400' value="dlt">DLQ Management</TabsTrigger>
         </TabsList>
 
         <TabsContent value="create">

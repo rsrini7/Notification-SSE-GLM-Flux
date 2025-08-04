@@ -55,11 +55,11 @@ export default function App() {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 max-w-2xl mx-auto">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="admin">Admin Panel</TabsTrigger>
-            <TabsTrigger value="user">User Panel</TabsTrigger>
-            <TabsTrigger value="features">Features</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl mx-auto bg-gray-200">
+            <TabsTrigger className='data-[state=active]:bg-yellow-400' value="overview">Overview</TabsTrigger>
+            <TabsTrigger className='data-[state=active]:bg-yellow-400' value="admin">Admin Panel</TabsTrigger>
+            <TabsTrigger className='data-[state=active]:bg-yellow-400' value="user">User Panel</TabsTrigger>
+            <TabsTrigger className='data-[state=active]:bg-yellow-400' value="features">Features</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-8">
