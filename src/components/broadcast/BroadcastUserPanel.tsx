@@ -45,7 +45,6 @@ const BroadcastUserPanel: React.FC = () => {
     }
   };
 
-  // START OF CHANGE: Simplified addAllUsers function for HTTP/2 environment
   const addAllUsers = () => {
     const usersToAdd = allUsers.filter(u => !users.includes(u));
     if (usersToAdd.length > 0) {
@@ -61,9 +60,7 @@ const BroadcastUserPanel: React.FC = () => {
       });
     }
   };
-  // END OF CHANGE
 
-  // START OF CHANGE: Add removeAllUsers function
   const removeAllUsers = () => {
     if (users.length > 0) {
       setUsers([]);
@@ -73,7 +70,6 @@ const BroadcastUserPanel: React.FC = () => {
       });
     }
   };
-  // END OF CHANGE
 
   const removeUser = useCallback((userIdToRemove: string) => {
     setUsers(users => users.filter(user => user !== userIdToRemove));
@@ -96,7 +92,6 @@ const BroadcastUserPanel: React.FC = () => {
           <CardTitle className="flex items-center gap-2"><UserPlus className="h-5 w-5" />Add New User Connection</CardTitle>
         </CardHeader>
         <CardContent>
-            {/* START OF CHANGE: Add the "Add All" and "Remove All" buttons */}
             <div className="flex items-end gap-4">
                 <div className="flex-grow grid gap-1.5">
                     <Label htmlFor="newUserSelect">User ID</Label>
@@ -125,7 +120,6 @@ const BroadcastUserPanel: React.FC = () => {
                   Remove All
                 </Button>
             </div>
-            {/* END OF CHANGE */}
         </CardContent>
       </Card>
 

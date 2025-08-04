@@ -1,4 +1,5 @@
 package com.example.broadcast.service;
+
 import com.example.broadcast.dto.MessageDeliveryEvent;
 import com.example.broadcast.util.Constants.EventType;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,6 +12,9 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -19,7 +23,10 @@ public class KafkaConsumerService {
     private final SseService sseService;
     private final CacheService cacheService;
     private final ObjectMapper objectMapper;
-
+    
+    private static final Map<String, Integer> TRANSIENT_FAILURE_ATTEMPTS = new ConcurrentHashMap<>();
+    private static final int MAX_AUTOMATIC_ATTEMPTS = 3; // 1 initial + 2 retries
+    
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name:broadcast-events}",
             groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}",
@@ -36,8 +43,26 @@ public class KafkaConsumerService {
             MessageDeliveryEvent event = objectMapper.readValue(payload, MessageDeliveryEvent.class);
             log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                     event.getEventId(), topic, partition, offset);
-            handleEvent(event);
 
+            if (event.isTransientFailure()) {
+                int attempts = TRANSIENT_FAILURE_ATTEMPTS.getOrDefault(event.getEventId(), 0);
+                
+                // Fail for the initial attempt and all configured automatic retries.
+                if (attempts < MAX_AUTOMATIC_ATTEMPTS) {
+                    TRANSIENT_FAILURE_ATTEMPTS.put(event.getEventId(), attempts + 1);
+                    log.warn("Transient failure flag detected for eventId: {}. Simulating failure, attempt {}/{}", 
+                             event.getEventId(), attempts + 1, MAX_AUTOMATIC_ATTEMPTS);
+                    throw new RuntimeException("Simulating a transient, recoverable error for DLT redrive testing.");
+                } else {
+                    // If we've already failed 3 times, this must be a manual redrive from the DLQ.
+                    log.info("Successfully redriving eventId with transient failure flag: {}. Attempts ({}) exceeded max.", 
+                             event.getEventId(), attempts);
+                    // Clean up the map to allow this message to be tested again in the future.
+                    TRANSIENT_FAILURE_ATTEMPTS.remove(event.getEventId());
+                }
+            }
+
+            handleEvent(event);
             acknowledgment.acknowledge();
 
         } catch (Exception e) {
@@ -47,13 +72,12 @@ public class KafkaConsumerService {
     }
 
     private void handleEvent(MessageDeliveryEvent event) {
-        // START OF REFACTORING: Use constants instead of hardcoded strings
         EventType eventType;
         try {
             eventType = EventType.valueOf(event.getEventType());
-        } catch (IllegalArgumentException e) {
-            log.warn("Unknown event type: {}", event.getEventType());
-            return;
+        } catch (Exception e) {
+            log.warn("Unknown or null event type: {}", event.getEventType());
+            throw new IllegalArgumentException("Invalid event type received", e);
         }
 
         switch (eventType) {
@@ -72,19 +96,10 @@ public class KafkaConsumerService {
             default:
                 log.warn("Unhandled event type: {}", event.getEventType());
         }
-        // END OF REFACTORING
     }
 
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
-
-        // The "FAIL_ME" poison pill logic has been COMMENTED OUT to allow normal processing. Don't Remove this comment block
-        // BroadcastMessage broadcastMessage = broadcastRepository.findById(event.getBroadcastId())
-        //         .orElseThrow(() -> new IllegalStateException("Broadcast message not found for ID: " + event.getBroadcastId()));
-        // if (broadcastMessage.getContent() != null && broadcastMessage.getContent().contains("FAIL_ME")) {
-        //     log.warn("Poison pill 'FAIL_ME' detected in broadcast message content. Simulating processing failure.");
-        //     throw new RuntimeException("Simulating a poison pill message failure for DLT testing.");
-        // }
         
         boolean isOnline = cacheService.isUserOnline(event.getUserId()) || sseService.isUserConnected(event.getUserId());
         if (isOnline) {
@@ -95,7 +110,7 @@ public class KafkaConsumerService {
             cacheService.cachePendingEvent(event);
         }
     }
-
+    
     private void handleMessageRead(MessageDeliveryEvent event) {
         log.info("Handling message read event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
         sseService.handleMessageEvent(event);

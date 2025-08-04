@@ -45,7 +45,7 @@ public class SseController {
             ServerWebExchange exchange) {
         
         log.info("SSE connection request from user: {}, session: {}, IP: {}", 
-                userId, sessionId, exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
+                 userId, sessionId, exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
         
         if (sessionId == null || sessionId.trim().isEmpty()) {
             sessionId = UUID.randomUUID().toString();
@@ -59,24 +59,20 @@ public class SseController {
                 .connectedAt(ZonedDateTime.now())
                 .lastHeartbeat(ZonedDateTime.now())
                 .build();
+        
         userSessionRepository.save(session);
         cacheService.registerUserConnection(userId, sessionId, podId);
         
         Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, sessionId);
         log.info("SSE connection established for user: {}, session: {}", userId, sessionId);
-        
         return eventStream;
     }
     
-    // MODIFIED: This fallback method now logs a clean WARN message instead of a full stack trace.
     public Flux<ServerSentEvent<String>> connectFallback(String userId, String sessionId, ServerWebExchange exchange, RequestNotPermitted ex) {
-        // Log a concise warning message. The exception message from Resilience4j is informative.
         log.warn("Connection rate limit exceeded for user: {}. IP: {}. Details: {}", 
             userId, 
             exchange.getRequest().getRemoteAddress(), 
             ex.getMessage());
-        
-        // Return the error Flux to send the 429 response to the client, but without generating a new exception here.
         return Flux.error(new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Connection rate limit exceeded. Please try again later."));
     }
 
@@ -86,17 +82,9 @@ public class SseController {
             @RequestParam String sessionId) {
         
         log.info("Disconnect request from user: {}, session: {}", userId, sessionId);
-        
         sseService.removeEventStream(userId, sessionId);
-        int updated = userSessionRepository.markSessionInactive(sessionId, podId);
-        
-        if (updated > 0) {
-            cacheService.unregisterUserConnection(userId, sessionId);
-            return ResponseEntity.ok("Disconnected successfully");
-        } else {
-            log.warn("Session not found for disconnect: user={}, session={}", userId, sessionId);
-            return ResponseEntity.notFound().build();
-        }
+        // The removeEventStream now handles marking the session inactive in DB and Cache
+        return ResponseEntity.ok("Disconnected successfully");
     }
 
     @GetMapping("/stats")

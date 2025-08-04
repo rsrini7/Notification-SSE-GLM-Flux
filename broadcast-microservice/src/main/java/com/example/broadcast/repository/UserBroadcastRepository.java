@@ -9,6 +9,7 @@ import org.springframework.jdbc.support.KeyHolder;
 
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.sql.Types;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
@@ -22,7 +23,6 @@ import java.util.Optional;
 public class UserBroadcastRepository {
 
     private final JdbcTemplate jdbcTemplate;
-
     public UserBroadcastRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -34,13 +34,13 @@ public class UserBroadcastRepository {
             .deliveryStatus(rs.getString("delivery_status"))
             .readStatus(rs.getString("read_status"))
             .deliveredAt(rs.getTimestamp("delivered_at") != null ? 
-                rs.getTimestamp("delivered_at").toInstant().atZone(ZoneOffset.UTC) : null)
+                    rs.getTimestamp("delivered_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .readAt(rs.getTimestamp("read_at") != null ? 
                     rs.getTimestamp("read_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
             .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
             .build();
-    
+            
     private final RowMapper<UserBroadcastResponse> userBroadcastResponseRowMapper = (rs, rowNum) -> UserBroadcastResponse.builder()
             .id(rs.getLong("id"))
             .broadcastId(rs.getLong("broadcast_id"))
@@ -55,7 +55,8 @@ public class UserBroadcastRepository {
             .priority(rs.getString("priority"))
             .category(rs.getString("category"))
             .broadcastCreatedAt(rs.getTimestamp("broadcast_created_at").toInstant().atZone(ZoneOffset.UTC))
-            .scheduledAt(rs.getTimestamp("scheduled_at") != null ? rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
+            .scheduledAt(rs.getTimestamp("scheduled_at") != null ?
+                    rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .expiresAt(rs.getTimestamp("expires_at") != null ? rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .build();
 
@@ -72,22 +73,38 @@ public class UserBroadcastRepository {
             ps.setString(2, userBroadcast.getUserId());
             ps.setString(3, userBroadcast.getDeliveryStatus());
             ps.setString(4, userBroadcast.getReadStatus());
-            ps.setObject(5, userBroadcast.getDeliveredAt());
-            ps.setObject(6, userBroadcast.getReadAt());
+            
+            if (userBroadcast.getDeliveredAt() != null) {
+                ps.setObject(5, userBroadcast.getDeliveredAt().toOffsetDateTime());
+            } else {
+                ps.setNull(5, Types.TIMESTAMP_WITH_TIMEZONE);
+            }
+            if (userBroadcast.getReadAt() != null) {
+                ps.setObject(6, userBroadcast.getReadAt().toOffsetDateTime());
+            } else {
+                ps.setNull(6, Types.TIMESTAMP_WITH_TIMEZONE);
+            }
+
             return ps;
         }, keyHolder);
-
+        
         if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
             Map<String, Object> keys = keyHolder.getKeyList().get(0);
-            Number id = (Number) keys.get("ID");
+            Number id = (Number) keys.get("id"); // Check for Postgres's lowercase 'id' first
+            if (id == null) {
+                id = (Number) keys.get("ID"); // Fallback to H2's uppercase 'ID'
+            }
             if (id != null) {
                 userBroadcast.setId(id.longValue());
             } else {
-                throw new RuntimeException("Generated key 'ID' not found.");
+                throw new RuntimeException("Generated key 'id' not found.");
             }
+        } else if (keyHolder.getKey() != null) {
+             userBroadcast.setId(keyHolder.getKey().longValue());
         } else {
             throw new RuntimeException("Failed to retrieve generated key for user broadcast.");
         }
+        
         return userBroadcast;
     }
     
@@ -150,13 +167,11 @@ public class UserBroadcastRepository {
         return jdbcTemplate.query(sql, userBroadcastRowMapper, userId, broadcastId);
     }
     
-    // NEW: Find a user message for a specific broadcast, regardless of its current status.
     public Optional<UserBroadcastMessage> findByUserIdAndBroadcastId(String userId, Long broadcastId) {
         String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND broadcast_id = ?";
         return jdbcTemplate.query(sql, userBroadcastRowMapper, userId, broadcastId).stream().findFirst();
     }
     
-    // NEW: Reset the status of an existing message to PENDING for redelivery.
     public int updateStatusToPending(Long id) {
         String sql = "UPDATE user_broadcast_messages SET delivery_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
         return jdbcTemplate.update(sql, DeliveryStatus.PENDING.name(), id);
@@ -179,7 +194,7 @@ public class UserBroadcastRepository {
 
     public int markAsRead(Long id, ZonedDateTime readAt) {
         String sql = "UPDATE user_broadcast_messages SET read_status = 'READ', read_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
-        return jdbcTemplate.update(sql, readAt, id);
+        return jdbcTemplate.update(sql, readAt.toOffsetDateTime(), id);
     }
 
     public void batchInsert(List<UserBroadcastMessage> userBroadcasts) {
@@ -193,8 +208,17 @@ public class UserBroadcastRepository {
             ps.setString(2, ub.getUserId());
             ps.setString(3, ub.getDeliveryStatus());
             ps.setString(4, ub.getReadStatus());
-            ps.setObject(5, ub.getDeliveredAt());
-            ps.setObject(6, ub.getReadAt());
+
+            if (ub.getDeliveredAt() != null) {
+                ps.setObject(5, ub.getDeliveredAt().toOffsetDateTime());
+            } else {
+                ps.setNull(5, Types.TIMESTAMP_WITH_TIMEZONE);
+            }
+            if (ub.getReadAt() != null) {
+                ps.setObject(6, ub.getReadAt().toOffsetDateTime());
+            } else {
+                ps.setNull(6, Types.TIMESTAMP_WITH_TIMEZONE);
+            }
         });
     }
 

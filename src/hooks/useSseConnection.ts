@@ -32,7 +32,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     onDisconnect,
     onError
   } = options;
-
   const [state, setState] = useState<SseConnectionState>({
     connected: false,
     connecting: false,
@@ -40,8 +39,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     error: null,
     reconnectAttempt: 0
   });
-
-  // MODIFIED: Increased max attempts for more resilience
   const MAX_RECONNECT_ATTEMPTS = 10;
   const BASE_RECONNECT_DELAY = 3000;
   const MAX_RECONNECT_DELAY = 300000;
@@ -91,10 +88,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     reconnectAttemptsRef.current = 0;
     if (sessionIdRef.current && wasConnected) {
-      fetch(`${baseUrl}/api/sse/disconnect?userId=${userId}&sessionId=${sessionIdRef.current}`, {
-        method: 'POST',
-        keepalive: true,
-      }).catch(error => console.warn('Ignoring potential error from disconnect fetch:', error));
+      // Use sendBeacon for a more reliable disconnect signal
+      navigator.sendBeacon(`${baseUrl}/api/sse/disconnect?userId=${userId}&sessionId=${sessionIdRef.current}`);
     }
     sessionIdRef.current = null;
     if (state.connected) onDisconnectRef.current?.();
@@ -104,8 +99,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   useEffect(() => {
     disconnectRef.current = disconnect;
   }, [disconnect]);
-  
-  // MODIFIED: Extracted scheduleReconnect into its own function for clarity and reuse.
+
   const scheduleReconnect = useCallback(() => {
     if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
       const delay = Math.min(MAX_RECONNECT_DELAY, BASE_RECONNECT_DELAY * 2 ** reconnectAttemptsRef.current);
@@ -118,14 +112,13 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
   }, [userId]);
 
-  // MODIFIED: The connect function now takes an isRetry flag.
   const connect = useCallback((isRetry = false) => {
     if (eventSourceRef.current) eventSourceRef.current.close();
     
     if (isRetry) {
       reconnectAttemptsRef.current++;
     } else {
-      reconnectAttemptsRef.current = 1; // Start with attempt 1
+      reconnectAttemptsRef.current = 1;
     }
     
     setState(prev => ({ ...prev, connecting: true, error: isRetry ? `Reconnecting... (Attempt ${reconnectAttemptsRef.current})` : null, reconnectAttempt: reconnectAttemptsRef.current }));
@@ -133,30 +126,28 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     const newSessionId = generateSessionId();
     sessionIdRef.current = newSessionId;
     const sseUrl = `${baseUrl}/api/sse/connect?userId=${userId}&sessionId=${newSessionId}`;
-
+    
     try {
       eventSourceRef.current = new EventSource(sseUrl);
 
       eventSourceRef.current.onopen = () => {
         setState(prev => ({ ...prev, connected: true, connecting: false, sessionId: newSessionId, error: null, reconnectAttempt: 0 }));
         onConnectRef.current?.();
-        reconnectAttemptsRef.current = 0; // Reset on successful connection
+        reconnectAttemptsRef.current = 0;
       };
-
+      
       SSE_EVENT_TYPES.forEach(type => {
         eventSourceRef.current?.addEventListener(type, handleSseMessage as EventListener);
       });
-
+      
       eventSourceRef.current.onerror = () => {
         eventSourceRef.current?.close();
         onErrorRef.current?.(new Error('SSE connection error'));
-        // MODIFIED: Centralized reconnect scheduling
         scheduleReconnect();
       };
     } catch (error) {
       console.error('Failed to create SSE connection:', error);
       onErrorRef.current?.(error);
-      // MODIFIED: Centralized reconnect scheduling for initial synchronous failures
       scheduleReconnect();
     }
   }, [userId, baseUrl, generateSessionId, handleSseMessage, scheduleReconnect]);

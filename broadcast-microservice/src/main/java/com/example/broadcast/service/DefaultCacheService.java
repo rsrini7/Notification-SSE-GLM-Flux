@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
-@Profile("!redis") //TODO: Gemfire check
+@Profile("!redis")
 @RequiredArgsConstructor
 @Slf4j
 public class DefaultCacheService implements CacheService {
@@ -27,9 +27,9 @@ public class DefaultCacheService implements CacheService {
     private final Cache<String, List<PendingEventInfo>> pendingEventsCache;
     private final Cache<String, UserSessionInfo> userSessionCache;
     private final Cache<String, BroadcastStatsInfo> broadcastStatsCache;
-    
     private final ConcurrentHashMap<String, Boolean> onlineUsers = new ConcurrentHashMap<>();
 
+    // ... (methods before getPendingEvents are unchanged)
     @Override
     public void registerUserConnection(String userId, String sessionId, String podId) {
         UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, sessionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
@@ -117,7 +117,7 @@ public class DefaultCacheService implements CacheService {
         if (pendingEvents == null) return List.of();
         
         return pendingEvents.stream()
-            .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null))
+            .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null, false))
             .collect(Collectors.toList());
     }
     

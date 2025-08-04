@@ -11,14 +11,10 @@ import java.util.List;
 import java.util.Optional;
 import java.time.ZoneOffset;
 
-/**
- * Repository for user preferences operations using Spring JDBC
- */
 @Repository
 public class UserPreferencesRepository {
 
     private final JdbcTemplate jdbcTemplate;
-
     public UserPreferencesRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -44,33 +40,30 @@ public class UserPreferencesRepository {
         }
     };
 
-    /**
-     * Find user preferences by user ID
-     */
     public Optional<UserPreferences> findByUserId(String userId) {
         String sql = "SELECT * FROM user_preferences WHERE user_id = ?";
         List<UserPreferences> results = jdbcTemplate.query(sql, preferencesRowMapper, userId);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
-    /**
-     * Save user preferences
-     */
     public UserPreferences save(UserPreferences preferences) {
         String sql = """
-            INSERT INTO user_preferences 
-            (user_id, notification_enabled, email_notifications, push_notifications, 
-             preferred_categories, quiet_hours_start, quiet_hours_end, timezone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-            notification_enabled = VALUES(notification_enabled),
-            email_notifications = VALUES(email_notifications),
-            push_notifications = VALUES(push_notifications),
-            preferred_categories = VALUES(preferred_categories),
-            quiet_hours_start = VALUES(quiet_hours_start),
-            quiet_hours_end = VALUES(quiet_hours_end),
-            timezone = VALUES(timezone),
-            updated_at = CURRENT_TIMESTAMP
+            MERGE INTO user_preferences t
+            USING (VALUES (?, ?, ?, ?, ?, ?, ?, ?))
+                AS s(user_id, notification_enabled, email_notifications, push_notifications, preferred_categories, quiet_hours_start, quiet_hours_end, timezone)
+            ON t.user_id = s.user_id
+            WHEN MATCHED THEN
+                UPDATE SET notification_enabled = s.notification_enabled,
+                           email_notifications = s.email_notifications,
+                           push_notifications = s.push_notifications,
+                           preferred_categories = s.preferred_categories,
+                           quiet_hours_start = s.quiet_hours_start,
+                           quiet_hours_end = s.quiet_hours_end,
+                           timezone = s.timezone,
+                           updated_at = CURRENT_TIMESTAMP
+            WHEN NOT MATCHED THEN
+                INSERT (user_id, notification_enabled, email_notifications, push_notifications, preferred_categories, quiet_hours_start, quiet_hours_end, timezone)
+                VALUES (s.user_id, s.notification_enabled, s.email_notifications, s.push_notifications, s.preferred_categories, s.quiet_hours_start, s.quiet_hours_end, s.timezone)
             """;
         
         jdbcTemplate.update(sql,
@@ -82,23 +75,15 @@ public class UserPreferencesRepository {
                 preferences.getQuietHoursStart(),
                 preferences.getQuietHoursEnd(),
                 preferences.getTimezone());
-
+        
         return preferences;
     }
 
-    /**
-     * **NEW:** Find all distinct user IDs from the preferences.
-     * This provides a list of all known users in the system.
-     * @return A list of unique user IDs.
-     */
     public List<String> findAllUserIds() {
         String sql = "SELECT DISTINCT user_id FROM user_preferences ORDER BY user_id";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
-    /**
-     * Helper method to parse JSON array from database
-     */
     private List<String> parseJsonArray(String json) {
         if (json == null || json.trim().isEmpty()) {
             return List.of();
@@ -111,9 +96,6 @@ public class UserPreferencesRepository {
         }
     }
 
-    /**
-     * Helper method to convert list to JSON array string
-     */
     private String toJsonArray(List<String> list) {
         if (list == null || list.isEmpty()) {
             return null;

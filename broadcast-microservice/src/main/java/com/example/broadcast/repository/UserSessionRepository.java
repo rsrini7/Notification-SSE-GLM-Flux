@@ -7,6 +7,8 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.time.ZoneOffset;
@@ -15,7 +17,6 @@ import java.time.ZoneOffset;
 public class UserSessionRepository {
 
     private final JdbcTemplate jdbcTemplate;
-
     public UserSessionRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -59,14 +60,32 @@ public class UserSessionRepository {
                 INSERT (user_id, session_id, pod_id, connection_status, connected_at, last_heartbeat)
                 VALUES (s.user_id, s.session_id, s.pod_id, s.connection_status, s.connected_at, s.last_heartbeat)
             """;
+        
         jdbcTemplate.update(sql,
                 session.getUserId(),
                 session.getSessionId(),
                 session.getPodId(),
                 session.getConnectionStatus(),
-                session.getConnectedAt(),
-                session.getLastHeartbeat());
+                session.getConnectedAt().toOffsetDateTime(),
+                session.getLastHeartbeat().toOffsetDateTime());
+        
         return session;
+    }
+
+    public int updateHeartbeatsForActiveSessions(List<String> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return 0;
+        }
+        String sql = String.format(
+            "UPDATE user_sessions SET last_heartbeat = CURRENT_TIMESTAMP WHERE session_id IN (%s)",
+            String.join(",", java.util.Collections.nCopies(sessionIds.size(), "?"))
+        );
+        return jdbcTemplate.update(sql, sessionIds.toArray());
+    }
+
+    public List<UserSession> findStaleSessions(ZonedDateTime threshold) {
+        String sql = "SELECT * FROM user_sessions WHERE connection_status = 'ACTIVE' AND last_heartbeat < ?";
+        return jdbcTemplate.query(sql, sessionRowMapper, threshold.toOffsetDateTime());
     }
 
     public Optional<UserSession> findByUserId(String userId) {
@@ -81,7 +100,7 @@ public class UserSessionRepository {
     }
 
     public int markSessionInactive(String sessionId, String podId) {
-        String sql = "UPDATE user_sessions SET connection_status = 'INACTIVE', disconnected_at = CURRENT_TIMESTAMP WHERE session_id = ? AND pod_id = ?";
+        String sql = "UPDATE user_sessions SET connection_status = 'INACTIVE', disconnected_at = CURRENT_TIMESTAMP WHERE session_id = ? AND pod_id = ? AND connection_status = 'ACTIVE'";
         return jdbcTemplate.update(sql, sessionId, podId);
     }
     
@@ -118,8 +137,8 @@ public class UserSessionRepository {
             ps.setString(2, session.getSessionId());
             ps.setString(3, session.getPodId());
             ps.setString(4, session.getConnectionStatus());
-            ps.setTimestamp(5, java.sql.Timestamp.from(session.getConnectedAt().toInstant()));
-            ps.setTimestamp(6, java.sql.Timestamp.from(session.getLastHeartbeat().toInstant()));
+            ps.setTimestamp(5, Timestamp.from(session.getConnectedAt().toInstant()));
+            ps.setTimestamp(6, Timestamp.from(session.getLastHeartbeat().toInstant()));
         });
     }
 }

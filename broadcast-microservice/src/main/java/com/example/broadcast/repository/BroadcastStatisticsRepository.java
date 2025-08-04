@@ -5,7 +5,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
 import java.util.List;
 import java.util.Optional;
 import java.time.ZoneOffset;
@@ -15,7 +14,6 @@ public class BroadcastStatisticsRepository {
 
     private final JdbcTemplate jdbcTemplate;
     private final RowMapper<BroadcastStatistics> rowMapper;
-
     public BroadcastStatisticsRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
         this.rowMapper = (rs, rowNum) -> BroadcastStatistics.builder()
@@ -30,28 +28,32 @@ public class BroadcastStatisticsRepository {
                 .build();
     }
 
-    // START OF FIX: Changed from a simple INSERT to a MERGE (upsert) statement.
-    // This makes the operation idempotent and works with the new UNIQUE constraint
-    // on the broadcast_id column, preventing duplicate statistic entries.
     public void save(BroadcastStatistics stats) {
         String sql = """
-            MERGE INTO broadcast_statistics (broadcast_id, total_targeted, total_delivered, total_read, total_failed, calculated_at)
-            KEY(broadcast_id)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """;
-    
-        jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(sql);
-            ps.setLong(1, stats.getBroadcastId());
-            ps.setInt(2, stats.getTotalTargeted());
-            ps.setInt(3, stats.getTotalDelivered());
-            ps.setInt(4, stats.getTotalRead());
-            ps.setInt(5, stats.getTotalFailed());
-            ps.setObject(6, stats.getCalculatedAt());
-            return ps;
-        });
+            MERGE INTO broadcast_statistics t
+            USING (VALUES (?, ?, ?, ?, ?, ?))
+                AS s(broadcast_id, total_targeted, total_delivered, total_read, total_failed, calculated_at)
+            ON t.broadcast_id = s.broadcast_id
+            WHEN MATCHED THEN
+                UPDATE SET total_targeted = s.total_targeted,
+                           total_delivered = s.total_delivered,
+                           total_read = s.total_read,
+                           total_failed = s.total_failed,
+                           calculated_at = s.calculated_at
+            WHEN NOT MATCHED THEN
+                INSERT (broadcast_id, total_targeted, total_delivered, total_read, total_failed, calculated_at)
+                VALUES (s.broadcast_id, s.total_targeted, s.total_delivered, s.total_read, s.total_failed, s.calculated_at)
+            """;
+        
+        jdbcTemplate.update(sql,
+                stats.getBroadcastId(),
+                stats.getTotalTargeted(),
+                stats.getTotalDelivered(),
+                stats.getTotalRead(),
+                stats.getTotalFailed(),
+                stats.getCalculatedAt() != null ? stats.getCalculatedAt().toOffsetDateTime() : null
+        );
     }
-    // END OF FIX
 
     public Optional<BroadcastStatistics> findByBroadcastId(Long broadcastId) {
         String sql = "SELECT * FROM broadcast_statistics WHERE broadcast_id = ?";
@@ -59,21 +61,11 @@ public class BroadcastStatisticsRepository {
         return results.stream().findFirst();
     }
 
-    /**
-     * **NEW:** Atomically increments the total_delivered count for a broadcast.
-     * @param broadcastId The ID of the broadcast to update.
-     * @return The number of rows affected.
-     */
     public int incrementDeliveredCount(Long broadcastId) {
         String sql = "UPDATE broadcast_statistics SET total_delivered = total_delivered + 1, calculated_at = CURRENT_TIMESTAMP WHERE broadcast_id = ?";
         return jdbcTemplate.update(sql, broadcastId);
     }
 
-    /**
-     * **NEW:** Atomically increments the total_read count for a broadcast.
-     * @param broadcastId The ID of the broadcast to update.
-     * @return The number of rows affected.
-     */
     public int incrementReadCount(Long broadcastId) {
         String sql = "UPDATE broadcast_statistics SET total_read = total_read + 1, calculated_at = CURRENT_TIMESTAMP WHERE broadcast_id = ?";
         return jdbcTemplate.update(sql, broadcastId);

@@ -5,6 +5,7 @@ import com.example.broadcast.dto.MessageDeliveryEvent;
 import com.example.broadcast.dto.UserBroadcastResponse;
 import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.UserBroadcastMessage;
+import com.example.broadcast.model.UserSession;
 import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
@@ -16,7 +17,9 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
@@ -24,6 +27,7 @@ import reactor.core.Disposable;
 
 import java.time.Duration;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -45,6 +49,10 @@ public class SseService {
     private final ObjectMapper objectMapper;
     private final BroadcastRepository broadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
+    private final CacheService cacheService;
+    
+    @Value("${broadcast.pod.id:pod-local}")
+    private String podId;
     
     @Value("${broadcast.sse.heartbeat-interval:30000}")
     private long heartbeatInterval;
@@ -52,34 +60,70 @@ public class SseService {
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
     private final Map<String, String> userSessionMap = new ConcurrentHashMap<>();
 
-    private Disposable heartbeatSubscription;
-    private Disposable cleanupSubscription;
+    private Disposable serverHeartbeatSubscription;
     
-    public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository, ObjectMapper objectMapper, BroadcastRepository broadcastRepository, BroadcastStatisticsRepository broadcastStatisticsRepository) {
+    public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository, ObjectMapper objectMapper, BroadcastRepository broadcastRepository, BroadcastStatisticsRepository broadcastStatisticsRepository, CacheService cacheService) {
         this.userBroadcastRepository = userBroadcastRepository;
         this.userSessionRepository = userSessionRepository;
         this.objectMapper = objectMapper;
         this.broadcastRepository = broadcastRepository;
         this.broadcastStatisticsRepository = broadcastStatisticsRepository;
+        this.cacheService = cacheService;
     }
 
     @PostConstruct
     public void init() {
-        startHeartbeat();
-        startCleanup();
+        startServerHeartbeat();
     }
 
     @PreDestroy
     public void cleanup() {
-        if (heartbeatSubscription != null && !heartbeatSubscription.isDisposed()) {
-            heartbeatSubscription.dispose();
+        if (serverHeartbeatSubscription != null && !serverHeartbeatSubscription.isDisposed()) {
+            serverHeartbeatSubscription.dispose();
         }
-        if (cleanupSubscription != null && !cleanupSubscription.isDisposed()) {
-            cleanupSubscription.dispose();
-        }
-        log.info("Disposed of SSE scheduled tasks.");
     }
 
+    @Scheduled(fixedRateString = "${broadcast.sse.heartbeat-interval:30000}")
+    @Transactional
+    public void updateActiveSessionHeartbeats() {
+        if (userSinks.isEmpty()) {
+            return;
+        }
+        List<String> activeSessionIdsOnThisPod = new ArrayList<>(userSinks.keySet());
+        int updatedCount = userSessionRepository.updateHeartbeatsForActiveSessions(activeSessionIdsOnThisPod);
+        log.debug("Pod [{}]: Updated heartbeat for {} active local sessions.", podId, updatedCount);
+    }
+
+    @Scheduled(fixedRate = 60000)
+    @Transactional
+    public void cleanupStaleSessions() {
+         try {
+            long staleThresholdSeconds = (heartbeatInterval / 1000) * 3;
+            ZonedDateTime threshold = ZonedDateTime.now().minusSeconds(staleThresholdSeconds);
+            
+            List<UserSession> staleSessions = userSessionRepository.findStaleSessions(threshold);
+
+            if (!staleSessions.isEmpty()) {
+                log.warn("Found {} stale user sessions based on heartbeat to clean up.", staleSessions.size());
+                
+                List<String> staleUserIds = staleSessions.stream()
+                        .map(UserSession::getUserId)
+                        .distinct()
+                        .collect(Collectors.toList());
+
+                userSessionRepository.markSessionsInactiveForUsers(staleUserIds);
+                log.info("Marked {} users as INACTIVE in the database.", staleUserIds.size());
+
+                for (UserSession staleSession : staleSessions) {
+                    cacheService.unregisterUserConnection(staleSession.getUserId(), staleSession.getSessionId());
+                }
+                log.info("Removed {} stale sessions from cache.", staleSessions.size());
+            }
+         } catch (Exception e) {
+            log.error("Error in cleanup task: {}", e.getMessage(), e);
+        }
+    }
+    
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String sessionId) {
         log.debug("Creating SSE event stream for user: {}, session: {}", userId, sessionId);
         Sinks.Many<ServerSentEvent<String>> sink = Sinks.many().multicast().onBackpressureBuffer();
@@ -87,15 +131,14 @@ public class SseService {
         userSinks.put(sessionId, sink);
         userSessionMap.put(userId, sessionId);
 
-        sendPendingMessages(userId, sink);
+        sendPendingMessages(userId);
         
         try {
             String connectedPayload = objectMapper.writeValueAsString(Map.of("message", "SSE connection established with session " + sessionId));
-            ServerSentEvent<String> connectedEvent = ServerSentEvent.<String>builder()
+            sendEvent(userId, ServerSentEvent.<String>builder()
                 .event(SseEventType.CONNECTED.name())
                 .data(connectedPayload)
-                .build();
-            sendEventToSink(sink, connectedEvent);
+                .build());
         } catch (JsonProcessingException e) {
             log.error("Error creating CONNECTED event", e);
         }
@@ -106,9 +149,19 @@ public class SseService {
                 .doOnTerminate(() -> removeEventStream(userId, sessionId));
     }
 
+    @Transactional
     public void removeEventStream(String userId, String sessionId) {
-        userSinks.remove(sessionId);
-        userSessionMap.remove(userId, sessionId);
+        // Ensure we only try to remove if the session ID is the one we expect for the user.
+        if (sessionId != null && sessionId.equals(userSessionMap.get(userId))) {
+            userSinks.remove(sessionId);
+            userSessionMap.remove(userId, sessionId);
+            
+            int updated = userSessionRepository.markSessionInactive(sessionId, podId);
+            if (updated > 0) {
+                cacheService.unregisterUserConnection(userId, sessionId);
+                log.info("Cleanly disconnected session {} for user {}", sessionId, userId);
+            }
+        }
     }
 
     public void handleMessageEvent(MessageDeliveryEvent event) {
@@ -128,24 +181,11 @@ public class SseService {
         }
     }
 
-    private void sendPendingMessages(String userId, Sinks.Many<ServerSentEvent<String>> sink) {
+    private void sendPendingMessages(String userId) {
         List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
         for (UserBroadcastMessage message : pendingMessages) {
-            buildUserBroadcastResponse(message).ifPresent(response -> {
-                try {
-                    String payload = objectMapper.writeValueAsString(response);
-                    ServerSentEvent<String> sse = ServerSentEvent.<String>builder()
-                        .event(SseEventType.MESSAGE.name())
-                        .data(payload)
-                        .id(String.valueOf(response.getId()))
-                        .build();
-                    sendEventToSink(sink, sse);
-                    userBroadcastRepository.updateDeliveryStatus(message.getId(), DeliveryStatus.DELIVERED.name());
-                    broadcastStatisticsRepository.incrementDeliveredCount(message.getBroadcastId());
-                } catch (JsonProcessingException e) {
-                    log.error("Error sending pending message as SSE", e);
-                }
-            });
+            // Re-use the main delivery logic
+            deliverMessageToUser(userId, message.getBroadcastId());
         }
         if (!pendingMessages.isEmpty()) {
             log.info("Sent {} pending messages to user: {}", pendingMessages.size(), userId);
@@ -157,20 +197,27 @@ public class SseService {
         if (sessionId != null) {
             Sinks.Many<ServerSentEvent<String>> sink = userSinks.get(sessionId);
             if (sink != null) {
-                sendEventToSink(sink, event);
+                Sinks.EmitResult result = sink.tryEmitNext(event);
+                // If emit fails, it means the connection is dead/broken ("zombie").
+                // Proactively clean it up immediately instead of waiting for the next cleanup job.
+                if (result.isFailure()) {
+                    log.warn("Failed to emit SSE event for user {}, session {}. Result: {}. Proactively cleaning up stale connection.", userId, sessionId, result);
+                    removeEventStream(userId, sessionId);
+                }
             }
         }
     }
 
-    private void sendEventToSink(Sinks.Many<ServerSentEvent<String>> sink, ServerSentEvent<String> event) {
-        sink.tryEmitNext(event);
-    }
-
-    private void deliverMessageToUser(String userId, Long broadcastId) {
-        userBroadcastRepository.findPendingMessagesByBroadcastId(userId, broadcastId)
-            .stream()
-            .findFirst()
-            .flatMap(message -> buildUserBroadcastResponse(message))
+    @Transactional
+    public void deliverMessageToUser(String userId, Long broadcastId) {
+        UserBroadcastMessage message = userBroadcastRepository
+                .findByUserIdAndBroadcastId(userId, broadcastId)
+                .filter(msg -> msg.getDeliveryStatus().equals(DeliveryStatus.PENDING.name()))
+                .orElseThrow(() -> new IllegalStateException(
+                        "Cannot deliver message. No PENDING UserBroadcastMessage found for user " + userId + " and broadcast " + broadcastId
+                ));
+        
+        buildUserBroadcastResponse(message)
             .ifPresent(response -> {
                 try {
                     String payload = objectMapper.writeValueAsString(response);
@@ -179,10 +226,17 @@ public class SseService {
                         .data(payload)
                         .id(String.valueOf(response.getId()))
                         .build();
+                    
                     sendEvent(userId, sse);
-                    userBroadcastRepository.updateDeliveryStatus(response.getId(), DeliveryStatus.DELIVERED.name());
-                    broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
-                    log.info("Message delivered to online user: {}, broadcast: {}", userId, broadcastId);
+                    
+                    if (isUserConnected(userId)) {
+                        userBroadcastRepository.updateDeliveryStatus(response.getId(), DeliveryStatus.DELIVERED.name());
+                        broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
+                        log.info("Message delivered to online user: {}, broadcast: {}", userId, broadcastId);
+                    } else {
+                        log.warn("Delivery attempt for user {} and broadcast {} aborted, user disconnected during process.", userId, broadcastId);
+                    }
+
                 } catch (JsonProcessingException e) {
                     log.error("Error delivering message to user as SSE", e);
                 }
@@ -199,8 +253,8 @@ public class SseService {
                 .id(message.getId())
                 .broadcastId(message.getBroadcastId())
                 .userId(message.getUserId())
-                .deliveryStatus(DeliveryStatus.DELIVERED.name())
-                .readStatus(ReadStatus.UNREAD.name())
+                .deliveryStatus(message.getDeliveryStatus())
+                .readStatus(message.getReadStatus())
                 .deliveredAt(message.getDeliveredAt())
                 .readAt(message.getReadAt())
                 .createdAt(message.getCreatedAt())
@@ -213,8 +267,8 @@ public class SseService {
                 .build();
     }
 
-    private void startHeartbeat() {
-        heartbeatSubscription = Flux.interval(Duration.ofMillis(heartbeatInterval), Schedulers.parallel())
+    private void startServerHeartbeat() {
+        serverHeartbeatSubscription = Flux.interval(Duration.ofMillis(heartbeatInterval), Schedulers.parallel())
             .doOnNext(tick -> {
                 try {
                     String payload = objectMapper.writeValueAsString(Map.of("timestamp", ZonedDateTime.now()));
@@ -222,35 +276,13 @@ public class SseService {
                         .event(SseEventType.HEARTBEAT.name())
                         .data(payload)
                         .build();
-                    userSinks.values().forEach(sink -> sendEventToSink(sink, heartbeatEvent));
-                    log.debug("Heartbeat sent to {} connected users", userSinks.size());
+                    
+                    // Send heartbeat to a copy of the user IDs to avoid concurrent modification issues
+                    new ArrayList<>(userSessionMap.keySet()).forEach(userId -> sendEvent(userId, heartbeatEvent));
+
                 } catch (Exception e) {
-                    log.error("Error in heartbeat task: {}", e.getMessage());
+                    log.error("Error in server heartbeat task: {}", e.getMessage());
                 }
-            })
-            .subscribe();
-    }
-
-    private void startCleanup() {
-        cleanupSubscription = Flux.interval(Duration.ofSeconds(60), Schedulers.parallel())
-            .doOnNext(tick -> {
-                 try {
-                    List<String> activeDbUsers = userSessionRepository.findAllActiveUserIds();
-                    
-                    List<String> staleUsers = activeDbUsers.stream()
-                        .filter(userId -> !isUserConnected(userId))
-                        .collect(Collectors.toList());
-
-                    if (!staleUsers.isEmpty()) {
-                        log.warn("Found {} stale user sessions in DB to clean up: {}", staleUsers.size(), staleUsers);
-                        int cleanedCount = userSessionRepository.markSessionsInactiveForUsers(staleUsers);
-                        log.info("Marked {} user sessions as INACTIVE.", cleanedCount);
-                    }
-                    
-                    log.debug("Cleanup completed. Active sinks: {}", userSinks.size());
-                 } catch (Exception e) {
-                    log.error("Error in cleanup task: {}", e.getMessage());
-                 }
             })
             .subscribe();
     }

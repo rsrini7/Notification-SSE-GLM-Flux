@@ -4,13 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
 import java.time.ZonedDateTime;
 
-/**
- * DTO for message delivery events
- * Used for Kafka event streaming and SSE communication
- */
 @Data
 @Builder
 @NoArgsConstructor
@@ -24,4 +19,6 @@ public class MessageDeliveryEvent {
     private ZonedDateTime timestamp;
     private String message;
     private String errorDetails;
+    @Builder.Default
+    private boolean transientFailure = false;
 }

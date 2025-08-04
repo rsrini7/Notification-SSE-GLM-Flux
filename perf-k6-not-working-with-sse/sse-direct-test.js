@@ -74,9 +74,7 @@ export function listen() {
   const sessionID = `k6-session-${__VU}-${Date.now()}`;
   const sseUrl = `${BASE_URL}/api/sse/connect?userId=${userID}&sessionId=${sessionID}`;
 
-  // START OF FIX: Use the correct sse.open() method signature.
   const response = sse.open(sseUrl, {}, function (client) {
-  // END OF FIX
     let startTime;
     client.on('open', function open() {
       console.log(`[Listener VU ${__VU}] (${userID}): Connected. Listening...`);
