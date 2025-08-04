@@ -1,4 +1,5 @@
 package com.example.broadcast.repository;
+
 import com.example.broadcast.dto.BroadcastResponse;
 import com.example.broadcast.model.BroadcastMessage;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -7,6 +8,7 @@ import org.springframework.jdbc.support.KeyHolder;
 
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.sql.Types;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import com.example.broadcast.util.Constants.BroadcastStatus;
+
 @Repository
 public class BroadcastRepository {
 
@@ -77,30 +80,45 @@ public class BroadcastRepository {
             ps.setString(5, toJsonArray(broadcast.getTargetIds()));
             ps.setString(6, broadcast.getPriority());
             ps.setString(7, broadcast.getCategory());
-            ps.setObject(8, broadcast.getScheduledAt());
-            ps.setObject(9, broadcast.getExpiresAt());
+
+            if (broadcast.getScheduledAt() != null) {
+                ps.setObject(8, broadcast.getScheduledAt().toOffsetDateTime());
+            } else {
+                ps.setNull(8, Types.TIMESTAMP_WITH_TIMEZONE);
+            }
+            if (broadcast.getExpiresAt() != null) {
+                ps.setObject(9, broadcast.getExpiresAt().toOffsetDateTime());
+            } else {
+                ps.setNull(9, Types.TIMESTAMP_WITH_TIMEZONE);
+            }
+
             ps.setString(10, broadcast.getStatus() != null ? broadcast.getStatus() : BroadcastStatus.ACTIVE.name());
             return ps;
         }, keyHolder);
+        
+        // START OF FIX: Handle both PostgreSQL (lowercase "id") and H2 (uppercase "ID") generated keys
         if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
             Map<String, Object> keys = keyHolder.getKeyList().get(0);
-            Number id = (Number) keys.get("ID");
+            Number id = (Number) keys.get("id"); // Check for Postgres's lowercase 'id' first
+            if (id == null) {
+                id = (Number) keys.get("ID"); // Fallback to H2's uppercase 'ID'
+            }
             if (id != null) {
                 broadcast.setId(id.longValue());
             } else {
-                throw new RuntimeException("Generated key 'ID' not found in the returned keys.");
+                throw new RuntimeException("Generated key 'id' not found in the returned keys.");
             }
         } else if (keyHolder.getKey() != null) {
             broadcast.setId(keyHolder.getKey().longValue());
         } else {
             throw new RuntimeException("Failed to retrieve generated key for broadcast.");
         }
+        // END OF FIX
         
         return broadcast;
     }
 
-    // START OF FIX: Add a dedicated update method.
-    // The previous implementation incorrectly used the `save` (INSERT) method for updates.
+    // ... (rest of the file is unchanged)
     public BroadcastMessage update(BroadcastMessage broadcast) {
         String sql = """
             UPDATE broadcast_messages SET
@@ -125,14 +143,13 @@ public class BroadcastRepository {
             toJsonArray(broadcast.getTargetIds()),
             broadcast.getPriority(),
             broadcast.getCategory(),
-            broadcast.getScheduledAt(),
-            broadcast.getExpiresAt(),
+            broadcast.getScheduledAt() != null ? broadcast.getScheduledAt().toOffsetDateTime() : null,
+            broadcast.getExpiresAt() != null ? broadcast.getExpiresAt().toOffsetDateTime() : null,
             broadcast.getStatus(),
             broadcast.getId()
         );
         return broadcast;
     }
-    // END OF FIX
 
     public Optional<BroadcastMessage> findById(Long id) {
         String sql = "SELECT * FROM broadcast_messages WHERE id = ?";
@@ -220,12 +237,12 @@ public class BroadcastRepository {
             LIMIT ? 
             FOR UPDATE SKIP LOCKED
             """;
-        return jdbcTemplate.query(sql, broadcastRowMapper, now, limit);
+        return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime(), limit);
     }
 
     public List<BroadcastMessage> findExpiredBroadcasts(ZonedDateTime now) {
         String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at <= ?";
-        return jdbcTemplate.query(sql, broadcastRowMapper, now);
+        return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime());
     }
 
     public int updateStatus(Long broadcastId, String status) {

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.Optional;
 import java.time.ZoneOffset;
@@ -15,7 +16,6 @@ import java.time.ZoneOffset;
 public class UserSessionRepository {
 
     private final JdbcTemplate jdbcTemplate;
-
     public UserSessionRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -59,13 +59,17 @@ public class UserSessionRepository {
                 INSERT (user_id, session_id, pod_id, connection_status, connected_at, last_heartbeat)
                 VALUES (s.user_id, s.session_id, s.pod_id, s.connection_status, s.connected_at, s.last_heartbeat)
             """;
+        
+        // START OF FIX: Convert ZonedDateTime to OffsetDateTime for JDBC compatibility
         jdbcTemplate.update(sql,
                 session.getUserId(),
                 session.getSessionId(),
                 session.getPodId(),
                 session.getConnectionStatus(),
-                session.getConnectedAt(),
-                session.getLastHeartbeat());
+                session.getConnectedAt().toOffsetDateTime(),
+                session.getLastHeartbeat().toOffsetDateTime());
+        // END OF FIX
+        
         return session;
     }
 
@@ -113,13 +117,14 @@ public class UserSessionRepository {
 
     public void batchInsert(List<UserSession> sessions) {
         String sql = "INSERT INTO user_sessions (user_id, session_id, pod_id, connection_status, connected_at, last_heartbeat) VALUES (?, ?, ?, ?, ?, ?)";
+        // NOTE: This method was already correct because it converted to java.sql.Timestamp, which is fine. No changes needed here.
         jdbcTemplate.batchUpdate(sql, sessions, sessions.size(), (ps, session) -> {
             ps.setString(1, session.getUserId());
             ps.setString(2, session.getSessionId());
             ps.setString(3, session.getPodId());
             ps.setString(4, session.getConnectionStatus());
-            ps.setTimestamp(5, java.sql.Timestamp.from(session.getConnectedAt().toInstant()));
-            ps.setTimestamp(6, java.sql.Timestamp.from(session.getLastHeartbeat().toInstant()));
+            ps.setTimestamp(5, Timestamp.from(session.getConnectedAt().toInstant()));
+            ps.setTimestamp(6, Timestamp.from(session.getLastHeartbeat().toInstant()));
         });
     }
 }

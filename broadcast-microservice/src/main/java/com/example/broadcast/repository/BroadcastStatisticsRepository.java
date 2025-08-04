@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
+import java.sql.Types;
 import java.util.List;
 import java.util.Optional;
 import java.time.ZoneOffset;
@@ -15,7 +16,6 @@ public class BroadcastStatisticsRepository {
 
     private final JdbcTemplate jdbcTemplate;
     private final RowMapper<BroadcastStatistics> rowMapper;
-
     public BroadcastStatisticsRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
         this.rowMapper = (rs, rowNum) -> BroadcastStatistics.builder()
@@ -30,16 +30,20 @@ public class BroadcastStatisticsRepository {
                 .build();
     }
 
-    // START OF FIX: Changed from a simple INSERT to a MERGE (upsert) statement.
-    // This makes the operation idempotent and works with the new UNIQUE constraint
-    // on the broadcast_id column, preventing duplicate statistic entries.
     public void save(BroadcastStatistics stats) {
+        // START OF FIX: Replaced H2-specific MERGE with PostgreSQL-compatible INSERT ON CONFLICT
         String sql = """
-            MERGE INTO broadcast_statistics (broadcast_id, total_targeted, total_delivered, total_read, total_failed, calculated_at)
-            KEY(broadcast_id)
+            INSERT INTO broadcast_statistics (broadcast_id, total_targeted, total_delivered, total_read, total_failed, calculated_at)
             VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (broadcast_id) DO UPDATE SET
+                total_targeted = EXCLUDED.total_targeted,
+                total_delivered = EXCLUDED.total_delivered,
+                total_read = EXCLUDED.total_read,
+                total_failed = EXCLUDED.total_failed,
+                calculated_at = EXCLUDED.calculated_at
         """;
-    
+        // END OF FIX
+
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(sql);
             ps.setLong(1, stats.getBroadcastId());
@@ -47,11 +51,16 @@ public class BroadcastStatisticsRepository {
             ps.setInt(3, stats.getTotalDelivered());
             ps.setInt(4, stats.getTotalRead());
             ps.setInt(5, stats.getTotalFailed());
-            ps.setObject(6, stats.getCalculatedAt());
+
+            if (stats.getCalculatedAt() != null) {
+                ps.setObject(6, stats.getCalculatedAt().toOffsetDateTime());
+            } else {
+                ps.setNull(6, Types.TIMESTAMP_WITH_TIMEZONE);
+            }
+
             return ps;
         });
     }
-    // END OF FIX
 
     public Optional<BroadcastStatistics> findByBroadcastId(Long broadcastId) {
         String sql = "SELECT * FROM broadcast_statistics WHERE broadcast_id = ?";
@@ -59,21 +68,11 @@ public class BroadcastStatisticsRepository {
         return results.stream().findFirst();
     }
 
-    /**
-     * **NEW:** Atomically increments the total_delivered count for a broadcast.
-     * @param broadcastId The ID of the broadcast to update.
-     * @return The number of rows affected.
-     */
     public int incrementDeliveredCount(Long broadcastId) {
         String sql = "UPDATE broadcast_statistics SET total_delivered = total_delivered + 1, calculated_at = CURRENT_TIMESTAMP WHERE broadcast_id = ?";
         return jdbcTemplate.update(sql, broadcastId);
     }
 
-    /**
-     * **NEW:** Atomically increments the total_read count for a broadcast.
-     * @param broadcastId The ID of the broadcast to update.
-     * @return The number of rows affected.
-     */
     public int incrementReadCount(Long broadcastId) {
         String sql = "UPDATE broadcast_statistics SET total_read = total_read + 1, calculated_at = CURRENT_TIMESTAMP WHERE broadcast_id = ?";
         return jdbcTemplate.update(sql, broadcastId);

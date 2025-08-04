@@ -27,6 +27,8 @@ public class DltRepository {
 
     public void save(DltMessage dltMessage) {
         String sql = "INSERT INTO dlt_messages (id, original_topic, original_partition, original_offset, exception_message, original_message_payload, failed_at) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        
+        // START OF FIX: Convert ZonedDateTime
         jdbcTemplate.update(sql,
                 dltMessage.getId(),
                 dltMessage.getOriginalTopic(),
@@ -34,7 +36,8 @@ public class DltRepository {
                 dltMessage.getOriginalOffset(),
                 dltMessage.getExceptionMessage(),
                 dltMessage.getOriginalMessagePayload(),
-                dltMessage.getFailedAt());
+                dltMessage.getFailedAt().toOffsetDateTime());
+        // END OF FIX
     }
 
     public List<DltMessage> findAll() {
@@ -42,8 +45,6 @@ public class DltRepository {
         return jdbcTemplate.query(sql, rowMapper);
     }
 
-    // FIX: Changed the return type to Optional<DltMessage> to avoid exceptions on not found.
-    // This provides a safer way for the service layer to handle cases where the message might have been processed by another instance.
     public Optional<DltMessage> findById(String id) {
         String sql = "SELECT * FROM dlt_messages WHERE id = ?";
         return jdbcTemplate.query(sql, rowMapper, id).stream().findFirst();

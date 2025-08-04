@@ -17,7 +17,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
-@Profile("!redis") //TODO: Gemfire check
+// START OF CHANGE: This implementation is now only active when 'redis' profile is NOT set
+@Profile("!redis")
+// END OF CHANGE
 @RequiredArgsConstructor
 @Slf4j
 public class DefaultCacheService implements CacheService {
@@ -27,7 +29,6 @@ public class DefaultCacheService implements CacheService {
     private final Cache<String, List<PendingEventInfo>> pendingEventsCache;
     private final Cache<String, UserSessionInfo> userSessionCache;
     private final Cache<String, BroadcastStatsInfo> broadcastStatsCache;
-    
     private final ConcurrentHashMap<String, Boolean> onlineUsers = new ConcurrentHashMap<>();
 
     @Override

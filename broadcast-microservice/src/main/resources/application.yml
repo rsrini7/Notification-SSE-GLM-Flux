@@ -9,17 +9,23 @@ server:
     enabled: true
     key-store-type: PKCS12
     key-store: "classpath:keystore.p12"
-    key-store-password: "password"     
-    key-alias: "netty"                
-
+    key-store-password: "password"
+    key-alias: "netty"
 
 spring:
   application:
     name: broadcast-microservice
+  # START OF CHANGE: Define a profile group
+  # This tells Spring that whenever the 'redis' profile is active,
+  # the 'dev-pg' profile should also be activated automatically.
+  profiles:
+    group:
+      "redis": "dev-pg"
+  # END OF CHANGE
   threads:
     virtual:
       enabled: true
-  
+
   # h2 Database Configuration (default)
   datasource:
     url: jdbc:h2:mem:broadcastdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
@@ -30,14 +36,19 @@ spring:
     console:
       enabled: true
       path: /h2-console
-  
+
   # SQL Initialization for schema and data
   sql:
     init:
       mode: always
       schema-locations: classpath:sql/schema.sql
       data-locations: classpath:sql/data.sql
-  
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
   # Kafka Configuration
   kafka:
     bootstrap-servers: localhost:9092
@@ -61,7 +72,7 @@ spring:
     listener:
       ack-mode: MANUAL_IMMEDIATE
       concurrency: 3
-  
+
   # Jackson Configuration
   jackson:
     serialization:
@@ -79,10 +90,10 @@ management:
       show-details: always
       probes:
         enabled: true
-      validate-group-membership: false # Allows the app to start even if Kafka isn't available
+      validate-group-membership: false
       group:
         readiness:
-          include: db,kafka
+          include: db,kafka,redis
         liveness:
           include: ping
 
@@ -105,14 +116,14 @@ resilience4j:
   ratelimiter:
     instances:
       createBroadcastLimiter:
-        limitForPeriod: 10               # Allow 10 requests...
-        limitRefreshPeriod: 1m           # ...per 1 minute window.
-        timeoutDuration: 0               # Don't wait for permission, fail immediately.
-        registerHealthIndicator: true    # Expose status in the health endpoint.
+        limitForPeriod: 10
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0
+        registerHealthIndicator: true
       sseConnectLimiter:
-        limitForPeriod: 15              # Allow 15 new connection attempts...
-        limitRefreshPeriod: 1m          # ...per 1 minute window.
-        timeoutDuration: 2s              # Fail after 2 seconds if the limit is exceeded.
+        limitForPeriod: 15
+        limitRefreshPeriod: 1m
+        timeoutDuration: 2s
         registerHealthIndicator: true
   circuitbreaker:
     instances:
@@ -134,9 +145,9 @@ resilience4j:
 broadcast:
   # SSE Configuration
   sse:
-    timeout: 300000  # 5 minutes
-    heartbeat-interval: 30000  # 30 seconds
-    
+    timeout: 300000
+    heartbeat-interval: 30000
+
   # Caffeine Cache Configuration
   cache:
     user-connections:
@@ -154,12 +165,12 @@ broadcast:
     broadcast-stats:
       maximum-size: 1000
       expire-after-write: 5m
-      
+
   # Database Configuration
   db:
     batch-size: 1000
     connection-pool-size: 50
-    
+
   # Kafka Configuration
   kafka:
     topic:
@@ -173,7 +184,7 @@ broadcast:
       backoff-delay: 1000
 
 ---
-# NEW: PostgreSQL-specific profile
+# PostgreSQL-specific profile
 spring:
   config:
     activate:
@@ -183,9 +194,17 @@ spring:
     driver-class-name: org.postgresql.Driver
     username: user
     password: password
-  # For a persistent DB, you usually want more control over schema creation.
-  # 'none' prevents Spring from running schema.sql automatically.
-  # Use a migration tool like Flyway for production.
   sql:
     init:
       mode: never
+
+---
+# Redis-specific profile
+spring:
+  config:
+    activate:
+      on-profile: "redis"
+  data:
+    redis:
+      host: localhost
+      port: 6379
