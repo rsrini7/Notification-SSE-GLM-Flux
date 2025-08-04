@@ -4,7 +4,9 @@ import com.example.broadcast.model.UserSession;
 import com.example.broadcast.repository.UserSessionRepository;
 import com.example.broadcast.service.CacheService;
 import com.example.broadcast.service.SseService;
-import com.example.broadcast.service.BroadcastService;
+// START OF FIX: Remove unused import for BroadcastService
+// import com.example.broadcast.service.BroadcastService;
+// END OF FIX
 import com.example.broadcast.service.UserMessageService;
 import com.example.broadcast.util.Constants.BroadcastStatus;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
@@ -33,7 +35,9 @@ public class SseController {
     private final SseService sseService;
     private final UserSessionRepository userSessionRepository;
     private final UserMessageService userMessageService;
-    private final BroadcastService broadcastService;
+    // START OF FIX: Remove unused BroadcastService dependency
+    // private final BroadcastService broadcastService;
+    // END OF FIX
     private final CacheService cacheService;
     
     @Value("${broadcast.pod.id:pod-local}")
@@ -112,8 +116,9 @@ public class SseController {
     public ResponseEntity<String> markMessageAsRead(
             @RequestParam String userId,
             @RequestParam Long messageId) {
+        // START OF FIX: Make a single, atomic call to the correct service.
         userMessageService.markMessageAsRead(userId, messageId);
-        broadcastService.markMessageAsReadAndPublishEvent(userId, messageId);
+        // END OF FIX
         return ResponseEntity.ok("Message marked as read");
     }
 }

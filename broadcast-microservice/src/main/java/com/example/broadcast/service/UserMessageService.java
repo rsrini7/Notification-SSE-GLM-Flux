@@ -21,6 +21,9 @@ public class UserMessageService {
 
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
+    // START OF FIX: Inject the MessageStatusService to handle event publishing
+    private final MessageStatusService messageStatusService;
+    // END OF FIX
 
     public List<UserBroadcastResponse> getUserMessages(String userId) {
         log.info("Getting messages for user: {}", userId);
@@ -32,6 +35,7 @@ public class UserMessageService {
         return userBroadcastRepository.findUserMessagesByUserId(userId);
     }
 
+    // START OF FIX: Consolidate all "mark as read" logic into this single transactional method.
     @Transactional
     public void markMessageAsRead(String userId, Long messageId) {
         log.info("Attempting to mark message as read: user={}, message={}", userId, messageId);
@@ -39,19 +43,24 @@ public class UserMessageService {
                 .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
 
         if (!userId.equals(userMessage.getUserId())) {
+            // Although this check is good, throwing ResourceNotFound might be misleading.
+            // An alternative would be an AccessDeniedException or similar. For now, this is fine.
             throw new ResourceNotFoundException("Message does not belong to user: " + userId);
         }
 
-        // START OF FIX: Check the number of rows affected by the atomic update.
-        // This ensures that the statistics are only incremented once.
+        // Use an atomic query to update the status from UNREAD to READ.
+        // This returns the number of rows affected (0 if it was already READ, 1 if the update succeeded).
         int updatedRows = userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
 
+        // Only if the status was successfully changed, increment stats and publish the event.
         if (updatedRows > 0) {
             broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
-            log.info("Successfully marked message {} as read for user {}", messageId, userId);
+            // This is the crucial step: publish the event within the same transaction.
+            messageStatusService.publishReadEvent(userMessage.getBroadcastId(), userId);
+            log.info("Successfully marked message {} as read for user {} and published READ event.", messageId, userId);
         } else {
             log.warn("Message {} was already read for user {}. No action taken.", messageId, userId);
         }
-        // END OF FIX
     }
+    // END OF FIX
 }

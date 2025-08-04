@@ -45,7 +45,9 @@ public class BroadcastService {
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
     private final TestingConfigurationService testingConfigService;
-    private final MessageStatusService messageStatusService;
+    // START OF FIX: Remove MessageStatusService dependency, its responsibility is now in UserMessageService
+    // private final MessageStatusService messageStatusService;
+    // END OF FIX
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
@@ -139,6 +141,8 @@ public class BroadcastService {
         return buildBroadcastResponse(broadcast, totalTargeted);
     }
     
+    // START OF FIX: Remove this redundant and problematic method.
+    /*
     @Transactional
     public void markMessageAsReadAndPublishEvent(String userId, Long messageId) {
         UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
@@ -148,6 +152,8 @@ public class BroadcastService {
             messageStatusService.publishReadEvent(userMessage.getBroadcastId(), userId);
         }
     }
+    */
+    // END OF FIX
 
     private void saveToOutbox(MessageDeliveryEvent payload) {
         try {
