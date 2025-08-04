@@ -24,7 +24,6 @@ export default function () {
   
   console.log(`[VU ${__VU}] Attempting to connect as ${userID}...`);
 
-  // START OF FIX: Remove the Promise wrapper and use a direct, blocking pattern.
   // The sse.open function is blocking. It will not return until the code inside this
   // callback, including the sleep(), is finished. This keeps the VU alive.
   const response = sse.open(sseUrl, {}, function (client) {
@@ -50,7 +49,6 @@ export default function () {
     client.close();
     console.log(`[VU ${__VU}] (${userID}): SSE connection closing.`);
   });
-  // END OF FIX
   
   check(response, { "Initial HTTP connection request was successful": (r) => r && r.status === 200 });
 

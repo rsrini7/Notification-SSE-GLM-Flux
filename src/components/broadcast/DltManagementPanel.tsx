@@ -72,7 +72,6 @@ const DltManagementPanel: React.FC = () => {
         }
     };
 
-    // START OF CHANGE: New handler for the "Purge All" action
     const handlePurgeAll = async () => {
         if (!window.confirm(`Are you sure you want to permanently purge all ${dltMessages.length} messages from the DLT? This action cannot be undone.`)) {
             return;
@@ -93,7 +92,6 @@ const DltManagementPanel: React.FC = () => {
             });
         }
     };
-    // END OF CHANGE
     
     const formatJsonPayload = (payload: string) => {
         try {

@@ -56,9 +56,7 @@ public class SseService {
     private long heartbeatInterval;
     
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
-    // START OF FIX: Change data structure to support multiple sessions per user
     private final Map<String, Set<String>> userSessionMap = new ConcurrentHashMap<>();
-    // END OF FIX
 
     private Disposable serverHeartbeatSubscription;
     
@@ -110,7 +108,6 @@ public class SseService {
                         sink.tryEmitComplete();
                         log.info("Removed stale in-memory sink for session: {}", staleSession.getSessionId());
                     }
-                    // START OF FIX: Correctly remove from the new data structure
                     Set<String> sessions = userSessionMap.get(staleSession.getUserId());
                     if (sessions != null) {
                         sessions.remove(staleSession.getSessionId());
@@ -118,7 +115,6 @@ public class SseService {
                             userSessionMap.remove(staleSession.getUserId());
                         }
                     }
-                    // END OF FIX
                 }
             }
             
@@ -146,9 +142,7 @@ public class SseService {
         Sinks.Many<ServerSentEvent<String>> sink = Sinks.many().multicast().onBackpressureBuffer();
         
         userSinks.put(sessionId, sink);
-        // START OF FIX: Add the new session to the user's set of sessions
         userSessionMap.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
-        // END OF FIX
 
         sendPendingMessages(userId);
         
@@ -170,7 +164,6 @@ public class SseService {
 
     @Transactional
     public void removeEventStream(String userId, String sessionId) {
-        // START OF FIX: Correctly remove a single session from the user's set
         Set<String> sessions = userSessionMap.get(userId);
         boolean wasRemoved = false;
         if (sessions != null) {
@@ -179,7 +172,6 @@ public class SseService {
                 userSessionMap.remove(userId);
             }
         }
-        // END OF FIX
         
         // Only proceed with DB/cache cleanup if the session was actually found and removed from the map
         if (wasRemoved) {
@@ -220,7 +212,6 @@ public class SseService {
     }
 
     public void sendEvent(String userId, ServerSentEvent<String> event) {
-        // START OF FIX: Iterate over ALL sessions for the given user
         Set<String> sessionIds = userSessionMap.get(userId);
         if (sessionIds != null && !sessionIds.isEmpty()) {
             for (String sessionId : sessionIds) {
@@ -235,7 +226,6 @@ public class SseService {
                 }
             }
         }
-        // END OF FIX
     }
     
     // Helper method to avoid transactional conflicts
@@ -325,9 +315,7 @@ public class SseService {
     }
 
     public boolean isUserConnected(String userId) {
-        // START OF FIX: Check if the user has any active sessions
         Set<String> sessions = userSessionMap.get(userId);
         return sessions != null && !sessions.isEmpty();
-        // END OF FIX
     }
 }

@@ -52,10 +52,8 @@ public class DltRepository {
         jdbcTemplate.update(sql, id);
     }
     
-    // START OF CHANGE: Add a method to delete all records.
     public void deleteAll() {
         String sql = "DELETE FROM dlt_messages";
         jdbcTemplate.update(sql);
     }
-    // END OF CHANGE
 }

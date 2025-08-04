@@ -16,9 +16,7 @@ import java.util.Optional;
 public class UserPreferencesRepository {
 
     private final JdbcTemplate jdbcTemplate;
-    // START OF CHANGE: Define a safe batch size for IN clauses
     private static final int BATCH_SIZE = 900;
-    // END OF CHANGE
 
     public UserPreferencesRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -51,7 +49,6 @@ public class UserPreferencesRepository {
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
-    // START OF CHANGE: Implement batching for large IN clauses
     public List<UserPreferences> findByUserIdIn(List<String> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return List.of();
@@ -75,7 +72,6 @@ public class UserPreferencesRepository {
 
         return allPreferences;
     }
-    // END OF CHANGE
 
     public UserPreferences save(UserPreferences preferences) {
         String sql = """

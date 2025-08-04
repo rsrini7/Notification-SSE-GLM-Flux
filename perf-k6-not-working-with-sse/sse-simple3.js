@@ -63,9 +63,7 @@ function createBroadcast() {
 export default function () {
   const user = users[__VU % users.length];
   const userID = user.username;
-  // START OF FIX: Replace __ITER__ with Date.now() for a unique session ID
   const sessionID = `k6-session-${__VU}-${Date.now()}`;
-  // END OF FIX
   const sseUrl = `${BASE_URL}/api/sse/connect?userId=${userID}&sessionId=${sessionID}`;
 
   const response = sse.open(sseUrl, {}, function (client) {

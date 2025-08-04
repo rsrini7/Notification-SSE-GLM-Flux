@@ -20,7 +20,6 @@ const users = new SharedArray('users', function () {
 });
 
 export const options = {
-  // START OF CHANGE: Define separate scenarios for broadcasting and listening
   scenarios: {
     // Scenario for the users who will connect and listen for messages
     listeners: {
@@ -42,7 +41,6 @@ export const options = {
       exec: 'broadcast', // This scenario will execute the 'broadcast' function
     },
   },
-  // END OF CHANGE
   thresholds: {
     'http_req_failed': ['rate<0.01'],
     'http_req_duration': ['p(95)<1000'],

@@ -66,9 +66,7 @@ public class KafkaConsumerService {
 
         } catch (Exception e) {
             log.error("Failed to process message from topic {}. Root cause: {}", topic, e.getMessage());
-            // START OF CHANGE: Throw our new custom exception, passing the failed event.
             throw new MessageProcessingException("Failed to process message", e, event);
-            // END OF CHANGE
         }
     }
 

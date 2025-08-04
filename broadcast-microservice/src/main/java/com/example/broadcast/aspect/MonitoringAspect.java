@@ -94,13 +94,11 @@ public class MonitoringAspect {
             metricsCollector.recordTimer("broadcast.database.latency", duration, "class", className, "method", methodName, "status", "success");
             metricsCollector.incrementCounter("broadcast.database.calls", "class", className, "method", methodName, "status", "success");
             
-            // START OF FIX: Reduce log verbosity for frequent polling operations
             if ("OutboxRepository".equals(className) && "findAndLockUnprocessedEvents".equals(methodName)) {
                 log.trace("{}.{} completed successfully in {}ms", className, methodName, duration);
             } else {
                 log.debug("{}.{} completed successfully in {}ms", className, methodName, duration);
             }
-            // END OF FIX
 
             return result;
         } catch (Exception e) {

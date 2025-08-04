@@ -57,11 +57,9 @@ public class DltController {
         }
     }
     
-    // START OF CHANGE: Add new endpoint to purge all DLT messages
     @DeleteMapping("/purge-all")
     public ResponseEntity<Void> purgeAllMessages() {
         dltService.purgeAllMessages();
         return ResponseEntity.noContent().build();
     }
-    // END OF CHANGE
 }

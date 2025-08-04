@@ -2,9 +2,6 @@ package com.example.broadcast.controller;
 
 import com.example.broadcast.dto.UserBroadcastResponse;
 import com.example.broadcast.dto.MessageReadRequest;
-// START OF FIX: Remove unused import
-// import com.example.broadcast.service.BroadcastService;
-// END OF FIX
 import com.example.broadcast.service.UserMessageService;
 import com.example.broadcast.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -22,9 +19,7 @@ import java.util.List;
 public class UserController {
 
     private final UserMessageService userMessageService;
-    // START OF FIX: Change BroadcastService to UserService for fetching all user IDs
     private final UserService userService;
-    // END OF FIX
 
     @GetMapping("/messages")
     public ResponseEntity<List<UserBroadcastResponse>> getUserMessages(@RequestParam String userId) {
@@ -45,9 +40,7 @@ public class UserController {
     @PostMapping("/messages/read")
     public ResponseEntity<Void> markMessageAsRead(@Valid @RequestBody MessageReadRequest request) {
         log.info("Marking message as read: user={}, message={}", request.getUserId(), request.getMessageId());
-        // START OF FIX: Make a single, atomic call to the correct service.
         userMessageService.markMessageAsRead(request.getUserId(), request.getMessageId());
-        // END OF FIX
         return ResponseEntity.ok().build();
     }
 
@@ -69,9 +62,7 @@ public class UserController {
     @GetMapping("/all")
     public ResponseEntity<List<String>> getAllUserIds() {
         log.info("Retrieving all unique user IDs.");
-        // START OF FIX: Use the correct service
         List<String> userIds = userService.getAllUserIds();
-        // END OF FIX
         return ResponseEntity.ok(userIds);
     }
 }

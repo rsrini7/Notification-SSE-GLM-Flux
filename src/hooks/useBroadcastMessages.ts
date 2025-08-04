@@ -131,7 +131,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     onError,
   });
   
-  // START OF CHANGE: Implement Optimistic UI for markAsRead
   const markAsRead = useCallback(async (messageId: number) => {
     // Store the original state in case we need to revert
     const originalMessages = messages;
@@ -156,7 +155,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
      });
     }
   }, [sseConnection, toast, userId, messages]);
-  // END OF CHANGE
   
   const stats = useMemo(() => {
     const total = messages.length;

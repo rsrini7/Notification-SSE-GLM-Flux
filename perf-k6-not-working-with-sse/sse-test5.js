@@ -98,10 +98,8 @@ export function listen() {
       console.error(`[Listener VU ${__VU}] (${userID}): SSE Error: ${e.error()}`);
     });
 
-    // START OF FIX: Use a shorter sleep to keep the connection alive without blocking the scenario stages.
     // This sleep will be interrupted when client.close() is called in the 'event' handler.
     sleep(45); // This value should be long enough to cover the active listening stage.
-    // END OF FIX
     
     client.close();
   });

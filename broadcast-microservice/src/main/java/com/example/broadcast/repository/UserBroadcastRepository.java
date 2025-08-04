@@ -40,6 +40,7 @@ public class UserBroadcastRepository {
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
             .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
             .build();
+            
     private final RowMapper<UserBroadcastResponse> userBroadcastResponseRowMapper = (rs, rowNum) -> UserBroadcastResponse.builder()
             .id(rs.getLong("id"))
             .broadcastId(rs.getLong("broadcast_id"))
@@ -58,6 +59,7 @@ public class UserBroadcastRepository {
                     rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .expiresAt(rs.getTimestamp("expires_at") != null ? rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .build();
+
     public UserBroadcastMessage save(UserBroadcastMessage userBroadcast) {
         String sql = """
             INSERT INTO user_broadcast_messages 
@@ -210,7 +212,6 @@ public class UserBroadcastRepository {
         });
     }
 
-    // START OF FIX: Add a method to batch update the status of pending messages for a broadcast.
     public int updatePendingStatusesByBroadcastId(Long broadcastId, String newStatus) {
         String sql = """
             UPDATE user_broadcast_messages 
@@ -219,5 +220,5 @@ public class UserBroadcastRepository {
         """;
         return jdbcTemplate.update(sql, newStatus, broadcastId);
     }
-    // END OF FIX
+
 }

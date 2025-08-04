@@ -35,9 +35,7 @@ export const options = {
       executor: 'per-vu-iterations',
       vus: 1,
       iterations: 1,
-      // START OF FIX: Delay the broadcaster until after all listeners have connected.
       startTime: '20s', 
-      // END OF FIX
       exec: 'broadcast',
     },
   },

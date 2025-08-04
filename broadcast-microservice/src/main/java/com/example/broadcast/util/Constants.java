@@ -18,9 +18,7 @@ public final class Constants {
         PENDING,
         DELIVERED,
         FAILED,
-        // START OF FIX: Add a terminal status for messages that were never delivered.
         SUPERSEDED
-        // END OF FIX
     }
 
     public enum ReadStatus {

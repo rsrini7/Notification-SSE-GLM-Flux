@@ -52,7 +52,6 @@ public class DltService {
             @Header(KafkaHeaders.DLT_ORIGINAL_TOPIC) String originalTopic,
             @Header(KafkaHeaders.DLT_ORIGINAL_PARTITION) int originalPartition,
             @Header(KafkaHeaders.DLT_ORIGINAL_OFFSET) long originalOffset,
-            // START OF CHANGE: We now also receive the full exception object
             @Header(KafkaHeaders.DLT_EXCEPTION_FQCN) String exceptionFqcn,
             @Header(KafkaHeaders.DLT_EXCEPTION_MESSAGE) String exceptionMessage,
             @Header(KafkaHeaders.DLT_EXCEPTION_STACKTRACE) String exceptionStacktrace) {
@@ -60,7 +59,6 @@ public class DltService {
         String payloadString = new String(payload, StandardCharsets.UTF_8);
         String id = UUID.randomUUID().toString();
         
-        // START OF CHANGE: Build a more informative title
         String displayTitle = "Failed to process message"; // Default title
         try {
             MessageDeliveryEvent event = objectMapper.readValue(payloadString, MessageDeliveryEvent.class);
@@ -72,7 +70,6 @@ public class DltService {
             log.warn("Could not parse DLT message payload to extract details for title.");
             displayTitle = exceptionMessage; // Fallback to the raw exception message
         }
-        // END OF CHANGE
         
         log.error("DLT Received Message. Saving to database with ID: {}, From Topic: {}, Reason: {}", id, originalTopic, displayTitle);
         DltMessage dltMessage = DltMessage.builder()

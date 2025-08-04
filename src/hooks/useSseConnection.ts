@@ -101,7 +101,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     disconnectRef.current = disconnect;
   }, [disconnect]);
 
-  // START OF CHANGE: Add Jitter to Reconnect Logic
   const scheduleReconnect = useCallback(() => {
     if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
       // Calculate exponential backoff
@@ -118,7 +117,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       setState(prev => ({ ...prev, error: 'Max reconnection attempts reached.', connecting: false }));
     }
   }, [userId]);
-  // END OF CHANGE
 
   const connect = useCallback((isRetry = false) => {
     if (eventSourceRef.current) eventSourceRef.current.close();

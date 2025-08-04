@@ -51,18 +51,15 @@ public class BroadcastTargetingService {
             return Collections.emptyList();
         }
 
-        // START OF FIX: Solve N+1 query problem
         // Fetch all preferences in a single batch query and store in a map for fast lookup.
         Map<String, UserPreferences> preferencesMap = userPreferencesRepository.findByUserIdIn(targetUserIds)
                 .stream()
                 .collect(Collectors.toMap(UserPreferences::getUserId, pref -> pref));
-        // END OF FIX
 
         List<UserBroadcastMessage> userMessages = targetUserIds.stream()
             .filter(userId -> {
-                // START OF FIX: Look up preferences from the in-memory map instead of hitting the DB.
                 UserPreferences preferences = preferencesMap.get(userId);
-                // END OF FIX
+
                 boolean shouldDeliver = shouldDeliverToUser(preferences);
                 if (!shouldDeliver) {
                     log.debug("Broadcast ID {}: Skipping user {} due to their notification preferences.", broadcast.getId(), userId);

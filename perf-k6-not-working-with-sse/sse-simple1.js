@@ -24,7 +24,6 @@ export default function () {
   
   console.log(`VU ${__VU}: Attempting to connect as ${userID}...`);
 
-  // START OF FIX: Wrap the SSE logic in a promise to handle its async nature correctly.
   const ssePromise = new Promise((resolve, reject) => {
     const response = sse.open(sseUrl, {}, function (client) {
       let connected = false;
@@ -61,13 +60,11 @@ export default function () {
     }
   });
 
-  // This will now wait for the promise to resolve or reject.
   try {
     const result = ssePromise; // In k6, promises are implicitly awaited at the end of the iteration.
   } catch (e) {
     console.error(`VU ${__VU}: Promise rejected: ${e}`);
   }
-  // END OF FIX
 }
 
 export function handleSummary(data) {

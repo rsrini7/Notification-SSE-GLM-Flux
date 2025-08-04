@@ -11,12 +11,10 @@ const sseTimeToFirstEvent = new Trend('sse_time_to_first_event', true);
 const sseEventParseErrors = new Counter('sse_event_parse_errors');
 const sseEventParsedSuccessfully = new Rate('sse_event_parsed_successfully');
 
-// START OF CHANGE: Define a list of known user IDs for the test
 const userIDs = [
     'user-001', 'user-002', 'user-003', 'user-004', 'user-005', 
     'user-006', 'user-007', 'user-008', 'user-009', 'user-010'
 ];
-// END OF CHANGE
 
 export const options = {
   stages: [
@@ -59,13 +57,11 @@ export default function () {
             console.log(`VU ${__VU} (${userID}): SSE connection opened.`);
             startTime = Date.now();
 
-            // START OF CHANGE: Simulate user fetching existing messages after connecting
             group('API: Get User Messages', function() {
                 const messagesUrl = `${BASE_URL}/api/user/messages?userId=${userID}`;
                 const res = http.get(messagesUrl);
                 check(res, { 'GET /api/user/messages status is 200': (r) => r.status === 200 });
             });
-            // END OF CHANGE
         });
 
         client.on('event', function (event) {
@@ -82,7 +78,6 @@ export default function () {
                     console.log(`VU ${__VU} (${userID}): Received SSE event type=${event.type}, parsed data=${parsedData}`);
                     sseEventParsedSuccessfully.add(true);
 
-                    // START OF CHANGE: Simulate user reading a message
                     if (parsedData.type === 'MESSAGE') {
                         console.log(`VU ${__VU} (${userID}): Received a broadcast message.`);
                         // Simulate a 50% chance the user reads the message
@@ -98,7 +93,6 @@ export default function () {
                             });
                         }
                     }
-                    // END OF CHANGE
 
                 } catch (e) {
                     sseEventParseErrors.add(1);

@@ -163,10 +163,8 @@ public class BroadcastService {
         broadcast.setStatus(BroadcastStatus.CANCELLED.name());
         broadcastRepository.update(broadcast);
         
-        // START OF FIX: Batch update all PENDING user messages to SUPERSEDED.
         int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(id, DeliveryStatus.SUPERSEDED.name());
         log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
-        // END OF FIX
 
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
         for (UserBroadcastMessage userMessage : userBroadcasts) {
@@ -193,10 +191,8 @@ public class BroadcastService {
             broadcast.setStatus(BroadcastStatus.EXPIRED.name());
             broadcastRepository.update(broadcast);
 
-            // START OF FIX: Batch update all PENDING user messages to SUPERSEDED.
             int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(broadcastId, DeliveryStatus.SUPERSEDED.name());
             log.info("Updated {} pending user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
-            // END OF FIX
 
             log.info("Broadcast expired: {}", broadcastId);
             List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);

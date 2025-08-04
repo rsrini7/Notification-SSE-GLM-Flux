@@ -102,11 +102,6 @@ export function listen() {
     client.on('error', (e) => {
       console.error(`[Listener VU ${__VU}] (${userID}): SSE Error: ${e.error()}`);
     });
-
-    // START OF FIX: Remove the premature client.close() call from here.
-    // The closing logic is now correctly handled at the end of the on('open') block.
-    // client.close(); 
-    // END OF FIX
   });
 
   check(response, { "SSE Connection successful": (r) => r && r.status === 200 });
