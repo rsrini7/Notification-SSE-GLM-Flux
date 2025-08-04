@@ -7,6 +7,7 @@ import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.DltRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
+import com.example.broadcast.util.Constants;
 import com.example.broadcast.util.Constants.DeliveryStatus;
 import com.example.broadcast.util.Constants.ReadStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -20,7 +21,6 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.example.broadcast.util.Constants;
 
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
@@ -57,7 +57,6 @@ public class DltService {
         String payloadString = new String(payload, StandardCharsets.UTF_8);
         String id = UUID.randomUUID().toString();
         log.error("DLT Received Message. Saving to database with ID: {}, From Topic: {}, Reason: {}", id, originalTopic, exceptionMessage);
-        
         DltMessage dltMessage = DltMessage.builder()
                 .id(id)
                 .originalTopic(originalTopic)
@@ -67,7 +66,6 @@ public class DltService {
                 .failedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .originalMessagePayload(payloadString)
                 .build();
-        
         dltRepository.save(dltMessage);
     }
 
@@ -85,7 +83,6 @@ public class DltService {
     public void redriveMessage(String id) throws JsonProcessingException {
         DltMessage dltMessage = dltRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
-
         MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
 
         prepareDatabaseForRedrive(originalPayload);
@@ -93,16 +90,20 @@ public class DltService {
         log.info("Redriving message ID: {}. Sending to original topic: {}", id, dltMessage.getOriginalTopic());
         
         kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload);
-        
         dltRepository.deleteById(id);
     }
 
+    // START OF FIX: This method now checks the status of the parent broadcast.
     private void prepareDatabaseForRedrive(MessageDeliveryEvent payload) {
-        Optional<BroadcastMessage> parentBroadcast = broadcastRepository.findById(payload.getBroadcastId());
-        if (parentBroadcast.isEmpty()) {
-            log.error("Cannot redrive message for broadcast ID {}. The original broadcast has been deleted.", payload.getBroadcastId());
-            throw new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") has been deleted.");
+        BroadcastMessage parentBroadcast = broadcastRepository.findById(payload.getBroadcastId())
+            .orElseThrow(() -> new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") has been deleted."));
+
+        // Check if the broadcast is in a non-active state.
+        if (!Constants.BroadcastStatus.ACTIVE.name().equals(parentBroadcast.getStatus())) {
+            log.error("Cannot redrive message for broadcast ID {}. The broadcast is no longer ACTIVE (current status: {}).", payload.getBroadcastId(), parentBroadcast.getStatus());
+            throw new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") is " + parentBroadcast.getStatus() + ".");
         }
+        // END OF FIX
 
         Optional<UserBroadcastMessage> existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(
             payload.getUserId(), payload.getBroadcastId()
@@ -126,18 +127,13 @@ public class DltService {
         }
     }
     
-    // NEW: Implements the purge logic.
     @Transactional
     public void purgeMessage(String id) throws JsonProcessingException {
         DltMessage dltMessage = dltRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
-
-        // Delete from the database first.
         dltRepository.deleteById(id);
         log.info("Deleted DLT message with ID: {} from the database.", id);
-
-        // Send a tombstone message to the DLT to purge it from Kafka's log.
-        // We need a key for compaction to work. Let's use the DB message ID as the key.
+        
         String messageKey = dltMessage.getId();
         String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
         
