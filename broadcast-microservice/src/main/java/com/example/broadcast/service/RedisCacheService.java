@@ -6,14 +6,15 @@ import com.example.broadcast.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
 
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -23,6 +24,8 @@ import java.util.stream.Collectors;
 @Slf4j
 public class RedisCacheService implements CacheService {
 
+    private final RedisConnectionFactory redisConnectionFactory;
+
     private final RedisTemplate<String, String> stringRedisTemplate;
     private final RedisTemplate<String, UserConnectionInfo> userConnectionInfoRedisTemplate;
     private final RedisTemplate<String, List<UserMessageInfo>> userMessagesRedisTemplate;
@@ -30,7 +33,6 @@ public class RedisCacheService implements CacheService {
     private final RedisTemplate<String, UserSessionInfo> userSessionRedisTemplate;
     private final RedisTemplate<String, BroadcastStatsInfo> broadcastStatsRedisTemplate;
 
-    // ... (key prefixes and methods before getPendingEvents are unchanged)
     private static final String USER_CONNECTION_KEY_PREFIX = "user-conn:";
     private static final String ONLINE_USERS_KEY = "online-users";
     private static final String USER_MESSAGES_KEY_PREFIX = "user-msg:";
@@ -191,9 +193,43 @@ public class RedisCacheService implements CacheService {
 
     @Override
     public Map<String, Object> getCacheStats() {
-        return Map.of(
-                "cacheType", "Redis",
-                "onlineUsersCount", Objects.requireNonNull(stringRedisTemplate.opsForSet().size(ONLINE_USERS_KEY))
-        );
+        Map<String, Object> stats = new LinkedHashMap<>();
+        try (RedisConnection connection = redisConnectionFactory.getConnection()) {
+            Properties info = connection.serverCommands().info("memory");
+            if (info != null) {
+                stats.put("usedMemory", info.getProperty("used_memory_human"));
+                stats.put("peakMemory", info.getProperty("used_memory_peak_human"));
+                stats.put("fragmentationRatio", info.getProperty("mem_fragmentation_ratio"));
+            }
+            stats.put("totalKeys", connection.serverCommands().dbSize());
+
+            Map<String, Long> keyCounts = new LinkedHashMap<>();
+            keyCounts.put("userConnections", countKeysByPattern(connection, USER_CONNECTION_KEY_PREFIX + "*"));
+            keyCounts.put("userMessages", countKeysByPattern(connection, USER_MESSAGES_KEY_PREFIX + "*"));
+            keyCounts.put("pendingEvents", countKeysByPattern(connection, PENDING_EVENTS_KEY_PREFIX + "*"));
+            keyCounts.put("userSessions", countKeysByPattern(connection, USER_SESSION_KEY_PREFIX + "*"));
+            keyCounts.put("broadcastStats", countKeysByPattern(connection, BROADCAST_STATS_KEY_PREFIX + "*"));
+            keyCounts.put("onlineUsersSetSize", connection.setCommands().sCard(ONLINE_USERS_KEY.getBytes()));
+
+            stats.put("keyCountsByPrefix", keyCounts);
+
+        } catch (Exception e) {
+            log.error("Failed to get Redis cache stats", e);
+            stats.put("error", e.getMessage());
+        }
+        return stats;
+    }
+
+    private long countKeysByPattern(RedisConnection connection, String pattern) {
+        long count = 0;
+        try (Cursor<byte[]> cursor = connection.keyCommands().scan(ScanOptions.scanOptions().match(pattern).count(1000).build())) {
+            while (cursor.hasNext()) {
+                cursor.next();
+                count++;
+            }
+        } catch (Exception e) {
+            log.error("Could not scan keys for pattern '{}'", pattern, e);
+        }
+        return count;
     }
 }

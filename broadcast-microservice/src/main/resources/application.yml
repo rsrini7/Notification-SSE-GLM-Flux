@@ -82,7 +82,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,circuitbreakers,bulkheads,ratelimiters
+        include: health,info,metrics,prometheus,circuitbreakers,bulkheads,ratelimiters,redis-cache-stats
   endpoint:
     health:
       show-details: always
