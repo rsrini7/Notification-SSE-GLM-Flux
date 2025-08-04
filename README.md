@@ -88,6 +88,12 @@ Backend: Java with Spring Boot and Netty
 - **Replication**: 3 replicas for fault tolerance
 - **Consumer Groups**: Multiple consumers for load distribution
 
+### Actuator
+- **Endpoint**: `/actuator/redis-cache-stats`
+- **Description**: Provides cache statistics for Redis.
+- **Usage**: Access this endpoint to monitor cache performance.
+- **Note**: This endpoint is only available when the Redis profile is active.
+
 
 ## Getting Started
 
