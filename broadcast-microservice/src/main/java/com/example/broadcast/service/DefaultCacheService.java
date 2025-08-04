@@ -17,9 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
-// START OF CHANGE: This implementation is now only active when 'redis' profile is NOT set
 @Profile("!redis")
-// END OF CHANGE
 @RequiredArgsConstructor
 @Slf4j
 public class DefaultCacheService implements CacheService {
@@ -31,6 +29,7 @@ public class DefaultCacheService implements CacheService {
     private final Cache<String, BroadcastStatsInfo> broadcastStatsCache;
     private final ConcurrentHashMap<String, Boolean> onlineUsers = new ConcurrentHashMap<>();
 
+    // ... (methods before getPendingEvents are unchanged)
     @Override
     public void registerUserConnection(String userId, String sessionId, String podId) {
         UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, sessionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
@@ -117,11 +116,14 @@ public class DefaultCacheService implements CacheService {
         List<PendingEventInfo> pendingEvents = pendingEventsCache.getIfPresent(userId);
         if (pendingEvents == null) return List.of();
         
+        // START OF FIX: Added the 9th argument (false) to the constructor call.
         return pendingEvents.stream()
-            .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null))
+            .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null, false))
             .collect(Collectors.toList());
+        // END OF FIX
     }
     
+    // ... (rest of the file is unchanged)
     @Override
     public void removePendingEvent(String userId, Long broadcastId) {
          List<PendingEventInfo> pendingEvents = pendingEventsCache.getIfPresent(userId);

@@ -23,26 +23,20 @@ import java.util.stream.Collectors;
 @Slf4j
 public class RedisCacheService implements CacheService {
 
-    // Spring finds the auto-configured 'stringRedisTemplate' bean and injects it here
     private final RedisTemplate<String, String> stringRedisTemplate;
-    
-    // Spring finds our other custom templates and injects them
     private final RedisTemplate<String, UserConnectionInfo> userConnectionInfoRedisTemplate;
     private final RedisTemplate<String, List<UserMessageInfo>> userMessagesRedisTemplate;
     private final RedisTemplate<String, List<PendingEventInfo>> pendingEventsRedisTemplate;
     private final RedisTemplate<String, UserSessionInfo> userSessionRedisTemplate;
     private final RedisTemplate<String, BroadcastStatsInfo> broadcastStatsRedisTemplate;
 
-
-    // Key prefixes for Redis namespacing
+    // ... (key prefixes and methods before getPendingEvents are unchanged)
     private static final String USER_CONNECTION_KEY_PREFIX = "user-conn:";
     private static final String ONLINE_USERS_KEY = "online-users";
     private static final String USER_MESSAGES_KEY_PREFIX = "user-msg:";
     private static final String PENDING_EVENTS_KEY_PREFIX = "pending-evt:";
     private static final String BROADCAST_STATS_KEY_PREFIX = "broadcast-stats:";
-    // START OF CHANGE: Add key prefix for sessions
     private static final String USER_SESSION_KEY_PREFIX = "user-sess:";
-    // END OF CHANGE
 
     @Override
     public void registerUserConnection(String userId, String sessionId, String podId) {
@@ -51,12 +45,9 @@ public class RedisCacheService implements CacheService {
         userConnectionInfoRedisTemplate.opsForValue().set(userKey, connectionInfo, 1, TimeUnit.HOURS);
         stringRedisTemplate.opsForSet().add(ONLINE_USERS_KEY, userId);
 
-        // START OF CHANGE: Use the userSessionRedisTemplate to store session info
         UserSessionInfo sessionInfo = new UserSessionInfo(userId, sessionId, podId, ZonedDateTime.now());
         String sessionKey = USER_SESSION_KEY_PREFIX + sessionId;
-        // The original cache had expireAfterAccess of 30m, we simulate this with a fixed expiration
         userSessionRedisTemplate.opsForValue().set(sessionKey, sessionInfo, 30, TimeUnit.MINUTES);
-        // END OF CHANGE
 
         log.debug("User connection and session registered in Redis: {} on pod {}", userId, podId);
     }
@@ -65,11 +56,7 @@ public class RedisCacheService implements CacheService {
     public void unregisterUserConnection(String userId, String sessionId) {
         userConnectionInfoRedisTemplate.delete(USER_CONNECTION_KEY_PREFIX + userId);
         stringRedisTemplate.opsForSet().remove(ONLINE_USERS_KEY, userId);
-
-        // START OF CHANGE: Also delete the specific session info from Redis
         userSessionRedisTemplate.delete(USER_SESSION_KEY_PREFIX + sessionId);
-        // END OF CHANGE
-
         log.debug("User connection and session unregistered from Redis: {}", userId);
     }
 
@@ -84,14 +71,12 @@ public class RedisCacheService implements CacheService {
             );
             userConnectionInfoRedisTemplate.opsForValue().set(userKey, updatedInfo, 1, TimeUnit.HOURS);
             
-            // START OF CHANGE: Also update the heartbeat in the session object
             String sessionKey = USER_SESSION_KEY_PREFIX + connectionInfo.getSessionId();
             UserSessionInfo sessionInfo = userSessionRedisTemplate.opsForValue().get(sessionKey);
             if (sessionInfo != null) {
                 UserSessionInfo updatedSession = new UserSessionInfo(userId, sessionInfo.getSessionId(), sessionInfo.getPodId(), ZonedDateTime.now());
                 userSessionRedisTemplate.opsForValue().set(sessionKey, updatedSession, 30, TimeUnit.MINUTES);
             }
-            // END OF CHANGE
         }
     }
 
@@ -152,17 +137,20 @@ public class RedisCacheService implements CacheService {
         pendingEvents.add(pendingEvent);
         pendingEventsRedisTemplate.opsForValue().set(key, pendingEvents, 6, TimeUnit.HOURS);
     }
-
+    
     @Override
     public List<MessageDeliveryEvent> getPendingEvents(String userId) {
         List<PendingEventInfo> pendingEvents = pendingEventsRedisTemplate.opsForValue().get(PENDING_EVENTS_KEY_PREFIX + userId);
         if (pendingEvents == null) return List.of();
 
+        // START OF FIX: Added the 9th argument (false) to the constructor call.
         return pendingEvents.stream()
-                .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null))
+                .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null, false))
                 .collect(Collectors.toList());
+        // END OF FIX
     }
 
+    // ... (rest of the file is unchanged)
     @Override
     public void removePendingEvent(String userId, Long broadcastId) {
         String key = PENDING_EVENTS_KEY_PREFIX + userId;

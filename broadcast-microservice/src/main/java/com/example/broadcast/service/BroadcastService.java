@@ -45,7 +45,10 @@ public class BroadcastService {
     private final UserService userService;
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
-
+    // START OF CHANGE: Inject the testing configuration service
+    private final TestingConfigurationService testingConfigService;
+    // END OF CHANGE
+    
     // ... (createBroadcast and processScheduledBroadcast are unchanged)
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
@@ -96,6 +99,15 @@ public class BroadcastService {
     }
 
     private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
+        // START OF CHANGE: Check if failure mode is enabled
+        boolean shouldFail = testingConfigService.isKafkaConsumerFailureEnabled();
+        if (shouldFail) {
+            log.info("Kafka failure mode is enabled. This broadcast will be marked for transient failure.");
+            // Automatically disable the flag after using it once.
+            testingConfigService.setKafkaConsumerFailureEnabled(false);
+        }
+        // END OF CHANGE
+
         List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
         int totalTargeted = userBroadcasts.size();
 
@@ -120,9 +132,10 @@ public class BroadcastService {
                     .eventType(EventType.CREATED.name())
                     .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
                     .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-                    // START OF FIX: Use the actual broadcast content in the event message
                     .message(broadcast.getContent())
-                    // END OF FIX
+                    // START OF CHANGE: Set the failure flag on the event if needed
+                    .transientFailure(shouldFail)
+                    // END OF CHANGE
                     .build();
                 
                 saveToOutbox(eventPayload);

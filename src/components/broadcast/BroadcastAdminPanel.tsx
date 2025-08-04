@@ -100,6 +100,7 @@ const BroadcastAdminPanel: React.FC = () => {
     }
   }, []);
 
+  // START OF CHANGE: Update the createBroadcast function
   const createBroadcast = async (payload: BroadcastRequest) => {
     setLoading(true);
     try {
@@ -109,6 +110,9 @@ const BroadcastAdminPanel: React.FC = () => {
         title: 'Success',
         description: 'Broadcast created successfully',
       });
+      // After creating, re-fetch the test mode status, which should now be disabled.
+      const status = await testingService.getKafkaFailureStatus();
+      setFailureModeEnabled(status.enabled);
       setActiveTab('manage');
     } catch {
       toast({
@@ -120,6 +124,7 @@ const BroadcastAdminPanel: React.FC = () => {
       setLoading(false);
     }
   };
+  // END OF CHANGE
 
   const cancelBroadcast = async (broadcastId: string) => {
     try {

@@ -24,9 +24,7 @@ public class KafkaConsumerService {
     private final SseService sseService;
     private final CacheService cacheService;
     private final ObjectMapper objectMapper;
-    // START OF CHANGE: Inject the new testing configuration service
     private final TestingConfigurationService testingConfigService;
-    // END OF CHANGE
     
     private static final Set<String> FAILED_ONCE_EVENT_IDS = Collections.synchronizedSet(new HashSet<>());
 
@@ -47,14 +45,14 @@ public class KafkaConsumerService {
             log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                     event.getEventId(), topic, partition, offset);
 
-            // START OF CHANGE: Gate the failure logic behind the test flag
-            if (testingConfigService.isKafkaConsumerFailureEnabled() && "FAIL_ONCE".equals(event.getMessage())) {
+            // START OF CHANGE: Check the boolean flag instead of the message content
+            if (event.isTransientFailure()) {
                 if (!FAILED_ONCE_EVENT_IDS.contains(event.getEventId())) {
                     FAILED_ONCE_EVENT_IDS.add(event.getEventId());
-                    log.warn("Poison pill 'FAIL_ONCE' detected while test mode is enabled. Simulating transient failure for eventId: {}", event.getEventId());
+                    log.warn("Transient failure flag detected for eventId: {}. Simulating failure.", event.getEventId());
                     throw new RuntimeException("Simulating a transient, recoverable error for DLT redrive testing.");
                 }
-                log.info("Successfully redriving eventId: {}. The transient error is now resolved.", event.getEventId());
+                log.info("Successfully redriving eventId with transient failure flag: {}.", event.getEventId());
             }
             // END OF CHANGE
 
@@ -66,7 +64,7 @@ public class KafkaConsumerService {
             throw new RuntimeException("Failed to process message", e);
         }
     }
-
+    // ... (rest of the file is unchanged)
     private void handleEvent(MessageDeliveryEvent event) {
         EventType eventType;
         try {
@@ -94,7 +92,6 @@ public class KafkaConsumerService {
         }
     }
 
-    // ... (rest of the file is unchanged)
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
         
