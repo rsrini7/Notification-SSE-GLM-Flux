@@ -142,9 +142,19 @@ VITE_API_BASE_URL=http://localhost:8081
 3. Handle errors gracefully
 4. Add loading states in components
 
+### spring boot profile based start
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.profiles=redis
+mvn clean package && java -Dspring.profiles.active=redis -jar target/broadcast-microservice-1.0.0.jar
+```
+
 ### Performance Testing
 
+```bash
 k6 run --insecure-skip-tls-verify sse-test.js
+mvn gatling:test
+```
 
 ## Troubleshooting
 
