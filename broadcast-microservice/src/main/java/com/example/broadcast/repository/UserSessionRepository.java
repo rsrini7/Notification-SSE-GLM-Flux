@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.time.ZoneOffset;
@@ -60,7 +61,6 @@ public class UserSessionRepository {
                 VALUES (s.user_id, s.session_id, s.pod_id, s.connection_status, s.connected_at, s.last_heartbeat)
             """;
         
-        // START OF FIX: Convert ZonedDateTime to OffsetDateTime for JDBC compatibility
         jdbcTemplate.update(sql,
                 session.getUserId(),
                 session.getSessionId(),
@@ -68,10 +68,27 @@ public class UserSessionRepository {
                 session.getConnectionStatus(),
                 session.getConnectedAt().toOffsetDateTime(),
                 session.getLastHeartbeat().toOffsetDateTime());
-        // END OF FIX
         
         return session;
     }
+
+    // START OF CHANGE: New methods for heartbeat and stale session detection
+    public int updateHeartbeatsForActiveSessions(List<String> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return 0;
+        }
+        String sql = String.format(
+            "UPDATE user_sessions SET last_heartbeat = CURRENT_TIMESTAMP WHERE session_id IN (%s)",
+            String.join(",", java.util.Collections.nCopies(sessionIds.size(), "?"))
+        );
+        return jdbcTemplate.update(sql, sessionIds.toArray());
+    }
+
+    public List<UserSession> findStaleSessions(ZonedDateTime threshold) {
+        String sql = "SELECT * FROM user_sessions WHERE connection_status = 'ACTIVE' AND last_heartbeat < ?";
+        return jdbcTemplate.query(sql, sessionRowMapper, threshold.toOffsetDateTime());
+    }
+    // END OF CHANGE
 
     public Optional<UserSession> findByUserId(String userId) {
         String sql = "SELECT * FROM user_sessions WHERE user_id = ? AND connection_status = 'ACTIVE' ORDER BY last_heartbeat DESC LIMIT 1";
@@ -85,7 +102,7 @@ public class UserSessionRepository {
     }
 
     public int markSessionInactive(String sessionId, String podId) {
-        String sql = "UPDATE user_sessions SET connection_status = 'INACTIVE', disconnected_at = CURRENT_TIMESTAMP WHERE session_id = ? AND pod_id = ?";
+        String sql = "UPDATE user_sessions SET connection_status = 'INACTIVE', disconnected_at = CURRENT_TIMESTAMP WHERE session_id = ? AND pod_id = ? AND connection_status = 'ACTIVE'";
         return jdbcTemplate.update(sql, sessionId, podId);
     }
     
@@ -117,7 +134,6 @@ public class UserSessionRepository {
 
     public void batchInsert(List<UserSession> sessions) {
         String sql = "INSERT INTO user_sessions (user_id, session_id, pod_id, connection_status, connected_at, last_heartbeat) VALUES (?, ?, ?, ?, ?, ?)";
-        // NOTE: This method was already correct because it converted to java.sql.Timestamp, which is fine. No changes needed here.
         jdbcTemplate.batchUpdate(sql, sessions, sessions.size(), (ps, session) -> {
             ps.setString(1, session.getUserId());
             ps.setString(2, session.getSessionId());
