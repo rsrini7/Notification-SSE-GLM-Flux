@@ -29,12 +29,12 @@ public class UserMessageService {
 
     public List<UserBroadcastResponse> getUnreadMessages(String userId) {
         log.info("Getting unread messages for user: {}", userId);
-        return userBroadcastRepository.findUnreadMessagesByUserId(userId);
+        return userBroadcastRepository.findUserMessagesByUserId(userId);
     }
 
     @Transactional
     public void markMessageAsRead(String userId, Long messageId) {
-        log.info("Marking message as read: user={}, message={}", userId, messageId);
+        log.info("Attempting to mark message as read: user={}, message={}", userId, messageId);
         UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
 
@@ -42,10 +42,16 @@ public class UserMessageService {
             throw new ResourceNotFoundException("Message does not belong to user: " + userId);
         }
 
-        // Only update if the status is currently UNREAD to avoid redundant DB writes and metric increments.
-        if ("UNREAD".equals(userMessage.getReadStatus())) {
-            userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
+        // START OF FIX: Check the number of rows affected by the atomic update.
+        // This ensures that the statistics are only incremented once.
+        int updatedRows = userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
+
+        if (updatedRows > 0) {
             broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
+            log.info("Successfully marked message {} as read for user {}", messageId, userId);
+        } else {
+            log.warn("Message {} was already read for user {}. No action taken.", messageId, userId);
         }
+        // END OF FIX
     }
 }
