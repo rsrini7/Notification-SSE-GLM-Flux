@@ -38,7 +38,7 @@ public class OutboxPollingService {
             return;
         }
 
-        log.info("Found {} events in outbox to publish.", events.size());
+        log.trace("Found {} events in outbox to publish.", events.size());
 
         for (OutboxEvent event : events) {
             try {
@@ -60,6 +60,6 @@ public class OutboxPollingService {
         // If all sends are successful, delete the events from the outbox
         List<UUID> processedIds = events.stream().map(OutboxEvent::getId).collect(Collectors.toList());
         outboxRepository.deleteByIds(processedIds);
-        log.info("Successfully published and deleted {} events from outbox.", events.size());
+        log.trace("Successfully published and deleted {} events from outbox.", processedIds.size());
     }
 }

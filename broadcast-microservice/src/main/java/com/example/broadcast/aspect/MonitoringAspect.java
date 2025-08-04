@@ -93,7 +93,15 @@ public class MonitoringAspect {
             long duration = System.currentTimeMillis() - startTime;
             metricsCollector.recordTimer("broadcast.database.latency", duration, "class", className, "method", methodName, "status", "success");
             metricsCollector.incrementCounter("broadcast.database.calls", "class", className, "method", methodName, "status", "success");
-            log.debug("{}.{} completed successfully in {}ms", className, methodName, duration);
+            
+            // START OF FIX: Add conditional logging
+            if ("OutboxRepository".equals(className) && "findAndLockUnprocessedEvents".equals(methodName)) {
+                log.trace("{}.{} completed successfully in {}ms", className, methodName, duration);
+            } else {
+                log.debug("{}.{} completed successfully in {}ms", className, methodName, duration);
+            }
+            // END OF FIX
+
             return result;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
@@ -128,10 +136,6 @@ public class MonitoringAspect {
         }
     }
 
-    /**
-     * Monitor cache service methods
-     */
-    // MODIFIED: Pointcut now targets the 'CacheService' interface, making it work for any implementation.
     @Around("execution(* com.example.broadcast.service.CacheService.*(..))")
     public Object monitorCacheService(ProceedingJoinPoint joinPoint) throws Throwable {
         String methodName = joinPoint.getSignature().getName();
@@ -153,21 +157,4 @@ public class MonitoringAspect {
             throw e;
         }
     }
-
-    /**
-     * Log method parameters for debugging (only at DEBUG level)
-     */
-    // private void logMethodParameters(ProceedingJoinPoint joinPoint) {
-    //     if (log.isDebugEnabled()) {
-    //         String methodName = joinPoint.getSignature().getName();
-    //         Object[] args = joinPoint.getArgs();
-            
-    //         if (args.length > 0) {
-    //             log.debug("{}.{} called with parameters: {}", 
-    //                     joinPoint.getTarget().getClass().getSimpleName(),
-    //                     methodName,
-    //                     Arrays.toString(args));
-    //         }
-    //     }
-    // }
 }
