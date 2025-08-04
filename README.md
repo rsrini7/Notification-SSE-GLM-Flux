@@ -270,7 +270,7 @@ graph TD
 
     subgraph "Data Stores"
         H2DB[(h2 Database)]
-        CaffeineCache[{"Caffeine Cache"}]
+        CaffeineCache["Caffeine Cache"]
     end
 
     subgraph "Messaging System"
@@ -514,26 +514,26 @@ graph TD
 
         subgraph "src/services/api.ts"
             api_ts_axios[axios instance]
-            api_ts_getBroadcasts[getBroadcasts()]
-            api_ts_createBroadcast[createBroadcast()]
-            api_ts_deleteBroadcast[deleteBroadcast()]
-            api_ts_getBroadcastStats[getBroadcastStats()]
-            api_ts_getUserMessages[getUserMessages()]
-            api_ts_markMessageAsRead[markMessageAsRead()]
-            api_ts_getDltMessages[getDltMessages()]
-            api_ts_redriveDltMessage[redriveDltMessage()]
-            api_ts_deleteDltMessage[deleteDltMessage()]
-            api_ts_purgeDltMessage[purgeDltMessage()]
+            api_ts_getBroadcasts[getBroadcasts]
+            api_ts_createBroadcast[createBroadcast]
+            api_ts_deleteBroadcast[deleteBroadcast]
+            api_ts_getBroadcastStats[getBroadcastStats]
+            api_ts_getUserMessages[getUserMessages]
+            api_ts_markMessageAsRead[markMessageAsRead]
+            api_ts_getDltMessages[getDltMessages]
+            api_ts_redriveDltMessage[redriveDltMessage]
+            api_ts_deleteDltMessage[deleteDltMessage]
+            api_ts_purgeDltMessage[purgeDltMessage]
             click api_ts_axios "src/services/api.ts"
         end
 
         subgraph "src/hooks/useSseConnection.ts"
-            useSseConnection_ts_useSseConnection[useSseConnection()]
+            useSseConnection_ts_useSseConnection[useSseConnection]
             click useSseConnection_ts_useSseConnection "src/hooks/useSseConnection.ts"
         end
 
         subgraph "src/hooks/useBroadcastMessages.ts"
-            useBroadcastMessages_ts_useBroadcastMessages[useBroadcastMessages()]
+            useBroadcastMessages_ts_useBroadcastMessages[useBroadcastMessages]
             click useBroadcastMessages_ts_useBroadcastMessages "src/hooks/useBroadcastMessages.ts"
         end
 
