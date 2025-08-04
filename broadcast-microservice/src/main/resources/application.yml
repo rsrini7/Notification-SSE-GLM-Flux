@@ -15,13 +15,11 @@ server:
 spring:
   application:
     name: broadcast-microservice
-  # START OF CHANGE: Define a profile group
-  # This tells Spring that whenever the 'redis' profile is active,
   # the 'dev-pg' profile should also be activated automatically.
   profiles:
     group:
       "redis": "dev-pg"
-  # END OF CHANGE
+
   threads:
     virtual:
       enabled: true

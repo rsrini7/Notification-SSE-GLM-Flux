@@ -10,8 +10,7 @@ services:
     depends_on:
       - kafka
       - postgres
-      - redis # START OF CHANGE: Add dependency
-      # END OF CHANGE
+      - redis
 
   kafka:
     image: confluentinc/cp-kafka:7.3.0
@@ -57,9 +56,7 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-  # END OF CHANGE
 
 volumes:
   postgres_data:
-  redis_data: # START OF CHANGE: Add redis volume
-  # END OF CHANGE
+  redis_data:

@@ -90,10 +90,7 @@ CREATE TABLE IF NOT EXISTS broadcast_statistics (
     -- Foreign key constraint
     FOREIGN KEY (broadcast_id) REFERENCES broadcast_messages(id) ON DELETE CASCADE,
 
-    -- START OF FIX: Enforces a 1-to-1 relationship between a broadcast and its statistics.
-    -- This prevents duplicate rows and fixes the multiple entry bug in the admin UI.
     UNIQUE (broadcast_id)
-    -- END OF FIX
 );
 
 -- User Preferences Table (for notification filtering)
@@ -145,7 +142,6 @@ CREATE TABLE IF NOT EXISTS outbox_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_outbox_created_at ON outbox_events (created_at);
--- END OF CHANGE
 
 -- Create sequence for ID generation
 CREATE SEQUENCE IF NOT EXISTS broadcast_seq START WITH 1 INCREMENT BY 1;

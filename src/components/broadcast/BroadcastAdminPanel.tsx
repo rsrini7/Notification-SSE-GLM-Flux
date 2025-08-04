@@ -6,7 +6,7 @@ import { broadcastService, testingService, type BroadcastMessage, type Broadcast
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
-import { BeakerIcon } from 'lucide-react'; // Using a different icon for clarity
+import { AlertCircle } from 'lucide-react';
 import BroadcastCreationForm from './BroadcastCreationForm';
 import BroadcastManagementList from './BroadcastManagementList';
 import BroadcastStatisticsView from './BroadcastStatisticsView';
@@ -173,12 +173,10 @@ const BroadcastAdminPanel: React.FC = () => {
         </Badge>
       </div>
 
-      {/* START OF CHANGE: Add higher-contrast text/icon colors */}
-      <Card className="border border-yellow-300 bg-yellow-500 dark:bg-yellow-900/120">
+      <Card className="border border-red-300 bg-red-500 dark:bg-red-900/120">
         <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-yellow-800 dark:text-yellow-700">
-                {/* Added specific text color to the icon */}
-                <BeakerIcon className="h-5 w-5 text-yellow-800 dark:text-yellow-900" />
+            <CardTitle className="flex items-center gap-2 text-red-800 dark:text-red-700">
+                <AlertCircle className="h-5 w-5 text-red-800 dark:text-red-900" />
                 DLQ Test Mode
             </CardTitle>
         </CardHeader>
@@ -186,22 +184,20 @@ const BroadcastAdminPanel: React.FC = () => {
             <div className="flex items-center space-x-2">
                 <Switch
                     id="kafka-failure-mode"
+                    className="data-[state=checked]:bg-red-800 data-[state=unchecked]:border-red-800 data-[state=unchecked]:bg-gray-400"
                     checked={isFailureModeEnabled}
                     onCheckedChange={handleToggleFailureMode}
                     aria-label="Toggle Kafka consumer failure mode"
                 />
-                {/* Added darker text color and font-medium to the label */}
                 <Label htmlFor="kafka-failure-mode" className="flex-grow font-medium text-yellow-600 dark:text-yellow-900">
                     Enable Kafka Consumer Failure Mode
                 </Label>
             </div>
-            {/* Adjusted text color for better readability */}
             <p className="text-xs text-yellow-900 dark:text-yellow-800 mt-2">
                 When enabled, messages containing "FAIL_ONCE" will be rejected to test the DLQ redrive functionality.
             </p>
         </CardContent>
       </Card>
-      {/* END OF CHANGE */}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
         <TabsList className="grid w-full grid-cols-4"> 

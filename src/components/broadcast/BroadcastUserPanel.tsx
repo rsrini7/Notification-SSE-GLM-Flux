@@ -92,7 +92,6 @@ const BroadcastUserPanel: React.FC = () => {
           <CardTitle className="flex items-center gap-2"><UserPlus className="h-5 w-5" />Add New User Connection</CardTitle>
         </CardHeader>
         <CardContent>
-            {/* START OF CHANGE: Add the "Add All" and "Remove All" buttons */}
             <div className="flex items-end gap-4">
                 <div className="flex-grow grid gap-1.5">
                     <Label htmlFor="newUserSelect">User ID</Label>
@@ -121,7 +120,6 @@ const BroadcastUserPanel: React.FC = () => {
                   Remove All
                 </Button>
             </div>
-            {/* END OF CHANGE */}
         </CardContent>
       </Card>
 
