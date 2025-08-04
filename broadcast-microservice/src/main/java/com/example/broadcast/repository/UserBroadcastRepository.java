@@ -40,7 +40,6 @@ public class UserBroadcastRepository {
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
             .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
             .build();
-            
     private final RowMapper<UserBroadcastResponse> userBroadcastResponseRowMapper = (rs, rowNum) -> UserBroadcastResponse.builder()
             .id(rs.getLong("id"))
             .broadcastId(rs.getLong("broadcast_id"))
@@ -59,7 +58,6 @@ public class UserBroadcastRepository {
                     rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .expiresAt(rs.getTimestamp("expires_at") != null ? rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .build();
-
     public UserBroadcastMessage save(UserBroadcastMessage userBroadcast) {
         String sql = """
             INSERT INTO user_broadcast_messages 
@@ -90,9 +88,9 @@ public class UserBroadcastRepository {
         
         if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
             Map<String, Object> keys = keyHolder.getKeyList().get(0);
-            Number id = (Number) keys.get("id"); // Check for Postgres's lowercase 'id' first
+            Number id = (Number) keys.get("id");
             if (id == null) {
-                id = (Number) keys.get("ID"); // Fallback to H2's uppercase 'ID'
+                id = (Number) keys.get("ID");
             }
             if (id != null) {
                 userBroadcast.setId(id.longValue());
@@ -161,11 +159,6 @@ public class UserBroadcastRepository {
         String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND delivery_status = 'PENDING' ORDER BY created_at ASC";
         return jdbcTemplate.query(sql, userBroadcastRowMapper, userId);
     }
-
-    public List<UserBroadcastMessage> findPendingMessagesByBroadcastId(String userId, Long broadcastId) {
-        String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND broadcast_id = ? AND delivery_status = 'PENDING'";
-        return jdbcTemplate.query(sql, userBroadcastRowMapper, userId, broadcastId);
-    }
     
     public Optional<UserBroadcastMessage> findByUserIdAndBroadcastId(String userId, Long broadcastId) {
         String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND broadcast_id = ?";
@@ -186,16 +179,13 @@ public class UserBroadcastRepository {
         String sql = "UPDATE user_broadcast_messages SET delivery_status = ?, delivered_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
         return jdbcTemplate.update(sql, status, id);
     }
-
-    public int updateReadStatus(Long id, String status) {
-        String sql = "UPDATE user_broadcast_messages SET read_status = ?, read_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
-        return jdbcTemplate.update(sql, status, id);
-    }
-
+    
+    // START OF FIX: This query is now atomic. It will only update the row if the read_status is still UNREAD.
     public int markAsRead(Long id, ZonedDateTime readAt) {
-        String sql = "UPDATE user_broadcast_messages SET read_status = 'READ', read_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        String sql = "UPDATE user_broadcast_messages SET read_status = 'READ', read_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND read_status = 'UNREAD'";
         return jdbcTemplate.update(sql, readAt.toOffsetDateTime(), id);
     }
+    // END OF FIX
 
     public void batchInsert(List<UserBroadcastMessage> userBroadcasts) {
         String sql = """
@@ -220,10 +210,5 @@ public class UserBroadcastRepository {
                 ps.setNull(6, Types.TIMESTAMP_WITH_TIMEZONE);
             }
         });
-    }
-
-    public List<UserBroadcastMessage> findByUserIdAndStatus(String userId, String deliveryStatus, String readStatus) {
-        String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND delivery_status = ? AND read_status = ?";
-        return jdbcTemplate.query(sql, userBroadcastRowMapper, userId, deliveryStatus, readStatus);
     }
 }

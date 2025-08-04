@@ -1,4 +1,3 @@
-// broadcast-microservice/src/main/java/com/example/broadcast/service/SseService.java
 package com.example.broadcast.service;
 
 import com.example.broadcast.dto.MessageDeliveryEvent;
@@ -7,7 +6,6 @@ import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.model.UserSession;
 import com.example.broadcast.repository.BroadcastRepository;
-import com.example.broadcast.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserSessionRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -48,7 +46,7 @@ public class SseService {
     private final UserSessionRepository userSessionRepository;
     private final ObjectMapper objectMapper;
     private final BroadcastRepository broadcastRepository;
-    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
+    private final MessageStatusService messageStatusService;
     private final CacheService cacheService;
     
     @Value("${broadcast.pod.id:pod-local}")
@@ -62,12 +60,14 @@ public class SseService {
 
     private Disposable serverHeartbeatSubscription;
     
-    public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository, ObjectMapper objectMapper, BroadcastRepository broadcastRepository, BroadcastStatisticsRepository broadcastStatisticsRepository, CacheService cacheService) {
+    public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository,
+                      ObjectMapper objectMapper, BroadcastRepository broadcastRepository,
+                      MessageStatusService messageStatusService, CacheService cacheService) {
         this.userBroadcastRepository = userBroadcastRepository;
         this.userSessionRepository = userSessionRepository;
         this.objectMapper = objectMapper;
         this.broadcastRepository = broadcastRepository;
-        this.broadcastStatisticsRepository = broadcastStatisticsRepository;
+        this.messageStatusService = messageStatusService;
         this.cacheService = cacheService;
     }
 
@@ -151,7 +151,6 @@ public class SseService {
 
     @Transactional
     public void removeEventStream(String userId, String sessionId) {
-        // Ensure we only try to remove if the session ID is the one we expect for the user.
         if (sessionId != null && sessionId.equals(userSessionMap.get(userId))) {
             userSinks.remove(sessionId);
             userSessionMap.remove(userId, sessionId);
@@ -184,7 +183,6 @@ public class SseService {
     private void sendPendingMessages(String userId) {
         List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
         for (UserBroadcastMessage message : pendingMessages) {
-            // Re-use the main delivery logic
             deliverMessageToUser(userId, message.getBroadcastId());
         }
         if (!pendingMessages.isEmpty()) {
@@ -198,8 +196,6 @@ public class SseService {
             Sinks.Many<ServerSentEvent<String>> sink = userSinks.get(sessionId);
             if (sink != null) {
                 Sinks.EmitResult result = sink.tryEmitNext(event);
-                // If emit fails, it means the connection is dead/broken ("zombie").
-                // Proactively clean it up immediately instead of waiting for the next cleanup job.
                 if (result.isFailure()) {
                     log.warn("Failed to emit SSE event for user {}, session {}. Result: {}. Proactively cleaning up stale connection.", userId, sessionId, result);
                     removeEventStream(userId, sessionId);
@@ -230,8 +226,7 @@ public class SseService {
                     sendEvent(userId, sse);
                     
                     if (isUserConnected(userId)) {
-                        userBroadcastRepository.updateDeliveryStatus(response.getId(), DeliveryStatus.DELIVERED.name());
-                        broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
+                        messageStatusService.updateMessageToDelivered(message.getId(), broadcastId);
                         log.info("Message delivered to online user: {}, broadcast: {}", userId, broadcastId);
                     } else {
                         log.warn("Delivery attempt for user {} and broadcast {} aborted, user disconnected during process.", userId, broadcastId);
@@ -277,9 +272,7 @@ public class SseService {
                         .data(payload)
                         .build();
                     
-                    // Send heartbeat to a copy of the user IDs to avoid concurrent modification issues
                     new ArrayList<>(userSessionMap.keySet()).forEach(userId -> sendEvent(userId, heartbeatEvent));
-
                 } catch (Exception e) {
                     log.error("Error in server heartbeat task: {}", e.getMessage());
                 }

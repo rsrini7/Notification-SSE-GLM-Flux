@@ -1,11 +1,8 @@
 package com.example.broadcast.service;
 
-// ... (imports are unchanged)
 import com.example.broadcast.dto.BroadcastRequest;
 import com.example.broadcast.dto.BroadcastResponse;
 import com.example.broadcast.dto.MessageDeliveryEvent;
-import com.example.broadcast.dto.UserBroadcastResponse;
-import com.example.broadcast.exception.ResourceNotFoundException;
 import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.BroadcastStatistics;
 import com.example.broadcast.model.OutboxEvent;
@@ -15,6 +12,7 @@ import com.example.broadcast.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.repository.OutboxRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserPreferencesRepository;
+import com.example.broadcast.exception.ResourceNotFoundException;
 import com.example.broadcast.exception.UserServiceUnavailableException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,9 +26,10 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
+
+import com.example.broadcast.util.Constants;
 import com.example.broadcast.util.Constants.BroadcastStatus;
 import com.example.broadcast.util.Constants.EventType;
-
 
 @Service
 @RequiredArgsConstructor
@@ -46,7 +45,8 @@ public class BroadcastService {
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
     private final TestingConfigurationService testingConfigService;
-    
+    private final MessageStatusService messageStatusService;
+
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
@@ -99,7 +99,6 @@ public class BroadcastService {
         boolean shouldFail = testingConfigService.isKafkaConsumerFailureEnabled();
         if (shouldFail) {
             log.info("Kafka failure mode is enabled. This broadcast will be marked for transient failure.");
-            // Automatically disable the flag after using it once.
             testingConfigService.setKafkaConsumerFailureEnabled(false);
         }
 
@@ -141,29 +140,13 @@ public class BroadcastService {
     }
     
     @Transactional
-    public void markMessageAsRead(String userId, Long messageId) {
-        log.info("Marking message as read: user={}, message={}", userId, messageId);
+    public void markMessageAsReadAndPublishEvent(String userId, Long messageId) {
         UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
-        
-        if (!userId.equals(userMessage.getUserId())) {
-            throw new ResourceNotFoundException("Message does not belong to user: " + userId);
+
+        if (Constants.ReadStatus.UNREAD.name().equals(userMessage.getReadStatus())) {
+            messageStatusService.publishReadEvent(userMessage.getBroadcastId(), userId);
         }
-        
-        userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
-        broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
-        
-        MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
-            .eventId(UUID.randomUUID().toString())
-            .broadcastId(userMessage.getBroadcastId())
-            .userId(userId)
-            .eventType(EventType.READ.name())
-            .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
-            .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-            .message("User marked message as read")
-            .build();
-            
-        saveToOutbox(eventPayload);
     }
 
     private void saveToOutbox(MessageDeliveryEvent payload) {
@@ -172,7 +155,7 @@ public class BroadcastService {
             OutboxEvent outboxEvent = OutboxEvent.builder()
                     .id(UUID.randomUUID())
                     .aggregateType("broadcast")
-                    .aggregateId(payload.getUserId()) 
+                    .aggregateId(payload.getUserId())
                     .eventType(payload.getEventType())
                     .payload(payloadJson)
                     .build();
@@ -182,7 +165,7 @@ public class BroadcastService {
             throw new RuntimeException("Failed to serialize event payload", e);
         }
     }
-    
+
     @Transactional
     public void cancelBroadcast(Long id) {
         BroadcastMessage broadcast = broadcastRepository.findById(id)
@@ -247,16 +230,6 @@ public class BroadcastService {
 
     public List<BroadcastResponse> getAllBroadcasts() {
         return broadcastRepository.findAllBroadcastsWithStats();
-    }
-
-    public List<UserBroadcastResponse> getUserMessages(String userId) {
-        log.info("Getting messages for user: {}", userId);
-        return userBroadcastRepository.findUserMessagesByUserId(userId);
-    }
-
-    public List<UserBroadcastResponse> getUnreadMessages(String userId) {
-        log.info("Getting unread messages for user: {}", userId);
-        return userBroadcastRepository.findUnreadMessagesByUserId(userId);
     }
 
     @CircuitBreaker(name = "userService", fallbackMethod = "fallbackGetAllUserIds")

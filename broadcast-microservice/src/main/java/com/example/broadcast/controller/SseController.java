@@ -5,6 +5,7 @@ import com.example.broadcast.repository.UserSessionRepository;
 import com.example.broadcast.service.CacheService;
 import com.example.broadcast.service.SseService;
 import com.example.broadcast.service.BroadcastService;
+import com.example.broadcast.service.UserMessageService;
 import com.example.broadcast.util.Constants.BroadcastStatus;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
@@ -31,6 +32,7 @@ public class SseController {
 
     private final SseService sseService;
     private final UserSessionRepository userSessionRepository;
+    private final UserMessageService userMessageService;
     private final BroadcastService broadcastService;
     private final CacheService cacheService;
     
@@ -83,7 +85,6 @@ public class SseController {
         
         log.info("Disconnect request from user: {}, session: {}", userId, sessionId);
         sseService.removeEventStream(userId, sessionId);
-        // The removeEventStream now handles marking the session inactive in DB and Cache
         return ResponseEntity.ok("Disconnected successfully");
     }
 
@@ -111,7 +112,8 @@ public class SseController {
     public ResponseEntity<String> markMessageAsRead(
             @RequestParam String userId,
             @RequestParam Long messageId) {
-        broadcastService.markMessageAsRead(userId, messageId);
+        userMessageService.markMessageAsRead(userId, messageId);
+        broadcastService.markMessageAsReadAndPublishEvent(userId, messageId);
         return ResponseEntity.ok("Message marked as read");
     }
 }
