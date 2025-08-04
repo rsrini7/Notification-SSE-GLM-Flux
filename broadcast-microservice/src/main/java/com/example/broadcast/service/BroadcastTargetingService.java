@@ -4,6 +4,8 @@ import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.model.UserPreferences;
 import com.example.broadcast.repository.UserPreferencesRepository;
+import com.example.broadcast.util.Constants.DeliveryStatus;
+import com.example.broadcast.util.Constants.ReadStatus;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
@@ -15,10 +17,8 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
-
-import com.example.broadcast.util.Constants.DeliveryStatus;
-import com.example.broadcast.util.Constants.ReadStatus;
 
 /**
  * A service dedicated to handling the logic of targeting users for broadcasts.
@@ -47,10 +47,22 @@ public class BroadcastTargetingService {
         List<String> targetUserIds = determineTargetUsers(broadcast);
 
         log.info("Broadcast ID {}: Determined {} initial target users.", broadcast.getId(), targetUserIds.size());
+        if (targetUserIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // START OF FIX: Solve N+1 query problem
+        // Fetch all preferences in a single batch query and store in a map for fast lookup.
+        Map<String, UserPreferences> preferencesMap = userPreferencesRepository.findByUserIdIn(targetUserIds)
+                .stream()
+                .collect(Collectors.toMap(UserPreferences::getUserId, pref -> pref));
+        // END OF FIX
 
         List<UserBroadcastMessage> userMessages = targetUserIds.stream()
             .filter(userId -> {
-                UserPreferences preferences = userPreferencesRepository.findByUserId(userId).orElse(null);
+                // START OF FIX: Look up preferences from the in-memory map instead of hitting the DB.
+                UserPreferences preferences = preferencesMap.get(userId);
+                // END OF FIX
                 boolean shouldDeliver = shouldDeliverToUser(preferences);
                 if (!shouldDeliver) {
                     log.debug("Broadcast ID {}: Skipping user {} due to their notification preferences.", broadcast.getId(), userId);

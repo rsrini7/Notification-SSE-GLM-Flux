@@ -32,6 +32,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     onDisconnect,
     onError
   } = options;
+
   const [state, setState] = useState<SseConnectionState>({
     connected: false,
     connecting: false,
@@ -39,6 +40,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     error: null,
     reconnectAttempt: 0
   });
+
   const MAX_RECONNECT_ATTEMPTS = 10;
   const BASE_RECONNECT_DELAY = 3000;
   const MAX_RECONNECT_DELAY = 300000;
@@ -88,7 +90,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     reconnectAttemptsRef.current = 0;
     if (sessionIdRef.current && wasConnected) {
-      // Use sendBeacon for a more reliable disconnect signal
       navigator.sendBeacon(`${baseUrl}/api/sse/disconnect?userId=${userId}&sessionId=${sessionIdRef.current}`);
     }
     sessionIdRef.current = null;
@@ -100,10 +101,16 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     disconnectRef.current = disconnect;
   }, [disconnect]);
 
+  // START OF CHANGE: Add Jitter to Reconnect Logic
   const scheduleReconnect = useCallback(() => {
     if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-      const delay = Math.min(MAX_RECONNECT_DELAY, BASE_RECONNECT_DELAY * 2 ** reconnectAttemptsRef.current);
-      console.log(`SSE: Scheduling reconnect for user ${userId} in ${delay}ms`);
+      // Calculate exponential backoff
+      const backoff = Math.min(MAX_RECONNECT_DELAY, BASE_RECONNECT_DELAY * 2 ** reconnectAttemptsRef.current);
+      // Add a random jitter of up to 1 second
+      const jitter = Math.random() * 1000;
+      const delay = backoff + jitter;
+      
+      console.log(`SSE: Scheduling reconnect for user ${userId} in ${delay.toFixed(0)}ms`);
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = setTimeout(() => connect(true), delay);
     } else {
@@ -111,6 +118,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       setState(prev => ({ ...prev, error: 'Max reconnection attempts reached.', connecting: false }));
     }
   }, [userId]);
+  // END OF CHANGE
 
   const connect = useCallback((isRetry = false) => {
     if (eventSourceRef.current) eventSourceRef.current.close();

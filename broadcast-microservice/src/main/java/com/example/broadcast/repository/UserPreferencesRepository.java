@@ -7,14 +7,19 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.time.ZoneOffset;
 
 @Repository
 public class UserPreferencesRepository {
 
     private final JdbcTemplate jdbcTemplate;
+    // START OF CHANGE: Define a safe batch size for IN clauses
+    private static final int BATCH_SIZE = 900;
+    // END OF CHANGE
+
     public UserPreferencesRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -29,9 +34,9 @@ public class UserPreferencesRepository {
                     .emailNotifications(rs.getBoolean("email_notifications"))
                     .pushNotifications(rs.getBoolean("push_notifications"))
                     .preferredCategories(parseJsonArray(rs.getString("preferred_categories")))
-                    .quietHoursStart(rs.getTime("quiet_hours_start") != null ? 
+                    .quietHoursStart(rs.getTime("quiet_hours_start") != null ?
                             rs.getTime("quiet_hours_start").toLocalTime() : null)
-                    .quietHoursEnd(rs.getTime("quiet_hours_end") != null ? 
+                    .quietHoursEnd(rs.getTime("quiet_hours_end") != null ?
                             rs.getTime("quiet_hours_end").toLocalTime() : null)
                     .timezone(rs.getString("timezone"))
                     .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
@@ -45,6 +50,32 @@ public class UserPreferencesRepository {
         List<UserPreferences> results = jdbcTemplate.query(sql, preferencesRowMapper, userId);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
+
+    // START OF CHANGE: Implement batching for large IN clauses
+    public List<UserPreferences> findByUserIdIn(List<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<UserPreferences> allPreferences = new ArrayList<>();
+        int totalUsers = userIds.size();
+
+        for (int i = 0; i < totalUsers; i += BATCH_SIZE) {
+            int end = Math.min(i + BATCH_SIZE, totalUsers);
+            List<String> batch = userIds.subList(i, end);
+
+            String sql = String.format(
+                "SELECT * FROM user_preferences WHERE user_id IN (%s)",
+                String.join(",", java.util.Collections.nCopies(batch.size(), "?"))
+            );
+            
+            List<UserPreferences> batchResult = jdbcTemplate.query(sql, preferencesRowMapper, batch.toArray());
+            allPreferences.addAll(batchResult);
+        }
+
+        return allPreferences;
+    }
+    // END OF CHANGE
 
     public UserPreferences save(UserPreferences preferences) {
         String sql = """

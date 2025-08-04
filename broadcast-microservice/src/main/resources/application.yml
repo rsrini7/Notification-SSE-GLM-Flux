@@ -192,6 +192,9 @@ spring:
     driver-class-name: org.postgresql.Driver
     username: user
     password: password
+    hikari:
+      max-lifetime: 1800000 # 30 minutes
+      maximum-pool-size: 50 # Set an explicit max size
   sql:
     init:
       mode: never

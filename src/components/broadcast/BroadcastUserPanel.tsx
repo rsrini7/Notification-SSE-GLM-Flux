@@ -1,82 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-import { useToast } from '../../hooks/use-toast';
-import { UserPlus, Users, UserMinus } from 'lucide-react'; // Import necessary icons
+import { UserPlus, Users, UserMinus } from 'lucide-react';
 import { Label } from '../ui/label';
 import UserConnectionPanel from './UserConnectionPanel';
-import { userService } from '../../services/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { useUserPanelManager } from '../../hooks/useUserPanelManager'; // Import the new hook
 
 // Main component to manage multiple user panels
 const BroadcastUserPanel: React.FC = () => {
-  const [users, setUsers] = useState<string[]>(['user-001']);
-  const [allUsers, setAllUsers] = useState<string[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState('');
-  const { toast } = useToast();
-
-  // Fetch all users from the database on component mount
-  useEffect(() => {
-    const fetchAllUsers = async () => {
-      try {
-        const userList = await userService.getAllUsers();
-        setAllUsers(userList);
-      } catch (error) {
-        toast({
-          title: 'Error Fetching Users',
-          description: `Could not retrieve the list of all users from the database. ${error}`,
-          variant: 'destructive',
-        });
-      }
-    };
-    fetchAllUsers();
-  }, [toast]);
-
-  const addUser = () => {
-    // If no user is selected, automatically add the next available one
-    const userToAdd = selectedUserId || (availableUsers.length > 0 ? availableUsers[0] : '');
-
-    if (userToAdd && !users.includes(userToAdd)) {
-      setUsers(prevUsers => [...prevUsers, userToAdd]);
-      setSelectedUserId(''); // Clear selection after adding
-      toast({ title: 'User Added', description: `Panel for ${userToAdd} is now active.` });
-    } else if (userToAdd && users.includes(userToAdd)) {
-      toast({ title: 'User Exists', description: `A panel for ${userToAdd} is already open.`, variant: 'destructive' });
-    }
-  };
-
-  const addAllUsers = () => {
-    const usersToAdd = allUsers.filter(u => !users.includes(u));
-    if (usersToAdd.length > 0) {
-      setUsers(prevUsers => [...prevUsers, ...usersToAdd]);
-      toast({
-        title: 'All Users Added',
-        description: `Added ${usersToAdd.length} new user panels.`,
-      });
-    } else {
-      toast({
-        title: 'No Users to Add',
-        description: 'All available users already have a panel open.',
-      });
-    }
-  };
-
-  const removeAllUsers = () => {
-    if (users.length > 0) {
-      setUsers([]);
-      toast({
-        title: 'All Users Removed',
-        description: 'All user connection panels have been closed.',
-      });
-    }
-  };
-
-  const removeUser = useCallback((userIdToRemove: string) => {
-    setUsers(users => users.filter(user => user !== userIdToRemove));
-    toast({ title: 'User Removed', description: `Panel for ${userIdToRemove} has been closed.` });
-  }, [toast]);
-
-  const availableUsers = allUsers.filter(u => !users.includes(u));
+  // All state and logic is now managed by the custom hook
+  const { state, actions } = useUserPanelManager();
+  const { users, selectedUserId, availableUsers } = state;
+  const { addUser, addAllUsers, removeAllUsers, removeUser, setSelectedUserId } = actions;
 
   return (
     <div className="container mx-auto p-6 space-y-8">

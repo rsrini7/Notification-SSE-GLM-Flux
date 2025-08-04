@@ -56,7 +56,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
               return [payload, ...prev];
             }
             return prev;
-          });
+           });
         }
         break;
       
@@ -108,18 +108,15 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // MODIFIED: Added userId to toast descriptions and to the dependency array.
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
     fetchMessages();
   }, [toast, fetchMessages, userId]);
 
-  // MODIFIED: Added userId to toast descriptions and to the dependency array.
   const onDisconnect = useCallback(() => {
     toast({ title: 'Disconnected', description: `Real-time updates disabled for ${userId}`, variant: 'destructive' });
   }, [toast, userId]);
 
-  // MODIFIED: Added userId to toast descriptions and to the dependency array.
   const onError = useCallback(() => {
     toast({ title: 'Connection Error', description: `Failed to connect for ${userId}`, variant: 'destructive' });
   }, [toast, userId]);
@@ -133,19 +130,33 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     onDisconnect,
     onError,
   });
-
+  
+  // START OF CHANGE: Implement Optimistic UI for markAsRead
   const markAsRead = useCallback(async (messageId: number) => {
+    // Store the original state in case we need to revert
+    const originalMessages = messages;
+
+    // Optimistically update the UI
+    setMessages(prev => prev.map(msg =>
+      msg.id === messageId
+        ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() }
+        : msg
+    ));
+
     try {
+      // Make the API call in the background
       await sseConnection.markAsRead(messageId);
-      setMessages(prev => prev.map(msg =>
-        msg.id === messageId
-          ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() }
-          : msg
-      ));
     } catch (error) {
-     toast({ title: 'Error', description: `Failed to mark message as read for ${userId}.`, variant: 'destructive' });
+     // If the API call fails, revert the UI change and show an error
+     setMessages(originalMessages);
+     toast({ 
+        title: 'Error', 
+        description: `Failed to mark message as read for ${userId}.`, 
+        variant: 'destructive' 
+     });
     }
-  }, [sseConnection, toast, userId]);
+  }, [sseConnection, toast, userId, messages]);
+  // END OF CHANGE
   
   const stats = useMemo(() => {
     const total = messages.length;
@@ -153,7 +164,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     const read = total - unread;
     return { total, unread, read };
   }, [messages]);
-  
+
   return {
     messages,
     loading,
