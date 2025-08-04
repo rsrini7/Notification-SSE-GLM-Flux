@@ -296,12 +296,12 @@ graph TD
     class CaffeineCache cache;
     class Kafka messaging;
 
-    click ReactUI "src/main/resources/static/index.html"
-    click BroadcastAPI "src/main/java/com/example/broadcast/BroadcastApplication.java"
-    click SSEEndpoint "src/main/java/com/example/broadcast/controller/SseController.java"
-    click H2DB "src/main/resources/sql/schema.sql"
-    click CaffeineCache "src/main/java/com/example/broadcast/config/CacheConfig.java"
-    click Kafka "src/main/java/com/example/broadcast/config/KafkaConfig.java"
+    click ReactUI "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/resources/static/index.html"
+    click BroadcastAPI "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/BroadcastApplication.java"
+    click SSEEndpoint "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/controller/SseController.java"
+    click H2DB "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/resources/sql/schema.sql"
+    click CaffeineCache "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/config/CacheConfig.java"
+    click Kafka "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/config/KafkaConfig.java"
     click AdminUI "README.md"
 ```
 
@@ -407,41 +407,41 @@ graph TD
     class BroadcastMessage_java,UserBroadcastMessage_java,UserSession_java model;
     class BroadcastRequest_java,BroadcastResponse_java,MessageDeliveryEvent_java dto;
 
-    click com_example_broadcast_controller "src/main/java/com/example/broadcast/controller"
-    click BroadcastController_java "src/main/java/com/example/broadcast/controller/BroadcastController.java"
-    click SseController_java "src/main/java/com/example/broadcast/controller/SseController.java"
+    click com_example_broadcast_controller "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/controller"
+    click BroadcastController_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/controller/BroadcastController.java"
+    click SseController_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/controller/SseController.java"
 
-    click com_example_broadcast_service "src/main/java/com/example/broadcast/service"
-    click BroadcastService_java "src/main/java/com/example/broadcast/service/BroadcastService.java"
-    click SseService_java "src/main/java/com/example/broadcast/service/SseService.java"
-    click BroadcastTargetingService_java "src/main/java/com/example/broadcast/service/BroadcastTargetingService.java"
-    click UserService_java "src/main/java/com/example/broadcast/service/UserService.java"
-    click CacheService_java "src/main/java/com/example/broadcast/service/CacheService.java"
-    click MessageStatusService_java "src/main/java/com/example/broadcast/service/MessageStatusService.java"
-    click TestingConfigurationService_java "src/main/java/com/example/broadcast/service/TestingConfigurationService.java"
+    click com_example_broadcast_service "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/service"
+    click BroadcastService_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/service/BroadcastService.java"
+    click SseService_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/service/SseService.java"
+    click BroadcastTargetingService_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/service/BroadcastTargetingService.java"
+    click UserService_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/service/UserService.java"
+    click CacheService_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/service/CacheService.java"
+    click MessageStatusService_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/service/MessageStatusService.java"
+    click TestingConfigurationService_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/service/TestingConfigurationService.java"
 
-    click com_example_broadcast_repository "src/main/java/com/example/broadcast/repository"
-    click BroadcastRepository_java "src/main/java/com/example/broadcast/repository/BroadcastRepository.java"
-    click UserBroadcastRepository_java "src/main/java/com/example/broadcast/repository/UserBroadcastRepository.java"
-    click BroadcastStatisticsRepository_java "src/main/java/com/example/broadcast/repository/BroadcastStatisticsRepository.java"
-    click UserSessionRepository_java "src/main/java/com/example/broadcast/repository/UserSessionRepository.java"
-    click OutboxRepository_java "src/main/java/com/example/broadcast/repository/OutboxRepository.java"
+    click com_example_broadcast_repository "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/repository"
+    click BroadcastRepository_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/repository/BroadcastRepository.java"
+    click UserBroadcastRepository_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/repository/UserBroadcastRepository.java"
+    click BroadcastStatisticsRepository_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/repository/BroadcastStatisticsRepository.java"
+    click UserSessionRepository_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/repository/UserSessionRepository.java"
+    click OutboxRepository_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/repository/OutboxRepository.java"
 
-    click com_example_broadcast_config "src/main/java/com/example/broadcast/config"
-    click KafkaConfig_java "src/main/java/com/example/broadcast/config/KafkaConfig.java"
-    click CaffeineConfig_java "src/main/java/com/example/broadcast/config/CaffeineConfig.java"
+    click com_example_broadcast_config "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/config"
+    click KafkaConfig_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/config/KafkaConfig.java"
+    click CaffeineConfig_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/config/CaffeineConfig.java"
 
-    click com_example_broadcast_model "src/main/java/com/example/broadcast/model"
-    click BroadcastMessage_java "src/main/java/com/example/broadcast/model/BroadcastMessage.java"
-    click UserBroadcastMessage_java "src/main/java/com/example/broadcast/model/UserBroadcastMessage.java"
-    click UserSession_java "src/main/java/com/example/broadcast/model/UserSession.java"
+    click com_example_broadcast_model "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/model"
+    click BroadcastMessage_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/model/BroadcastMessage.java"
+    click UserBroadcastMessage_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/model/UserBroadcastMessage.java"
+    click UserSession_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/model/UserSession.java"
 
-    click com_example_broadcast_dto "src/main/java/com/example/broadcast/dto"
-    click BroadcastRequest_java "src/main/java/com/example/broadcast/dto/BroadcastRequest.java"
-    click BroadcastResponse_java "src/main/java/com/example/broadcast/dto/BroadcastResponse.java"
-    click MessageDeliveryEvent_java "src/main/java/com/example/broadcast/dto/MessageDeliveryEvent.java"
+    click com_example_broadcast_dto "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/dto"
+    click BroadcastRequest_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/dto/BroadcastRequest.java"
+    click BroadcastResponse_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/dto/BroadcastResponse.java"
+    click MessageDeliveryEvent_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/dto/MessageDeliveryEvent.java"
 
-    click BroadcastMicroserviceApplication_java "src/main/java/com/example/broadcast/BroadcastMicroserviceApplication.java"
+    click BroadcastMicroserviceApplication_java "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/BroadcastMicroserviceApplication.java"
 ```
 
 ### System Design Diagram UI
@@ -453,7 +453,7 @@ graph TD
 
     subgraph "Frontend Application"
         B -- "HTTP/S" --> C(React Frontend)
-        click C "src/App.tsx"
+        click C "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/App.tsx"
     end
 
     subgraph "Backend Services"
@@ -501,18 +501,18 @@ graph TD
 ### Code Map
 ```mermaid
 graph TD
-    subgraph "src/"
-        subgraph "src/App.tsx"
+    subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/App.tsx"
             App_tsx_App[App Component]
-            click App_tsx_App "src/App.tsx"
+            click App_tsx_App "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/App.tsx"
         end
 
-        subgraph "src/main.tsx"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main.tsx"
             main_tsx_ReactDOM[ReactDOM.createRoot]
-            click main_tsx_ReactDOM "src/main.tsx"
+            click main_tsx_ReactDOM "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main.tsx"
         end
 
-        subgraph "src/services/api.ts"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/services/api.ts"
             api_ts_axios[axios instance]
             api_ts_getBroadcasts[getBroadcasts]
             api_ts_createBroadcast[createBroadcast]
@@ -524,38 +524,38 @@ graph TD
             api_ts_redriveDltMessage[redriveDltMessage]
             api_ts_deleteDltMessage[deleteDltMessage]
             api_ts_purgeDltMessage[purgeDltMessage]
-            click api_ts_axios "src/services/api.ts"
+            click api_ts_axios "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/services/api.ts"
         end
 
-        subgraph "src/hooks/useSseConnection.ts"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/hooks/useSseConnection.ts"
             useSseConnection_ts_useSseConnection[useSseConnection]
-            click useSseConnection_ts_useSseConnection "src/hooks/useSseConnection.ts"
+            click useSseConnection_ts_useSseConnection "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/hooks/useSseConnection.ts"
         end
 
-        subgraph "src/hooks/useBroadcastMessages.ts"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/hooks/useBroadcastMessages.ts"
             useBroadcastMessages_ts_useBroadcastMessages[useBroadcastMessages]
-            click useBroadcastMessages_ts_useBroadcastMessages "src/hooks/useBroadcastMessages.ts"
+            click useBroadcastMessages_ts_useBroadcastMessages "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/hooks/useBroadcastMessages.ts"
         end
 
-        subgraph "src/components/broadcast/BroadcastAdminPanel.tsx"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/BroadcastAdminPanel.tsx"
             BroadcastAdminPanel_tsx_BroadcastAdminPanel[BroadcastAdminPanel Component]
-            click BroadcastAdminPanel_tsx_BroadcastAdminPanel "src/components/broadcast/BroadcastAdminPanel.tsx"
+            click BroadcastAdminPanel_tsx_BroadcastAdminPanel "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/BroadcastAdminPanel.tsx"
         end
 
-        subgraph "src/components/broadcast/BroadcastUserPanel.tsx"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/BroadcastUserPanel.tsx"
             BroadcastUserPanel_tsx_BroadcastUserPanel[BroadcastUserPanel Component]
-            click BroadcastUserPanel_tsx_BroadcastUserPanel "src/components/broadcast/BroadcastUserPanel.tsx"
+            click BroadcastUserPanel_tsx_BroadcastUserPanel "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/BroadcastUserPanel.tsx"
         end
 
-        subgraph "src/components/broadcast/DltManagementPanel.tsx"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/DltManagementPanel.tsx"
             DltManagementPanel_tsx_DltManagementPanel[DltManagementPanel Component]
-            click DltManagementPanel_tsx_DltManagementPanel "src/components/broadcast/DltManagementPanel.tsx"
+            click DltManagementPanel_tsx_DltManagementPanel "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/components/broadcast/DltManagementPanel.tsx"
         end
 
-        subgraph "src/lib/utils.ts"
+        subgraph "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/lib/utils.ts"
             utils_ts_cn[cn]
             utils_ts_formatDate[formatDate]
-            click utils_ts_cn "src/lib/utils.ts"
+            click utils_ts_cn "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/lib/utils.ts"
         end
     end
 
