@@ -21,7 +21,7 @@ public class UserService {
         // A proper implementation would have a WebClient call here.
 
         //useSseConnection.ts:80  POST https://localhost/api/sse/heartbeat?userId=user-117&sessionId=session-1754111099026-trcv6by5p net::ERR_INSUFFICIENT_RESOURCES
-        return java.util.stream.IntStream.rangeClosed(1, 50)
+        return java.util.stream.IntStream.rangeClosed(1, 120)
                 .mapToObj(i -> String.format("user-%03d", i))
                 .collect(java.util.stream.Collectors.toList());
     }

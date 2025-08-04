@@ -119,7 +119,7 @@ resilience4j:
         timeoutDuration: 0
         registerHealthIndicator: true
       sseConnectLimiter:
-        limitForPeriod: 15
+        limitForPeriod: 200
         limitRefreshPeriod: 1m
         timeoutDuration: 2s
         registerHealthIndicator: true

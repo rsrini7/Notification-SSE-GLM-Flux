@@ -1,6 +1,7 @@
-# React Broadcast Messaging System - Frontend
+# Broadcast Messaging System
 
 A modern React frontend for the Broadcast Messaging System, built with Vite, TypeScript, and Tailwind CSS.
+Backend: Java with Spring Boot and Netty
 
 ## Features
 
@@ -11,6 +12,13 @@ A modern React frontend for the Broadcast Messaging System, built with Vite, Typ
 - **Responsive Design**: Works seamlessly on desktop and mobile devices.
 - **TypeScript**: Full type safety throughout the application.
 
+### Core Functionality
+- **Real-time SSE Delivery**: Sub-second latency for online users
+- **Persistent Storage**: h2 Database with admin and user-side tracking
+- **Event Streaming**: Kafka-based fan-out with at-least-once semantics
+- **High-Performance Caching**: Caffeine for low-latency operations
+- **Scalable Architecture**: Kubernetes-ready with HPA and PDB
+
 ## Tech Stack
 
 - **React 19**: Latest React with hooks and modern features.
@@ -20,11 +28,66 @@ A modern React frontend for the Broadcast Messaging System, built with Vite, Typ
 - **shadcn/ui**: High-quality React components.
 - **Axios**: HTTP client for API communication.
 - **Lucide React**: Beautiful icons.
+- **Netty**: High-performance network library for Java.
+- **Spring Boot**: Java backend framework.
+- **Postgres**: Relational database for message storage.
+- **Redis**: In-memory data structure store for caching and message queuing.
+- **Docker**: Containerization for easy deployment.
+- **Nginx**: Reverse proxy and load balancer.
+
+
+### Technical Capabilities
+- **Reactive Programming**: Spring WebFlux with non-blocking I/O
+- **Database Optimization**: Batch operations, proper indexing, connection pooling
+- **Message Delivery**: Guaranteed delivery with retry mechanisms
+- **Monitoring & Observability**: Comprehensive metrics, logging, and tracing
+- **High Availability**: Multi-replica deployment with failover
+
+### Data Flow
+1. **Admin creates broadcast** → Stored in h2 DB → Kafka event published
+2. **Kafka consumer** processes event → Updates cache → Delivers via SSE
+3. **User receives message** → Marks as read → Status updated in DB
+4. **Offline users** → Messages cached → Delivered on reconnect
+
 
 ## Prerequisites
 
 - Node.js 18+.
-- Java backend running on port **8081**.
+- Java 17+
+- Maven 3.6+
+- Docker & Kubernetes (for deployment)
+- Kafka 3.7.1+ (Confluence 7.7.1)
+- Postgres 15+
+- Redis 7+
+
+## Database Schema
+
+### Core Tables
+- **broadcast_messages**: Admin-side broadcast records
+- **user_broadcast_messages**: User-specific delivery tracking
+- **user_sessions**: Connection and session management
+- **user_preferences**: Notification preferences
+- **broadcast_statistics**: Performance metrics
+- **dlq_messages**: Dead Letter Queue for failed messages
+- **outbox_events**: Outbox table for event sourcing
+
+## Scaling Guide
+
+### Horizontal Scaling
+- **Pod Count**: Start with 3, scale to 20+ based on load
+- **Resource Allocation**: 3-5GB memory, 1-2 CPU cores per pod
+- **Load Balancing**: Kubernetes Service with session affinity
+
+### Vertical Scaling
+- **Memory**: Adjust based on cache size requirements
+- **CPU**: Scale based on message processing load
+- **Network**: Ensure sufficient bandwidth for SSE traffic
+
+### Kafka Scaling
+- **Partitions**: 10 partitions for parallel processing
+- **Replication**: 3 replicas for fault tolerance
+- **Consumer Groups**: Multiple consumers for load distribution
+
 
 ## Getting Started
 
@@ -78,7 +141,7 @@ The frontend is configured to connect to a Java backend:
 
 ### API Endpoints Used
 
--   [cite_start]`GET /api/broadcasts` - Get all broadcasts [cite: 40-41].
+-   `GET /api/broadcasts` - Get all broadcasts.
 -   `POST /api/broadcasts` - Create a new broadcast.
 -   `DELETE /api/broadcasts/{id}` - Cancel a broadcast.
 -   `GET /api/broadcasts/{id}/stats` - Get broadcast statistics.
@@ -149,6 +212,17 @@ mvn spring-boot:run -Dspring-boot.run.profiles=redis
 mvn clean package && java "-Dspring.profiles.active=redis" -jar target/broadcast-microservice-1.0.0.jar
 ```
 
+## Deployment
+
+### Kubernetes Deployment
+```bash
+# Apply all configurations
+kubectl apply -f k8s/
+
+# Verify deployment
+kubectl get pods -n broadcast-system
+kubectl get hpa -n broadcast-system
+
 ### Performance Testing
 
 ```bash
@@ -179,3 +253,389 @@ mvn gatling:test
 ## License
 
 This project is part of the Broadcast Messaging System.
+
+## Project Architecture
+
+### System Design Diagram Backend
+```mermaid
+graph TD
+    subgraph "User Interface"
+        ReactUI[("React UI")]
+    end
+
+    subgraph "Backend Microservice"
+        BroadcastAPI["Broadcast API (Spring Boot)"]
+        SSEEndpoint["SSE Endpoint (WebFlux)"]
+    end
+
+    subgraph "Data Stores"
+        H2DB[(h2 Database)]
+        CaffeineCache[{"Caffeine Cache"}]
+    end
+
+    subgraph "Messaging System"
+        Kafka[((Kafka Event Stream))]
+    end
+
+    AdminUI[Admin UI]
+
+    AdminUI -- "Manages" --> BroadcastAPI
+    BroadcastAPI -- "Reads/Writes" --> H2DB
+    BroadcastAPI -- "Publishes Events" --> Kafka
+    Kafka -- "Consumes Events" --> SSEEndpoint
+    Kafka -- "Updates" --> CaffeineCache
+    SSEEndpoint -- "Serves" --> ReactUI
+    SSEEndpoint -- "Accesses" --> CaffeineCache
+
+    classDef default fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef database fill:#add8e6,stroke:#333,stroke-width:2px;
+    classDef cache fill:#90ee90,stroke:#333,stroke-width:2px;
+    classDef messaging fill:#ffb6c1,stroke:#333,stroke-width:2px;
+
+    class H2DB database;
+    class CaffeineCache cache;
+    class Kafka messaging;
+
+    click ReactUI "src/main/resources/static/index.html"
+    click BroadcastAPI "src/main/java/com/example/broadcast/BroadcastApplication.java"
+    click SSEEndpoint "src/main/java/com/example/broadcast/controller/SseController.java"
+    click H2DB "src/main/resources/sql/schema.sql"
+    click CaffeineCache "src/main/java/com/example/broadcast/config/CacheConfig.java"
+    click Kafka "src/main/java/com/example/broadcast/config/KafkaConfig.java"
+    click AdminUI "README.md"
+```
+
+### Code Map
+```mermaid
+graph TD
+    subgraph com_example_broadcast_controller["com.example.broadcast.controller"]
+        BroadcastController_java["BroadcastController.java"]
+        SseController_java["SseController.java"]
+    end
+
+    subgraph com_example_broadcast_service["com.example.broadcast.service"]
+        BroadcastService_java["BroadcastService.java"]
+        SseService_java["SseService.java"]
+        BroadcastTargetingService_java["BroadcastTargetingService.java"]
+        UserService_java["UserService.java"]
+        CacheService_java["CacheService.java"]
+        MessageStatusService_java["MessageStatusService.java"]
+        TestingConfigurationService_java["TestingConfigurationService.java"]
+    end
+
+    subgraph com_example_broadcast_repository["com.example.broadcast.repository"]
+        BroadcastRepository_java["BroadcastRepository.java"]
+        UserBroadcastRepository_java["UserBroadcastRepository.java"]
+        BroadcastStatisticsRepository_java["BroadcastStatisticsRepository.java"]
+        UserSessionRepository_java["UserSessionRepository.java"]
+        OutboxRepository_java["OutboxRepository.java"]
+    end
+
+    subgraph com_example_broadcast_config["com.example.broadcast.config"]
+        KafkaConfig_java["KafkaConfig.java"]
+        CaffeineConfig_java["CaffeineConfig.java"]
+    end
+
+    subgraph com_example_broadcast_model["com.example.broadcast.model"]
+        BroadcastMessage_java["BroadcastMessage.java"]
+        UserBroadcastMessage_java["UserBroadcastMessage.java"]
+        UserSession_java["UserSession.java"]
+    end
+
+    subgraph com_example_broadcast_dto["com.example.broadcast.dto"]
+        BroadcastRequest_java["BroadcastRequest.java"]
+        BroadcastResponse_java["BroadcastResponse.java"]
+        MessageDeliveryEvent_java["MessageDeliveryEvent.java"]
+    end
+
+    BroadcastController_java -- "createBroadcast(req)" --> BroadcastService_java::createBroadcast
+    BroadcastController_java -- "getBroadcast(id)" --> BroadcastService_java::getBroadcast
+    BroadcastController_java -- "cancelBroadcast(id)" --> BroadcastService_java::cancelBroadcast
+    BroadcastController_java -- "markMessageAsRead(userId, msgId)" --> BroadcastService_java::markMessageAsReadAndPublishEvent
+
+    SseController_java -- "connect(userId, sessionId)" --> SseService_java::createEventStream
+    SseController_java -- "disconnect(userId, sessionId)" --> SseService_java::removeEventStream
+    SseController_java -- "markMessageAsRead(userId, msgId)" --> SseService_java::markMessageAsRead
+    SseController_java -- "markMessageAsRead(userId, msgId)" --> BroadcastService_java::markMessageAsReadAndPublishEvent
+    SseController_java -- "Uses" --> UserSessionRepository_java
+    SseController_java -- "Uses" --> CacheService_java
+
+    BroadcastService_java -- "Saves/Updates" --> BroadcastRepository_java
+    BroadcastService_java -- "Saves/Updates" --> UserBroadcastRepository_java
+    BroadcastService_java -- "Saves/Updates" --> BroadcastStatisticsRepository_java
+    BroadcastService_java -- "Targets Users" --> BroadcastTargetingService_java
+    BroadcastService_java -- "Interacts with" --> UserService_java
+    BroadcastService_java -- "Publishes Events" --> OutboxRepository_java
+    BroadcastService_java -- "Checks Config" --> TestingConfigurationService_java
+    BroadcastService_java -- "Updates Status" --> MessageStatusService_java
+
+    SseService_java -- "Manages Sessions" --> UserSessionRepository_java
+    SseService_java -- "Retrieves Messages" --> UserBroadcastRepository_java
+    SseService_java -- "Handles Events" --> MessageStatusService_java
+    SseService_java -- "Manages Cache" --> CacheService_java
+    SseService_java -- "Uses" --> BroadcastRepository_java
+
+    BroadcastTargetingService_java -- "Queries" --> UserBroadcastRepository_java
+    BroadcastTargetingService_java -- "Queries" --> UserSessionRepository_java
+
+    OutboxRepository_java -- "Sends to" --> KafkaConfig_java
+    KafkaConfig_java -- "Configures" --> BroadcastMicroserviceApplication_java["BroadcastMicroserviceApplication.java"]
+    CaffeineConfig_java -- "Configures" --> CacheService_java
+
+    BroadcastMessage_java -- "Used by" --> BroadcastService_java
+    UserBroadcastMessage_java -- "Used by" --> BroadcastService_java
+    UserSession_java -- "Used by" --> SseService_java
+
+    BroadcastRequest_java -- "Used by" --> BroadcastController_java
+    BroadcastResponse_java -- "Used by" --> BroadcastController_java
+    MessageDeliveryEvent_java -- "Used by" --> SseService_java
+    MessageDeliveryEvent_java -- "Used by" --> BroadcastService_java
+
+    classDef fileNode fill:#fffacd,stroke:#333,stroke-width:1px;
+    classDef folderNode fill:#b0e0e6,stroke:#333,stroke-width:1px;
+    classDef controller fill:#cceeff,stroke:#333,stroke-width:1px;
+    classDef service fill:#ffcc99,stroke:#333,stroke-width:1px;
+    classDef repository fill:#ccffcc,stroke:#333,stroke-width:1px;
+    classDef config fill:#ffddaa,stroke:#333,stroke-width:1px;
+    classDef model fill:#ddccff,stroke:#333,stroke-width:1px;
+    classDef dto fill:#ffeecc,stroke:#333,stroke-width:1px;
+
+    class BroadcastController_java,SseController_java controller;
+    class BroadcastService_java,SseService_java,BroadcastTargetingService_java,UserService_java,CacheService_java,MessageStatusService_java,TestingConfigurationService_java service;
+    class BroadcastRepository_java,UserBroadcastRepository_java,BroadcastStatisticsRepository_java,UserSessionRepository_java,OutboxRepository_java repository;
+    class KafkaConfig_java,CaffeineConfig_java config;
+    class BroadcastMessage_java,UserBroadcastMessage_java,UserSession_java model;
+    class BroadcastRequest_java,BroadcastResponse_java,MessageDeliveryEvent_java dto;
+
+    click com_example_broadcast_controller "src/main/java/com/example/broadcast/controller"
+    click BroadcastController_java "src/main/java/com/example/broadcast/controller/BroadcastController.java"
+    click SseController_java "src/main/java/com/example/broadcast/controller/SseController.java"
+
+    click com_example_broadcast_service "src/main/java/com/example/broadcast/service"
+    click BroadcastService_java "src/main/java/com/example/broadcast/service/BroadcastService.java"
+    click SseService_java "src/main/java/com/example/broadcast/service/SseService.java"
+    click BroadcastTargetingService_java "src/main/java/com/example/broadcast/service/BroadcastTargetingService.java"
+    click UserService_java "src/main/java/com/example/broadcast/service/UserService.java"
+    click CacheService_java "src/main/java/com/example/broadcast/service/CacheService.java"
+    click MessageStatusService_java "src/main/java/com/example/broadcast/service/MessageStatusService.java"
+    click TestingConfigurationService_java "src/main/java/com/example/broadcast/service/TestingConfigurationService.java"
+
+    click com_example_broadcast_repository "src/main/java/com/example/broadcast/repository"
+    click BroadcastRepository_java "src/main/java/com/example/broadcast/repository/BroadcastRepository.java"
+    click UserBroadcastRepository_java "src/main/java/com/example/broadcast/repository/UserBroadcastRepository.java"
+    click BroadcastStatisticsRepository_java "src/main/java/com/example/broadcast/repository/BroadcastStatisticsRepository.java"
+    click UserSessionRepository_java "src/main/java/com/example/broadcast/repository/UserSessionRepository.java"
+    click OutboxRepository_java "src/main/java/com/example/broadcast/repository/OutboxRepository.java"
+
+    click com_example_broadcast_config "src/main/java/com/example/broadcast/config"
+    click KafkaConfig_java "src/main/java/com/example/broadcast/config/KafkaConfig.java"
+    click CaffeineConfig_java "src/main/java/com/example/broadcast/config/CaffeineConfig.java"
+
+    click com_example_broadcast_model "src/main/java/com/example/broadcast/model"
+    click BroadcastMessage_java "src/main/java/com/example/broadcast/model/BroadcastMessage.java"
+    click UserBroadcastMessage_java "src/main/java/com/example/broadcast/model/UserBroadcastMessage.java"
+    click UserSession_java "src/main/java/com/example/broadcast/model/UserSession.java"
+
+    click com_example_broadcast_dto "src/main/java/com/example/broadcast/dto"
+    click BroadcastRequest_java "src/main/java/com/example/broadcast/dto/BroadcastRequest.java"
+    click BroadcastResponse_java "src/main/java/com/example/broadcast/dto/BroadcastResponse.java"
+    click MessageDeliveryEvent_java "src/main/java/com/example/broadcast/dto/MessageDeliveryEvent.java"
+
+    click BroadcastMicroserviceApplication_java "src/main/java/com/example/broadcast/BroadcastMicroserviceApplication.java"
+```
+
+### System Design Diagram UI
+```mermaid
+graph TD
+    subgraph "User Interface"
+        A["Browser/Client"] -- "HTTP/S" --> B(Nginx Reverse Proxy)
+    end
+
+    subgraph "Frontend Application"
+        B -- "HTTP/S" --> C(React Frontend)
+        click C "src/App.tsx"
+    end
+
+    subgraph "Backend Services"
+        C -- "HTTP SSE" --> D(Broadcast Microservice)
+        click D "broadcast-microservice/src/main/java/com/example/broadcast/BroadcastApplication.java"
+        D -- "Kafka Messages" --> E(Kafka Broker)
+        E -- "DLQ Messages" --> F(Kafka DLQ Topic)
+        D -- "DB Operations" --> G(PostgreSQL Database)
+    end
+
+    subgraph "External Tools"
+        H[K6 Performance Testing] --> D
+        I[Gatling Performance Testing] --> D
+    end
+
+    classDef client fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef proxy fill:#ccf,stroke:#333,stroke-width:2px;
+    classDef frontend fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef backend fill:#fcc,stroke:#333,stroke-width:2px;
+    classDef database fill:#cfc,stroke:#333,stroke-width:2px;
+    classDef message_queue fill:#ffc,stroke:#333,stroke-width:2px;
+    classDef testing_tool fill:#e0e0e0,stroke:#333,stroke-width:2px;
+
+    A:::client
+    B:::proxy
+    C:::frontend
+    D:::backend
+    E:::message_queue
+    F:::message_queue
+    G:::database
+    H:::testing_tool
+    I:::testing_tool
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#ccf,stroke:#333,stroke-width:2px
+    style C fill:#bbf,stroke:#333,stroke-width:2px
+    style D fill:#fcc,stroke:#333,stroke-width:2px
+    style E fill:#ffc,stroke:#333,stroke-width:2px
+    style F fill:#ffc,stroke:#333,stroke-width:2px
+    style G fill:#cfc,stroke:#333,stroke-width:2px
+    style H fill:#e0e0e0,stroke:#333,stroke-width:2px
+    style I fill:#e0e0e0,stroke:#333,stroke-width:2px
+```
+
+### Code Map
+```mermaid
+graph TD
+    subgraph "src/"
+        subgraph "src/App.tsx"
+            App_tsx_App[App Component]
+            click App_tsx_App "src/App.tsx"
+        end
+
+        subgraph "src/main.tsx"
+            main_tsx_ReactDOM[ReactDOM.createRoot]
+            click main_tsx_ReactDOM "src/main.tsx"
+        end
+
+        subgraph "src/services/api.ts"
+            api_ts_axios[axios instance]
+            api_ts_getBroadcasts[getBroadcasts()]
+            api_ts_createBroadcast[createBroadcast()]
+            api_ts_deleteBroadcast[deleteBroadcast()]
+            api_ts_getBroadcastStats[getBroadcastStats()]
+            api_ts_getUserMessages[getUserMessages()]
+            api_ts_markMessageAsRead[markMessageAsRead()]
+            api_ts_getDltMessages[getDltMessages()]
+            api_ts_redriveDltMessage[redriveDltMessage()]
+            api_ts_deleteDltMessage[deleteDltMessage()]
+            api_ts_purgeDltMessage[purgeDltMessage()]
+            click api_ts_axios "src/services/api.ts"
+        end
+
+        subgraph "src/hooks/useSseConnection.ts"
+            useSseConnection_ts_useSseConnection[useSseConnection()]
+            click useSseConnection_ts_useSseConnection "src/hooks/useSseConnection.ts"
+        end
+
+        subgraph "src/hooks/useBroadcastMessages.ts"
+            useBroadcastMessages_ts_useBroadcastMessages[useBroadcastMessages()]
+            click useBroadcastMessages_ts_useBroadcastMessages "src/hooks/useBroadcastMessages.ts"
+        end
+
+        subgraph "src/components/broadcast/BroadcastAdminPanel.tsx"
+            BroadcastAdminPanel_tsx_BroadcastAdminPanel[BroadcastAdminPanel Component]
+            click BroadcastAdminPanel_tsx_BroadcastAdminPanel "src/components/broadcast/BroadcastAdminPanel.tsx"
+        end
+
+        subgraph "src/components/broadcast/BroadcastUserPanel.tsx"
+            BroadcastUserPanel_tsx_BroadcastUserPanel[BroadcastUserPanel Component]
+            click BroadcastUserPanel_tsx_BroadcastUserPanel "src/components/broadcast/BroadcastUserPanel.tsx"
+        end
+
+        subgraph "src/components/broadcast/DltManagementPanel.tsx"
+            DltManagementPanel_tsx_DltManagementPanel[DltManagementPanel Component]
+            click DltManagementPanel_tsx_DltManagementPanel "src/components/broadcast/DltManagementPanel.tsx"
+        end
+
+        subgraph "src/lib/utils.ts"
+            utils_ts_cn[cn()]
+            utils_ts_formatDate[formatDate()]
+            click utils_ts_cn "src/lib/utils.ts"
+        end
+    end
+
+    main_tsx_ReactDOM --> App_tsx_App
+
+    App_tsx_App --> useSseConnection_ts_useSseConnection
+    App_tsx_App --> useBroadcastMessages_ts_useBroadcastMessages
+    App_tsx_App --> BroadcastAdminPanel_tsx_BroadcastAdminPanel
+    App_tsx_App --> BroadcastUserPanel_tsx_BroadcastUserPanel
+
+    useBroadcastMessages_ts_useBroadcastMessages --> api_ts_getUserMessages
+    useBroadcastMessages_ts_useBroadcastMessages --> api_ts_markMessageAsRead
+
+    BroadcastAdminPanel_tsx_BroadcastAdminPanel --> api_ts_getBroadcasts
+    BroadcastAdminPanel_tsx_BroadcastAdminPanel --> api_ts_createBroadcast
+    BroadcastAdminPanel_tsx_BroadcastAdminPanel --> api_ts_deleteBroadcast
+    BroadcastAdminPanel_tsx_BroadcastAdminPanel --> api_ts_getBroadcastStats
+    BroadcastAdminPanel_tsx_BroadcastAdminPanel --> DltManagementPanel_tsx_DltManagementPanel
+
+    DltManagementPanel_tsx_DltManagementPanel --> api_ts_getDltMessages
+    DltManagementPanel_tsx_DltManagementPanel --> api_ts_redriveDltMessage
+    DltManagementPanel_tsx_DltManagementPanel --> api_ts_deleteDltMessage
+    DltManagementPanel_tsx_DltManagementPanel --> api_ts_purgeDltMessage
+
+    api_ts_getBroadcasts --> api_ts_axios
+    api_ts_createBroadcast --> api_ts_axios
+    api_ts_deleteBroadcast --> api_ts_axios
+    api_ts_getBroadcastStats --> api_ts_axios
+    api_ts_getUserMessages --> api_ts_axios
+    api_ts_markMessageAsRead --> api_ts_axios
+    api_ts_getDltMessages --> api_ts_axios
+    api_ts_redriveDltMessage --> api_ts_axios
+    api_ts_deleteDltMessage --> api_ts_axios
+    api_ts_purgeDltMessage --> api_ts_axios
+
+    classDef file_node fill:#e0e0e0,stroke:#333,stroke-width:2px;
+    classDef component_node fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef hook_node fill:#fcc,stroke:#333,stroke-width:2px;
+    classDef service_node fill:#cfc,stroke:#333,stroke-width:2px;
+    classDef utility_node fill:#ffc,stroke:#333,stroke-width:2px;
+
+    App_tsx_App:::component_node
+    main_tsx_ReactDOM:::component_node
+    api_ts_axios:::service_node
+    api_ts_getBroadcasts:::service_node
+    api_ts_createBroadcast:::service_node
+    api_ts_deleteBroadcast:::service_node
+    api_ts_getBroadcastStats:::service_node
+    api_ts_getUserMessages:::service_node
+    api_ts_markMessageAsRead:::service_node
+    api_ts_getDltMessages:::service_node
+    api_ts_redriveDltMessage:::service_node
+    api_ts_deleteDltMessage:::service_node
+    api_ts_purgeDltMessage:::service_node
+    useSseConnection_ts_useSseConnection:::hook_node
+    useBroadcastMessages_ts_useBroadcastMessages:::hook_node
+    BroadcastAdminPanel_tsx_BroadcastAdminPanel:::component_node
+    BroadcastUserPanel_tsx_BroadcastUserPanel:::component_node
+    DltManagementPanel_tsx_DltManagementPanel:::component_node
+    utils_ts_cn:::utility_node
+    utils_ts_formatDate:::utility_node
+
+    style App_tsx_App fill:#bbf,stroke:#333,stroke-width:2px
+    style main_tsx_ReactDOM fill:#bbf,stroke:#333,stroke-width:2px
+    style api_ts_axios fill:#cfc,stroke:#333,stroke-width:2px
+    style api_ts_getBroadcasts fill:#cfc,stroke:#333,stroke-width:2px
+    style api_ts_createBroadcast fill:#cfc,stroke:#333,stroke-width:2px
+    style api_ts_deleteBroadcast fill:#cfc,stroke:#333,stroke-width:2px
+    style api_ts_getBroadcastStats fill:#cfc,stroke:#333,stroke-width:2px
+    style api_ts_getUserMessages fill:#cfc,stroke:#333,stroke-width:2px
+    style api_ts_markMessageAsRead fill:#cfc,stroke:#333,stroke-width:2px
+    style api_ts_getDltMessages fill:#cfc,stroke:#333,stroke-width:2px
+    style api_ts_redriveDltMessage fill:#cfc,stroke:#333,stroke-width:2px
+    style api_ts_deleteDltMessage fill:#cfc,stroke:#333,stroke-width:2px
+    style api_ts_purgeDltMessage fill:#cfc,stroke:#333,stroke-width:2px
+    style useSseConnection_ts_useSseConnection fill:#fcc,stroke:#333,stroke-width:2px
+    style useBroadcastMessages_ts_useBroadcastMessages fill:#fcc,stroke:#333,stroke-width:2px
+    style BroadcastAdminPanel_tsx_BroadcastAdminPanel fill:#bbf,stroke:#333,stroke-width:2px
+    style BroadcastUserPanel_tsx_BroadcastUserPanel fill:#bbf,stroke:#333,stroke-width:2px
+    style DltManagementPanel_tsx_DltManagementPanel fill:#bbf,stroke:#333,stroke-width:2px
+    style utils_ts_cn fill:#ffc,stroke:#333,stroke-width:2px
+    style utils_ts_formatDate fill:#ffc,stroke:#333,stroke-width:2px
+```
