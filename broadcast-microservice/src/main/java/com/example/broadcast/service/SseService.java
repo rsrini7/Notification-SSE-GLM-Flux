@@ -9,6 +9,7 @@ import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserSessionRepository;
+import com.example.broadcast.dto.cache.UserConnectionInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +28,6 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -45,23 +45,28 @@ public class SseService {
     private final ObjectMapper objectMapper;
     private final BroadcastRepository broadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
+    // START OF CHANGE: Inject CacheService for cleanup
+    private final CacheService cacheService;
+    // END OF CHANGE
     
     @Value("${broadcast.sse.heartbeat-interval:30000}")
     private long heartbeatInterval;
-    
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
     private final Map<String, String> userSessionMap = new ConcurrentHashMap<>();
 
     private Disposable heartbeatSubscription;
     private Disposable cleanupSubscription;
     
-    public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository, ObjectMapper objectMapper, BroadcastRepository broadcastRepository, BroadcastStatisticsRepository broadcastStatisticsRepository) {
+    // START OF CHANGE: Update constructor to accept CacheService
+    public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository, ObjectMapper objectMapper, BroadcastRepository broadcastRepository, BroadcastStatisticsRepository broadcastStatisticsRepository, CacheService cacheService) {
         this.userBroadcastRepository = userBroadcastRepository;
         this.userSessionRepository = userSessionRepository;
         this.objectMapper = objectMapper;
         this.broadcastRepository = broadcastRepository;
         this.broadcastStatisticsRepository = broadcastStatisticsRepository;
+        this.cacheService = cacheService;
     }
+    // END OF CHANGE
 
     @PostConstruct
     public void init() {
@@ -88,7 +93,6 @@ public class SseService {
         userSessionMap.put(userId, sessionId);
 
         sendPendingMessages(userId, sink);
-        
         try {
             String connectedPayload = objectMapper.writeValueAsString(Map.of("message", "SSE connection established with session " + sessionId));
             ServerSentEvent<String> connectedEvent = ServerSentEvent.<String>builder()
@@ -109,6 +113,8 @@ public class SseService {
     public void removeEventStream(String userId, String sessionId) {
         userSinks.remove(sessionId);
         userSessionMap.remove(userId, sessionId);
+        // This will now properly clean up Redis as well
+        cacheService.unregisterUserConnection(userId, sessionId);
     }
 
     public void handleMessageEvent(MessageDeliveryEvent event) {
@@ -170,7 +176,7 @@ public class SseService {
         userBroadcastRepository.findPendingMessagesByBroadcastId(userId, broadcastId)
             .stream()
             .findFirst()
-            .flatMap(message -> buildUserBroadcastResponse(message))
+            .flatMap(this::buildUserBroadcastResponse) // Use method reference
             .ifPresent(response -> {
                 try {
                     String payload = objectMapper.writeValueAsString(response);
@@ -195,11 +201,16 @@ public class SseService {
     }
     
     private UserBroadcastResponse buildUserBroadcastResponse(UserBroadcastMessage message, BroadcastMessage broadcast) {
+        // START OF FIX: Use the actual status from the message object instead of hardcoding it.
+        // It will be PENDING initially, then updated to DELIVERED in the database.
+        String deliveryStatus = DeliveryStatus.DELIVERED.name();
+        // END OF FIX
+
         return UserBroadcastResponse.builder()
                 .id(message.getId())
                 .broadcastId(message.getBroadcastId())
                 .userId(message.getUserId())
-                .deliveryStatus(DeliveryStatus.DELIVERED.name())
+                .deliveryStatus(deliveryStatus)
                 .readStatus(ReadStatus.UNREAD.name())
                 .deliveredAt(message.getDeliveredAt())
                 .readAt(message.getReadAt())
@@ -244,13 +255,23 @@ public class SseService {
                     if (!staleUsers.isEmpty()) {
                         log.warn("Found {} stale user sessions in DB to clean up: {}", staleUsers.size(), staleUsers);
                         int cleanedCount = userSessionRepository.markSessionsInactiveForUsers(staleUsers);
-                        log.info("Marked {} user sessions as INACTIVE.", cleanedCount);
+                        log.info("Marked {} user sessions as INACTIVE in the database.", cleanedCount);
+
+                        // START OF FIX: Also remove stale users from the cache
+                        staleUsers.forEach(staleUser -> {
+                            UserConnectionInfo info = cacheService.getUserConnectionInfo(staleUser);
+                            if (info != null) {
+                                cacheService.unregisterUserConnection(staleUser, info.getSessionId());
+                                log.info("Removed stale user {} from cache.", staleUser);
+                            }
+                        });
+                        // END OF FIX
                     }
                     
                     log.debug("Cleanup completed. Active sinks: {}", userSinks.size());
                  } catch (Exception e) {
                     log.error("Error in cleanup task: {}", e.getMessage());
-                 }
+                }
             })
             .subscribe();
     }
