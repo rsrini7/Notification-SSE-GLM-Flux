@@ -61,11 +61,8 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
       
       case 'READ_RECEIPT':
-        setMessages(prev => prev.map(msg => 
-          msg.broadcastId === payload.broadcastId 
-            ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() }
-            : msg
-        ));
+        // This event can now be used for more subtle UI feedback if needed, but it won't remove the message.
+        console.log(`Read receipt for broadcast ${payload.broadcastId} acknowledged.`);
         break;
       
       case 'MESSAGE_REMOVED':
@@ -73,7 +70,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
             setMessages(prev => prev.filter(msg => msg.broadcastId !== payload.broadcastId));
             toast({
                 title: 'Message Removed',
-                description: 'A broadcast message has been removed.',
+                description: 'A broadcast message has been removed from your view.',
             });
         }
         break;
@@ -90,8 +87,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         console.log('Unhandled SSE event type:', event.type);
     }
   }, [toast, userId]);
-
-  // REMOVED: The setInterval polling logic is now gone. The component relies solely on SSE events.
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
@@ -117,29 +112,22 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   });
   
   const markAsRead = useCallback(async (messageId: number) => {
-    // Store the original state in case we need to revert
-    const originalMessages = messages;
-
-    // Optimistically update the UI
-    setMessages(prev => prev.map(msg =>
-      msg.id === messageId
-        ? { ...msg, readStatus: 'READ', readAt: new Date().toISOString() }
-        : msg
-    ));
-
+    // The function no longer performs optimistic updates.
+    // It just sends the request to the server. The server's response (via SSE) will trigger the UI change.
     try {
-      // Make the API call in the background
       await sseConnection.markAsRead(messageId);
+      toast({
+        title: 'Action Sent',
+        description: `Message marked as read for ${userId}. It will be removed shortly.`,
+      });
     } catch (error) {
-     // If the API call fails, revert the UI change and show an error
-     setMessages(originalMessages);
      toast({ 
         title: 'Error', 
         description: `Failed to mark message as read for ${userId}.`, 
         variant: 'destructive' 
      });
     }
-  }, [sseConnection, toast, userId, messages]);
+  }, [sseConnection, toast, userId]);
   
   const stats = useMemo(() => {
     const total = messages.length;

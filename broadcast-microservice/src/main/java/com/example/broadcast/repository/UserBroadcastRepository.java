@@ -126,6 +126,7 @@ public class UserBroadcastRepository {
                 broadcast_messages bm ON ubm.broadcast_id = bm.id
             WHERE
                 ubm.user_id = ? AND ubm.delivery_status != 'FAILED' 
+                AND ubm.read_status = 'UNREAD'
                 AND bm.status IN ('ACTIVE', 'SCHEDULED')
                 AND (bm.expires_at IS NULL OR bm.expires_at > CURRENT_TIMESTAMP)
             ORDER BY

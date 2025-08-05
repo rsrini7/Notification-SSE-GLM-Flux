@@ -29,15 +29,12 @@ const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string)
 
   const markAsRead = async (messageId: number) => {
     try {
+      // The action now just sends the request. The UI update is handled by the SSE event.
       await actions.markAsRead(messageId);
-      toast({
-        title: 'Message Read',
-        description: `Message marked as read for ${userId}`,
-      });
     } catch {
       toast({
         title: 'Error',
-        description: 'Failed to mark message as read',
+        description: 'Failed to send read receipt',
         variant: 'destructive',
       });
     }
@@ -87,7 +84,7 @@ const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string)
             <div className="text-center py-8 text-gray-500">No messages yet.</div>
           ) : (
             <div className="space-y-3 pr-4">
-              {messages.map((message: UserBroadcastMessage) => (
+              {messages.map((message: UserBroadcastMessage, index) => (
                 <div
                   key={message.id}
                   className={`border rounded-lg p-3 space-y-2 ${message.readStatus === 'UNREAD' ? 'bg-blue-50 border-blue-200' : 'bg-white'}`}
@@ -101,10 +98,11 @@ const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string)
                       <p className="text-sm text-gray-800">{message.content}</p>
                       <p className="text-xs text-gray-500">From {message.senderName} • {new Date(message.broadcastCreatedAt).toLocaleString()}</p>
                     </div>
-                    {message.readStatus === 'UNREAD' && (
-                      <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => markAsRead(message.id)}>
-                        Mark Read
-                      </Button>
+                    {/* MODIFIED: Only show the button for the top 3 latest messages */}
+                    {index < 3 && (
+                        <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => markAsRead(message.id)}>
+                          Mark Read
+                        </Button>
                     )}
                   </div>
                 </div>

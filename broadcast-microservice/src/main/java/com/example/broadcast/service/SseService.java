@@ -176,6 +176,7 @@ public class SseService {
             }
         }
         
+        // Only proceed with DB/cache cleanup if the session was actually found and removed from the map
         if (wasRemoved) {
             userSinks.remove(sessionId);
             sessionIdToUserIdMap.remove(sessionId);
@@ -190,19 +191,24 @@ public class SseService {
     public void handleMessageEvent(MessageDeliveryEvent event) {
         log.debug("Handling message event: {} for user: {}", event.getEventType(), event.getUserId());
         try {
-            if (EventType.CREATED.name().equals(event.getEventType())) {
-                deliverMessageToUser(event.getUserId(), event.getBroadcastId());
-            } else if (EventType.READ.name().equals(event.getEventType())) {
-                String payload = objectMapper.writeValueAsString(Map.of("broadcastId", event.getBroadcastId()));
-                sendEvent(event.getUserId(), ServerSentEvent.<String>builder().event(SseEventType.READ_RECEIPT.name()).data(payload).build());
-            } else if (EventType.EXPIRED.name().equals(event.getEventType()) || EventType.CANCELLED.name().equals(event.getEventType())) {
-                String payload = objectMapper.writeValueAsString(Map.of("broadcastId", event.getBroadcastId()));
-                sendEvent(event.getUserId(), ServerSentEvent.<String>builder().event(SseEventType.MESSAGE_REMOVED.name()).data(payload).build());
+            String payload = objectMapper.writeValueAsString(Map.of("broadcastId", event.getBroadcastId()));
+
+            switch (EventType.valueOf(event.getEventType())) {
+                case CREATED:
+                    deliverMessageToUser(event.getUserId(), event.getBroadcastId());
+                    break;
+                case READ:
+                case EXPIRED:
+                case CANCELLED:
+                    // For any of these events, the action is the same: tell the client to remove the message.
+                    sendEvent(event.getUserId(), ServerSentEvent.<String>builder().event(SseEventType.MESSAGE_REMOVED.name()).data(payload).build());
+                    break;
             }
         } catch (JsonProcessingException e) {
             log.error("Error processing message event for SSE", e);
         }
     }
+
 
     private void sendPendingMessages(String userId) {
         List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
