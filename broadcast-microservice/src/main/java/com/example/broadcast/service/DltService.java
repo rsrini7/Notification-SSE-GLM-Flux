@@ -28,6 +28,7 @@ import java.time.ZonedDateTime;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 
 @Service
 @Slf4j
@@ -107,8 +108,22 @@ public class DltService {
 
         log.info("Redriving message ID: {}. Sending to original topic: {}", id, dltMessage.getOriginalTopic());
         
-        kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload);
-        dltRepository.deleteById(id);
+        try {
+            // Step 1: Send the message back to its original topic for reprocessing.
+            kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload).get();
+            
+            // Step 2: If successful, purge the message from the DLQ topic by sending a tombstone record.
+            String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
+            kafkaTemplate.send(dltTopicName, dltMessage.getId(), null).get();
+            
+            // Step 3: If both sends were successful, delete the message from the DLT database.
+            dltRepository.deleteById(id);
+            log.info("Successfully redriven and purged DLT message with ID: {}", id);
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("Failed to redrive message with ID: {}. It will remain in the DLQ.", id, e);
+            // Re-throw as a runtime exception to ensure the transaction rolls back.
+            throw new RuntimeException("Failed to send message to Kafka during redrive", e);
+        }
     }
 
     private void prepareDatabaseForRedrive(MessageDeliveryEvent payload) {
