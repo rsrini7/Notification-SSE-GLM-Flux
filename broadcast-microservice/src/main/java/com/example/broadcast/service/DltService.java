@@ -100,7 +100,6 @@ public class DltService {
         acknowledgment.acknowledge();
     }
     
-    // This is now a private helper method, executed within the listener's transaction.
     private void handleProcessingFailure(MessageDeliveryEvent event) {
         if (event == null || event.getUserId() == null || event.getBroadcastId() == null) {
             log.error("Cannot handle processing failure: event or its key fields are null.");
@@ -117,8 +116,6 @@ public class DltService {
                 }
             });
     }
-
-    // --- ALL OTHER METHODS IN THIS SERVICE ARE CORRECT AND UNCHANGED ---
 
     public Collection<DltMessage> getDltMessages() {
         return dltRepository.findAll();
@@ -157,7 +154,6 @@ public class DltService {
             log.info("No DLT messages to redrive.");
             return;
         }
-
         log.info("Attempting to redrive all {} messages from the DLT.", messagesToRedrive.size());
         int successCount = 0;
         int failureCount = 0;
@@ -189,9 +185,11 @@ public class DltService {
 
         if (existingMessage.isPresent()) {
             UserBroadcastMessage message = existingMessage.get();
-            userBroadcastRepository.updateStatusToPending(message.getId());
+            // IMPORTANT: The message must be reset to PENDING for redrive to work
+            userBroadcastRepository.updateDeliveryStatus(message.getId(), DeliveryStatus.PENDING.name());
             log.info("Reset existing UserBroadcastMessage (ID: {}) to PENDING for redrive.", message.getId());
         } else {
+            // This case should ideally not happen for a redrive, but is handled defensively
             UserBroadcastMessage newMessage = UserBroadcastMessage.builder()
                     .broadcastId(payload.getBroadcastId())
                     .userId(payload.getUserId())
@@ -226,12 +224,10 @@ public class DltService {
         }
 
         log.info("Purging all {} messages from the DLT.", messagesToPurge.size());
-
         for (DltMessage dltMessage : messagesToPurge) {
             String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
             kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null);
         }
-
         dltRepository.deleteAll();
         log.info("Purged all DLT messages from the database and sent tombstone records to Kafka.");
     }

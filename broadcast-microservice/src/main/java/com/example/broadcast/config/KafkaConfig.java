@@ -86,10 +86,11 @@ public class KafkaConfig {
 
     @Bean
     public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
-        FixedBackOff backOff = new FixedBackOff(1000L, 2L); // 1s interval, 2 retries
+        // After 2 retries (3 total attempts), the message will be sent to the DLT.
+        FixedBackOff backOff = new FixedBackOff(1000L, 2L);
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(deadLetterPublishingRecoverer, backOff);
         errorHandler.setLogLevel(KafkaException.Level.WARN);
-        errorHandler.setCommitRecovered(true);
+        errorHandler.setCommitRecovered(true); // Commit the offset of the failed message
         return errorHandler;
     }
 
@@ -100,6 +101,7 @@ public class KafkaConfig {
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
                 new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
         
+        // This is a standard recoverer. Its only job is to publish the failed record to the DLT.
         return new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
     }
 
