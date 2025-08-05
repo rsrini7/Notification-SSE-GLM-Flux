@@ -41,7 +41,7 @@ public class UserMessageService {
 
     public List<UserBroadcastResponse> getUnreadMessages(String userId) {
         log.info("Getting unread messages for user: {}", userId);
-        return userBroadcastRepository.findUserMessagesByUserId(userId);
+        return userBroadcastRepository.findUnreadMessagesByUserId(userId);
     }
 
     @Transactional
