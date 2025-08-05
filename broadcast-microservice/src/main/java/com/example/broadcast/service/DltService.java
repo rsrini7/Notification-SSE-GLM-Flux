@@ -42,6 +42,7 @@ public class DltService {
     private final DltRepository dltRepository;
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
+    private final MessageStatusService messageStatusService;
 
     @KafkaListener(
             topics = {
@@ -127,19 +128,15 @@ public class DltService {
                 .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
         MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
 
+        // This now calls the separate transactional method
         prepareDatabaseForRedrive(originalPayload);
 
         log.info("Redriving message ID: {}. Sending to original topic: {}", id, dltMessage.getOriginalTopic());
         
         try {
-            // Send to original topic
             kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload).get();
-            
-            // Send tombstone to DLQ topic
             String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
             kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null).get();
-            
-            // Delete from DLT database
             dltRepository.deleteById(id);
             log.info("Successfully redriven and purged DLT message with ID: {}", id);
         } catch (InterruptedException | ExecutionException e) {
@@ -175,32 +172,15 @@ public class DltService {
             .orElseThrow(() -> new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") has been deleted."));
 
         if (!Constants.BroadcastStatus.ACTIVE.name().equals(parentBroadcast.getStatus())) {
-            log.error("Cannot redrive message for broadcast ID {}. The broadcast is no longer ACTIVE (current status: {}).", payload.getBroadcastId(), parentBroadcast.getStatus());
             throw new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") is " + parentBroadcast.getStatus() + ".");
         }
 
-        Optional<UserBroadcastMessage> existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(
+        UserBroadcastMessage existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(
             payload.getUserId(), payload.getBroadcastId()
-        );
+        ).orElseThrow(() -> new IllegalStateException("Cannot find original UserBroadcastMessage to redrive."));
 
-        if (existingMessage.isPresent()) {
-            UserBroadcastMessage message = existingMessage.get();
-            // IMPORTANT: The message must be reset to PENDING for redrive to work
-            userBroadcastRepository.updateDeliveryStatus(message.getId(), DeliveryStatus.PENDING.name());
-            log.info("Reset existing UserBroadcastMessage (ID: {}) to PENDING for redrive.", message.getId());
-        } else {
-            // This case should ideally not happen for a redrive, but is handled defensively
-            UserBroadcastMessage newMessage = UserBroadcastMessage.builder()
-                    .broadcastId(payload.getBroadcastId())
-                    .userId(payload.getUserId())
-                    .deliveryStatus(DeliveryStatus.PENDING.name())
-                    .readStatus(ReadStatus.UNREAD.name())
-                    .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
-                    .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                    .build();
-            userBroadcastRepository.save(newMessage);
-            log.info("Created new UserBroadcastMessage for redrive for user {} and broadcast {}.", payload.getUserId(), payload.getBroadcastId());
-        }
+        // Call the new service method to update the status in a separate, committed transaction.
+        messageStatusService.resetMessageForRedrive(existingMessage.getId());
     }
     
     @Transactional

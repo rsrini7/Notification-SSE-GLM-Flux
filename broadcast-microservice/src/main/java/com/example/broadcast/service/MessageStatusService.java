@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -26,6 +28,12 @@ public class MessageStatusService {
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void resetMessageForRedrive(Long userBroadcastMessageId) {
+        userBroadcastRepository.updateDeliveryStatus(userBroadcastMessageId, Constants.DeliveryStatus.PENDING.name());
+        log.info("Reset UserBroadcastMessage (ID: {}) to PENDING for redrive in a new transaction.", userBroadcastMessageId);
+    }
 
     @Transactional
     public void updateMessageToDelivered(Long userBroadcastMessageId, Long broadcastId) {
