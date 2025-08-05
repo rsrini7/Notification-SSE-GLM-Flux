@@ -172,7 +172,9 @@ broadcast:
   # Kafka Configuration
   kafka:
     topic:
-      name: broadcast-events
+      name:
+        all: broadcast-events-all
+        selected: broadcast-events-selected
       partitions: 10
       replication-factor: 1
     consumer:

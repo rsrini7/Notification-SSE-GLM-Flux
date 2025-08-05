@@ -4,7 +4,7 @@
 # which is not handled gracefully and will reliably trigger the DLQ.
 
 # --- Configuration ---
-TOPIC_NAME="broadcast-events"
+TOPIC_NAME="broadcast-events-selected"
 USER_KEY="user-001"
 # This payload will cause a NullPointerException when the service calls EventType.valueOf(null)
 INVALID_PAYLOAD='{"eventId":"npe-failure-'"$(date +%s)"'","broadcastId":123,"userId":"'"$USER_KEY"'","eventType":null,"message":"This message will cause an NPE."}'

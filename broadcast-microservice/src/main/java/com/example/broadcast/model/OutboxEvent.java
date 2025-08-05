@@ -15,4 +15,5 @@ public class OutboxEvent {
     private String eventType;
     private String payload;
     private ZonedDateTime createdAt;
+    private String topic;
 }

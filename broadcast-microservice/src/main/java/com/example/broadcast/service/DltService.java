@@ -41,7 +41,10 @@ public class DltService {
     private final BroadcastRepository broadcastRepository;
 
     @KafkaListener(
-            topics = "${broadcast.kafka.topic.name:broadcast-events}" + Constants.DLT_SUFFIX,
+            topics = {
+                "${broadcast.kafka.topic.name.all:broadcast-events-all}" + Constants.DLT_SUFFIX,
+                "${broadcast.kafka.topic.name.selected:broadcast-events-selected}" + Constants.DLT_SUFFIX
+            },
             groupId = "${broadcast.kafka.consumer.dlt-group-id:broadcast-dlt-group}",
             containerFactory = "kafkaListenerContainerFactory"
     )

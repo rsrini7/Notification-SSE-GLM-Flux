@@ -134,12 +134,13 @@ CREATE TABLE IF NOT EXISTS dlt_messages (
 CREATE INDEX IF NOT EXISTS idx_dlt_failed_at ON dlt_messages (failed_at);
 
 
--- START OF CHANGE: Add the outbox table for the Transactional Outbox pattern
+-- Add the outbox table for the Transactional Outbox pattern
 CREATE TABLE IF NOT EXISTS outbox_events (
     id UUID PRIMARY KEY,
     aggregate_type VARCHAR(255) NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,
     event_type VARCHAR(255) NOT NULL,
+    topic VARCHAR(255) NOT NULL, -- Add this column
     payload TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

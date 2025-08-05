@@ -34,8 +34,11 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
 
-    @Value("${broadcast.kafka.topic.name:broadcast-events}")
-    private String topicName;
+    @Value("${broadcast.kafka.topic.name.all:broadcast-events-all}")
+    private String allUsersTopicName;
+
+    @Value("${broadcast.kafka.topic.name.selected:broadcast-events-selected}")
+    private String selectedUsersTopicName;
 
     @Value("${broadcast.kafka.topic.partitions:10}")
     private int topicPartitions;
@@ -116,8 +119,8 @@ public class KafkaConfig {
     }
     
     @Bean
-    public NewTopic broadcastTopic() {
-        return TopicBuilder.name(topicName)
+    public NewTopic allUsersBroadcastTopic() {
+        return TopicBuilder.name(allUsersTopicName)
                 .partitions(topicPartitions)
                 .replicas(topicReplicationFactor)
                 .config("retention.ms", "604800000")
@@ -125,8 +128,26 @@ public class KafkaConfig {
     }
 
     @Bean
-    public NewTopic deadLetterTopic() {
-        return TopicBuilder.name(topicName + Constants.DLT_SUFFIX)
+    public NewTopic selectedUsersBroadcastTopic() {
+        return TopicBuilder.name(selectedUsersTopicName)
+                .partitions(topicPartitions)
+                .replicas(topicReplicationFactor)
+                .config("retention.ms", "604800000")
+                .build();
+    }
+
+    @Bean
+    public NewTopic allUsersDeadLetterTopic() {
+        return TopicBuilder.name(allUsersTopicName + Constants.DLT_SUFFIX)
+                .partitions(1)
+                .replicas(topicReplicationFactor)
+                .config("retention.ms", "1209600000")
+                .build();
+    }
+
+    @Bean
+    public NewTopic selectedUsersDeadLetterTopic() {
+        return TopicBuilder.name(selectedUsersTopicName + Constants.DLT_SUFFIX)
                 .partitions(1)
                 .replicas(topicReplicationFactor)
                 .config("retention.ms", "1209600000")

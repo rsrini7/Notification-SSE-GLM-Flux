@@ -26,9 +26,6 @@ public class OutboxPollingService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
 
-    @Value("${broadcast.kafka.topic.name:broadcast-events}")
-    private String broadcastTopicName;
-
     @Scheduled(fixedDelay = 2000) // Poll every 2 seconds
     @Transactional
     public void pollAndPublishEvents() {
@@ -43,7 +40,8 @@ public class OutboxPollingService {
         for (OutboxEvent event : events) {
             try {
                 MessageDeliveryEvent payload = objectMapper.readValue(event.getPayload(), MessageDeliveryEvent.class);
-                kafkaTemplate.send(broadcastTopicName, payload.getUserId(), payload)
+                // Use the topic from the event itself
+                kafkaTemplate.send(event.getTopic(), payload.getUserId(), payload)
                         .whenComplete((result, ex) -> {
                             if (ex != null) {
                                 log.error("Failed to send outbox event {} to Kafka", event.getId(), ex);

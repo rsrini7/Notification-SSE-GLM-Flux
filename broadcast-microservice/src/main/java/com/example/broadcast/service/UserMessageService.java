@@ -2,11 +2,15 @@ package com.example.broadcast.service;
 
 import com.example.broadcast.dto.UserBroadcastResponse;
 import com.example.broadcast.exception.ResourceNotFoundException;
+import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.UserBroadcastMessage;
+import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
+import com.example.broadcast.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,8 +24,15 @@ import java.util.List;
 public class UserMessageService {
 
     private final UserBroadcastRepository userBroadcastRepository;
+    private final BroadcastRepository broadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final MessageStatusService messageStatusService;
+    
+    @Value("${broadcast.kafka.topic.name.all:broadcast-events-all}")
+    private String allUsersTopicName;
+
+    @Value("${broadcast.kafka.topic.name.selected:broadcast-events-selected}")
+    private String selectedUsersTopicName;
 
     public List<UserBroadcastResponse> getUserMessages(String userId) {
         log.info("Getting messages for user: {}", userId);
@@ -40,21 +51,24 @@ public class UserMessageService {
                 .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
 
         if (!userId.equals(userMessage.getUserId())) {
-            // Although this check is good, throwing ResourceNotFound might be misleading.
-            // An alternative would be an AccessDeniedException or similar. For now, this is fine.
             throw new ResourceNotFoundException("Message does not belong to user: " + userId);
         }
 
-        // Use an atomic query to update the status from UNREAD to READ.
-        // This returns the number of rows affected (0 if it was already READ, 1 if the update succeeded).
         int updatedRows = userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
 
-        // Only if the status was successfully changed, increment stats and publish the event.
         if (updatedRows > 0) {
             broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
-            // This is the crucial step: publish the event within the same transaction.
-            messageStatusService.publishReadEvent(userMessage.getBroadcastId(), userId);
-            log.info("Successfully marked message {} as read for user {} and published READ event.", messageId, userId);
+
+            // Fetch the parent broadcast to determine the correct topic
+            BroadcastMessage parentBroadcast = broadcastRepository.findById(userMessage.getBroadcastId())
+                .orElseThrow(() -> new IllegalStateException("Cannot publish READ event. Original broadcast (ID: " + userMessage.getBroadcastId() + ") not found."));
+            
+            String topicName = Constants.TargetType.ALL.name().equals(parentBroadcast.getTargetType()) 
+                ? allUsersTopicName 
+                : selectedUsersTopicName;
+
+            messageStatusService.publishReadEvent(userMessage.getBroadcastId(), userId, topicName);
+            log.info("Successfully marked message {} as read for user {} and published READ event to topic {}.", messageId, userId, topicName);
         } else {
             log.warn("Message {} was already read for user {}. No action taken.", messageId, userId);
         }

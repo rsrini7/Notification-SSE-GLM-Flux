@@ -5,8 +5,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
@@ -25,13 +23,14 @@ public class OutboxRepository {
             .aggregateType(rs.getString("aggregate_type"))
             .aggregateId(rs.getString("aggregate_id"))
             .eventType(rs.getString("event_type"))
+            .topic(rs.getString("topic")) // Add this line
             .payload(rs.getString("payload"))
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
             .build();
 
     public void save(OutboxEvent event) {
-        String sql = "INSERT INTO outbox_events (id, aggregate_type, aggregate_id, event_type, payload) VALUES (?, ?, ?, ?, ?)";
-        jdbcTemplate.update(sql, event.getId(), event.getAggregateType(), event.getAggregateId(), event.getEventType(), event.getPayload());
+        String sql = "INSERT INTO outbox_events (id, aggregate_type, aggregate_id, event_type, topic, payload) VALUES (?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.update(sql, event.getId(), event.getAggregateType(), event.getAggregateId(), event.getEventType(), event.getTopic(), event.getPayload());
     }
 
     public List<OutboxEvent> findAndLockUnprocessedEvents(int limit) {

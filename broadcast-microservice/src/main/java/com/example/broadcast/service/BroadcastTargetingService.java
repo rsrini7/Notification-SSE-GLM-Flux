@@ -4,6 +4,7 @@ import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.model.UserPreferences;
 import com.example.broadcast.repository.UserPreferencesRepository;
+import com.example.broadcast.util.Constants;
 import com.example.broadcast.util.Constants.DeliveryStatus;
 import com.example.broadcast.util.Constants.ReadStatus;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
@@ -89,18 +90,20 @@ public class BroadcastTargetingService {
      */
     private List<String> determineTargetUsers(BroadcastMessage broadcast) {
         log.info("Broadcast ID {}: Calling UserService to determine target users. Target type is {}", broadcast.getId(), broadcast.getTargetType());
-        switch (broadcast.getTargetType()) {
-            case "ALL":
-                return userService.getAllUserIds();
-            case "SELECTED":
-                return broadcast.getTargetIds() != null ? broadcast.getTargetIds() : List.of();
-            case "ROLE":
-                // Assuming targetIds contains the role name for simplicity
-                String role = broadcast.getTargetIds() != null && !broadcast.getTargetIds().isEmpty() ? broadcast.getTargetIds().get(0) : "default";
-                return userService.getUserIdsByRole(role);
-            default:
-                return List.of();
+        // REFACTOR: Use constant instead of magic strings
+        String targetType = broadcast.getTargetType();
+        
+        if (Constants.TargetType.ALL.name().equals(targetType)) {
+            return userService.getAllUserIds();
+        } else if (Constants.TargetType.SELECTED.name().equals(targetType)) {
+            return broadcast.getTargetIds() != null ? broadcast.getTargetIds() : List.of();
+        } else if (Constants.TargetType.ROLE.name().equals(targetType)) {
+            // Assuming targetIds contains the role name for simplicity
+            String role = broadcast.getTargetIds() != null && !broadcast.getTargetIds().isEmpty() ? broadcast.getTargetIds().get(0) : "default";
+            return userService.getUserIdsByRole(role);
         }
+        
+        return List.of();
     }
 
     /**

@@ -37,7 +37,7 @@ public class MessageStatusService {
     }
 
     @Transactional
-    public void publishReadEvent(Long broadcastId, String userId) {
+    public void publishReadEvent(Long broadcastId, String userId, String topicName) {
         MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
             .eventId(UUID.randomUUID().toString())
             .broadcastId(broadcastId)
@@ -48,10 +48,10 @@ public class MessageStatusService {
             .message("User marked message as read")
             .build();
 
-        saveToOutbox(eventPayload);
+        saveToOutbox(eventPayload, topicName);
     }
 
-    private void saveToOutbox(MessageDeliveryEvent payload) {
+    private void saveToOutbox(MessageDeliveryEvent payload, String topicName) {
         try {
             String payloadJson = objectMapper.writeValueAsString(payload);
             OutboxEvent outboxEvent = OutboxEvent.builder()
@@ -59,6 +59,7 @@ public class MessageStatusService {
                     .aggregateType("broadcast")
                     .aggregateId(payload.getUserId())
                     .eventType(payload.getEventType())
+                    .topic(topicName)
                     .payload(payloadJson)
                     .build();
             outboxRepository.save(outboxEvent);

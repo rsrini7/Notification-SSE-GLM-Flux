@@ -14,11 +14,13 @@ import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserPreferencesRepository;
 import com.example.broadcast.exception.ResourceNotFoundException;
 import com.example.broadcast.exception.UserServiceUnavailableException;
+import com.example.broadcast.util.Constants;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +47,12 @@ public class BroadcastService {
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
     private final TestingConfigurationService testingConfigService;
+
+    @Value("${broadcast.kafka.topic.name.all:broadcast-events-all}")
+    private String allUsersTopicName;
+
+    @Value("${broadcast.kafka.topic.name.selected:broadcast-events-selected}")
+    private String selectedUsersTopicName;
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
@@ -117,6 +125,8 @@ public class BroadcastService {
             broadcastStatisticsRepository.save(initialStats);
             userBroadcastRepository.batchInsert(userBroadcasts);
 
+            String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? allUsersTopicName : selectedUsersTopicName;
+
             for (UserBroadcastMessage userMessage : userBroadcasts) {
                 MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
                     .eventId(UUID.randomUUID().toString())
@@ -129,7 +139,7 @@ public class BroadcastService {
                     .transientFailure(shouldFail)
                     .build();
                 
-                saveToOutbox(eventPayload);
+                saveToOutbox(eventPayload, topicName);
             }
         } else {
             log.warn("Broadcast {} created, but no users were targeted after filtering.", broadcast.getId());
@@ -138,7 +148,7 @@ public class BroadcastService {
         return buildBroadcastResponse(broadcast, totalTargeted);
     }
     
-    private void saveToOutbox(MessageDeliveryEvent payload) {
+    private void saveToOutbox(MessageDeliveryEvent payload, String topicName) {
         try {
             String payloadJson = objectMapper.writeValueAsString(payload);
             OutboxEvent outboxEvent = OutboxEvent.builder()
@@ -146,6 +156,7 @@ public class BroadcastService {
                     .aggregateType("broadcast")
                     .aggregateId(payload.getUserId())
                     .eventType(payload.getEventType())
+                    .topic(topicName) // Set the topic here
                     .payload(payloadJson)
                     .build();
             outboxRepository.save(outboxEvent);
@@ -154,7 +165,7 @@ public class BroadcastService {
             throw new RuntimeException("Failed to serialize event payload", e);
         }
     }
-
+    
     @Transactional
     public void cancelBroadcast(Long id) {
         BroadcastMessage broadcast = broadcastRepository.findById(id)
@@ -166,6 +177,7 @@ public class BroadcastService {
         int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(id, DeliveryStatus.SUPERSEDED.name());
         log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
 
+        String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? allUsersTopicName : selectedUsersTopicName;
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
         for (UserBroadcastMessage userMessage : userBroadcasts) {
             MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
@@ -177,7 +189,7 @@ public class BroadcastService {
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .message("Broadcast CANCELLED")
                 .build();
-            saveToOutbox(eventPayload);
+            saveToOutbox(eventPayload, topicName);
         }
         log.info("Broadcast cancelled: {}", id);
     }
@@ -195,6 +207,7 @@ public class BroadcastService {
             log.info("Updated {} pending user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
 
             log.info("Broadcast expired: {}", broadcastId);
+            String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? allUsersTopicName : selectedUsersTopicName;
             List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);
             for (UserBroadcastMessage userMessage : userBroadcasts) {
                 MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
@@ -206,7 +219,7 @@ public class BroadcastService {
                     .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                     .message("Broadcast EXPIRED")
                     .build();
-                saveToOutbox(eventPayload);
+                saveToOutbox(eventPayload, topicName);
             }
         }
     }

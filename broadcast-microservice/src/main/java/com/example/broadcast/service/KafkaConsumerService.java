@@ -29,15 +29,40 @@ public class KafkaConsumerService {
     private static final int MAX_AUTOMATIC_ATTEMPTS = 3;
 
     @KafkaListener(
-            topics = "${broadcast.kafka.topic.name:broadcast-events}",
-            groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}",
+            topics = "${broadcast.kafka.topic.name.all:broadcast-events-all}",
+            groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}-all",
             containerFactory = "kafkaListenerContainerFactory"
     )
-    public void processBroadcastEvent(
+    public void processAllUsersBroadcastEvent(
             @Payload byte[] payload,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
+            Acknowledgment acknowledgment) {
+        
+        processBroadcastEvent(payload, topic, partition, offset, acknowledgment);
+    }
+    
+    @KafkaListener(
+            topics = "${broadcast.kafka.topic.name.selected:broadcast-events-selected}",
+            groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}-selected",
+            containerFactory = "kafkaListenerContainerFactory"
+    )
+    public void processSelectedUsersBroadcastEvent(
+            @Payload byte[] payload,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
+            @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
+            @Header(KafkaHeaders.OFFSET) long offset,
+            Acknowledgment acknowledgment) {
+
+        processBroadcastEvent(payload, topic, partition, offset, acknowledgment);
+    }
+
+    private void processBroadcastEvent(
+            byte[] payload,
+            String topic,
+            String partition,
+            long offset,
             Acknowledgment acknowledgment) {
         
         MessageDeliveryEvent event = null;

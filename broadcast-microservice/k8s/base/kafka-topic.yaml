@@ -1,7 +1,7 @@
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
 metadata:
-  name: broadcast-events
+  name: broadcast-events-all
   namespace: kafka-system
   labels:
     strimzi.io/cluster: my-cluster
@@ -16,7 +16,7 @@ spec:
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
 metadata:
-  name: broadcast-events-delivery
+  name: broadcast-events-selected
   namespace: kafka-system
   labels:
     strimzi.io/cluster: my-cluster
@@ -24,28 +24,13 @@ spec:
   partitions: 10
   replicas: 3
   config:
-    retention.ms: 86400000  # 24 hours
+    retention.ms: 604800000 # 7 days
     cleanup.policy: delete
 ---
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
 metadata:
-  name: broadcast-events-read-receipts
-  namespace: kafka-system
-  labels:
-    strimzi.io/cluster: my-cluster
-spec:
-  partitions: 10
-  replicas: 3
-  config:
-    retention.ms: 604800000  # 7 days
-    cleanup.policy: delete
----
-# NEW: Definition for the Dead Letter Topic (DLT)
-apiVersion: kafka.strimzi.io/v1beta2
-kind: KafkaTopic
-metadata:
-  name: broadcast-events.DLT
+  name: broadcast-events-all.DLT
   namespace: kafka-system
   labels:
     strimzi.io/cluster: my-cluster
@@ -54,5 +39,18 @@ spec:
   replicas: 3
   config:
     retention.ms: 1209600000 # 14 days retention for analysis
-    # FIX: Change cleanup.policy to 'compact' to allow for purging.
+    cleanup.policy: compact
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: broadcast-events-selected.DLT
+  namespace: kafka-system
+  labels:
+    strimzi.io/cluster: my-cluster
+spec:
+  partitions: 1 # A single partition is often sufficient for a DLT
+  replicas: 3
+  config:
+    retention.ms: 1209600000 # 14 days retention for analysis
     cleanup.policy: compact
