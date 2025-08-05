@@ -21,6 +21,7 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
@@ -93,6 +94,21 @@ public class DltService {
         dltRepository.save(dltMessage);
 
         acknowledgment.acknowledge();
+    }
+    
+    // METHOD MOVED BACK INTO THIS CLASS
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void handleProcessingFailure(MessageDeliveryEvent event) {
+        if (event == null || event.getUserId() == null || event.getBroadcastId() == null) {
+            log.error("Cannot handle processing failure: event or its key fields are null.");
+            return;
+        }
+
+        userBroadcastRepository.findByUserIdAndBroadcastId(event.getUserId(), event.getBroadcastId())
+            .ifPresent(userMessage -> {
+                userBroadcastRepository.updateDeliveryStatus(userMessage.getId(), DeliveryStatus.FAILED.name());
+                log.info("Marked UserBroadcastMessage (ID: {}) as FAILED for user {} due to processing error.", userMessage.getId(), event.getUserId());
+            });
     }
 
     public Collection<DltMessage> getDltMessages() {

@@ -13,6 +13,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.annotation.EnableKafka;
@@ -27,7 +28,6 @@ import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.util.backoff.FixedBackOff;
 import com.example.broadcast.util.Constants;
-import com.example.broadcast.service.DltFailureHandler;
 
 
 import java.util.HashMap;
@@ -89,7 +89,7 @@ public class KafkaConfig {
         return factory;
     }
 
- @Bean
+    @Bean
     public DefaultErrorHandler errorHandler(ConsumerRecordRecoverer consumerRecordRecoverer) {
         FixedBackOff backOff = new FixedBackOff(1000L, 2L);
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(consumerRecordRecoverer, backOff);
@@ -101,8 +101,8 @@ public class KafkaConfig {
     @Bean
     public ConsumerRecordRecoverer consumerRecordRecoverer(
             @Qualifier("dltKafkaTemplate") KafkaTemplate<String, byte[]> dltKafkaTemplate,
-            DltFailureHandler dltFailureHandler) { // DEPEND ON THE NEW HANDLER
-
+            @Lazy DltService dltService) { // USE @Lazy to break the cycle
+        
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
                 new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
         
@@ -110,9 +110,10 @@ public class KafkaConfig {
 
         return (record, exception) -> {
             if (exception.getCause() instanceof MessageProcessingException) {
-                // CALL THE NEW HANDLER
-                dltFailureHandler.handleProcessingFailure(((MessageProcessingException) exception.getCause()).getFailedEvent());
+                // This call now works because the DltService proxy will initialize the real bean.
+                dltService.handleProcessingFailure(((MessageProcessingException) exception.getCause()).getFailedEvent());
             }
+            
             dltRecoverer.accept(record, exception);
         };
     }
