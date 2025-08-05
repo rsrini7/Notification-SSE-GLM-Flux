@@ -1,7 +1,5 @@
 package com.example.broadcast.config;
 
-import com.example.broadcast.exception.MessageProcessingException;
-import com.example.broadcast.service.DltService;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -13,21 +11,19 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.KafkaException;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.*;
-import org.springframework.kafka.KafkaException;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.util.backoff.FixedBackOff;
 import com.example.broadcast.util.Constants;
-
 
 import java.util.HashMap;
 import java.util.Map;
@@ -90,7 +86,7 @@ public class KafkaConfig {
 
     @Bean
     public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
-        FixedBackOff backOff = new FixedBackOff(1000L, 2L);
+        FixedBackOff backOff = new FixedBackOff(1000L, 2L); // 1s interval, 2 retries
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(deadLetterPublishingRecoverer, backOff);
         errorHandler.setLogLevel(KafkaException.Level.WARN);
         errorHandler.setCommitRecovered(true);
@@ -145,7 +141,7 @@ public class KafkaConfig {
         return TopicBuilder.name(allUsersTopicName + Constants.DLT_SUFFIX)
                 .partitions(1)
                 .replicas(topicReplicationFactor)
-                .config("retention.ms", "1209600000")
+                .config("retention.ms", "1209600000") // 14 days
                 .build();
     }
 
@@ -154,7 +150,7 @@ public class KafkaConfig {
         return TopicBuilder.name(selectedUsersTopicName + Constants.DLT_SUFFIX)
                 .partitions(1)
                 .replicas(topicReplicationFactor)
-                .config("retention.ms", "1209600000")
+                .config("retention.ms", "1209600000") // 14 days
                 .build();
     }
 

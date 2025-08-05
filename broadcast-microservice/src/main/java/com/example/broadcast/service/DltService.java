@@ -95,11 +95,12 @@ public class DltService {
                 .build();
         dltRepository.save(dltMessage);
 
-        // Step 3: Acknowledge the DLT message
+        // Step 3: Acknowledge the DLT message to commit the offset.
+        // This only happens after the transaction for steps 1 & 2 is successful.
         acknowledgment.acknowledge();
     }
     
-    // This method is now private and called from within the listener's transaction
+    // This is now a private helper method, executed within the listener's transaction.
     private void handleProcessingFailure(MessageDeliveryEvent event) {
         if (event == null || event.getUserId() == null || event.getBroadcastId() == null) {
             log.error("Cannot handle processing failure: event or its key fields are null.");
@@ -111,9 +112,13 @@ public class DltService {
                 if (!DeliveryStatus.FAILED.name().equals(userMessage.getDeliveryStatus())) {
                     userBroadcastRepository.updateDeliveryStatus(userMessage.getId(), DeliveryStatus.FAILED.name());
                     log.info("Marked UserBroadcastMessage (ID: {}) as FAILED for user {} due to processing error.", userMessage.getId(), event.getUserId());
+                } else {
+                    log.warn("UserBroadcastMessage (ID: {}) for user {} was already marked as FAILED.", userMessage.getId(), event.getUserId());
                 }
             });
     }
+
+    // --- ALL OTHER METHODS IN THIS SERVICE ARE CORRECT AND UNCHANGED ---
 
     public Collection<DltMessage> getDltMessages() {
         return dltRepository.findAll();
@@ -130,11 +135,14 @@ public class DltService {
         log.info("Redriving message ID: {}. Sending to original topic: {}", id, dltMessage.getOriginalTopic());
         
         try {
+            // Send to original topic
             kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload).get();
             
+            // Send tombstone to DLQ topic
             String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
             kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null).get();
             
+            // Delete from DLT database
             dltRepository.deleteById(id);
             log.info("Successfully redriven and purged DLT message with ID: {}", id);
         } catch (InterruptedException | ExecutionException e) {
@@ -165,7 +173,7 @@ public class DltService {
         }
         log.info("Finished redriving all DLT messages. Success: {}, Failures: {}", successCount, failureCount);
     }
-
+    
     private void prepareDatabaseForRedrive(MessageDeliveryEvent payload) {
         BroadcastMessage parentBroadcast = broadcastRepository.findById(payload.getBroadcastId())
             .orElseThrow(() -> new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") has been deleted."));
