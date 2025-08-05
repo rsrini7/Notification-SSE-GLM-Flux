@@ -25,28 +25,21 @@ import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.util.backoff.FixedBackOff;
 import com.example.broadcast.util.Constants;
 
+import lombok.RequiredArgsConstructor;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiFunction;
 
 @Configuration
 @EnableKafka
+@RequiredArgsConstructor
 public class KafkaConfig {
 
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
-
-    @Value("${broadcast.kafka.topic.name.all:broadcast-events-all}")
-    private String allUsersTopicName;
-
-    @Value("${broadcast.kafka.topic.name.selected:broadcast-events-selected}")
-    private String selectedUsersTopicName;
-
-    @Value("${broadcast.kafka.topic.partitions:10}")
-    private int topicPartitions;
-
-    @Value("${broadcast.kafka.topic.replication-factor:1}")
-    private short topicReplicationFactor;
+    
+    private final AppProperties appProperties;
 
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
@@ -123,36 +116,36 @@ public class KafkaConfig {
     
     @Bean
     public NewTopic allUsersBroadcastTopic() {
-        return TopicBuilder.name(allUsersTopicName)
-                .partitions(topicPartitions)
-                .replicas(topicReplicationFactor)
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameAll())
+                .partitions(appProperties.getKafka().getTopic().getPartitions())
+                .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
                 .config("retention.ms", "604800000")
                 .build();
     }
 
     @Bean
     public NewTopic selectedUsersBroadcastTopic() {
-        return TopicBuilder.name(selectedUsersTopicName)
-                .partitions(topicPartitions)
-                .replicas(topicReplicationFactor)
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameSelected())
+                .partitions(appProperties.getKafka().getTopic().getPartitions())
+                .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
                 .config("retention.ms", "604800000")
                 .build();
     }
 
     @Bean
     public NewTopic allUsersDeadLetterTopic() {
-        return TopicBuilder.name(allUsersTopicName + Constants.DLT_SUFFIX)
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameAll() + Constants.DLT_SUFFIX)
                 .partitions(1)
-                .replicas(topicReplicationFactor)
+                .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
                 .config("retention.ms", "1209600000") // 14 days
                 .build();
     }
 
     @Bean
     public NewTopic selectedUsersDeadLetterTopic() {
-        return TopicBuilder.name(selectedUsersTopicName + Constants.DLT_SUFFIX)
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameSelected() + Constants.DLT_SUFFIX)
                 .partitions(1)
-                .replicas(topicReplicationFactor)
+                .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
                 .config("retention.ms", "1209600000") // 14 days
                 .build();
     }

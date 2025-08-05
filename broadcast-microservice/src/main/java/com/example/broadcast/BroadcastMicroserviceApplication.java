@@ -5,6 +5,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import com.example.broadcast.config.AppProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 /**
  * Main application class for the Broadcast Messaging Microservice
@@ -20,6 +22,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableKafka
 @EnableAsync
 @EnableScheduling
+@EnableConfigurationProperties({
+    AppProperties.class
+})
 public class BroadcastMicroserviceApplication {
 
     public static void main(String[] args) {

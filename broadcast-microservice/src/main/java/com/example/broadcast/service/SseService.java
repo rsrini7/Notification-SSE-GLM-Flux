@@ -10,10 +10,11 @@ import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserSessionRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -32,14 +33,17 @@ import java.util.Optional;
 import java.util.Set; 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.time.ZoneOffset;
 
 import com.example.broadcast.util.Constants.DeliveryStatus;
 import com.example.broadcast.util.Constants.EventType;
 import com.example.broadcast.util.Constants.SseEventType;
+import com.example.broadcast.config.AppProperties;
 
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class SseService {
 
     private final UserBroadcastRepository userBroadcastRepository;
@@ -49,28 +53,15 @@ public class SseService {
     private final MessageStatusService messageStatusService;
     private final CacheService cacheService;
     
-    @Value("${broadcast.pod.id:pod-local}")
-    private String podId;
-    
-    @Value("${broadcast.sse.heartbeat-interval:30000}")
-    private long heartbeatInterval;
+    private final AppProperties appProperties;
+ 
     
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> userSessionMap = new ConcurrentHashMap<>();
     private final Map<String, String> sessionIdToUserIdMap = new ConcurrentHashMap<>();
 
     private Disposable serverHeartbeatSubscription;
-    
-    public SseService(UserBroadcastRepository userBroadcastRepository, UserSessionRepository userSessionRepository,
-                      ObjectMapper objectMapper, BroadcastRepository broadcastRepository,
-                      MessageStatusService messageStatusService, CacheService cacheService) {
-        this.userBroadcastRepository = userBroadcastRepository;
-        this.userSessionRepository = userSessionRepository;
-        this.objectMapper = objectMapper;
-        this.broadcastRepository = broadcastRepository;
-        this.messageStatusService = messageStatusService;
-        this.cacheService = cacheService;
-    }
+
 
     @PostConstruct
     public void init() {
@@ -88,7 +79,7 @@ public class SseService {
     @Transactional
     public void cleanupStaleSessions() {
          try {
-            long staleThresholdSeconds = (heartbeatInterval / 1000) * 3;
+            long staleThresholdSeconds = (appProperties.getSse().getHeartbeatInterval() / 1000) * 3;
             ZonedDateTime threshold = ZonedDateTime.now().minusSeconds(staleThresholdSeconds);
             
             List<UserSession> allStaleSessions = userSessionRepository.findStaleSessions(threshold);
@@ -98,11 +89,11 @@ public class SseService {
             }
 
             List<UserSession> staleSessionsOnThisPod = allStaleSessions.stream()
-                    .filter(session -> podId.equals(session.getPodId()))
+                    .filter(session -> appProperties.getPod().getId().equals(session.getPodId()))
                     .collect(Collectors.toList());
 
             if (!staleSessionsOnThisPod.isEmpty()) {
-                log.warn("Found {} stale sessions on this pod ({}) to clean up from memory.", staleSessionsOnThisPod.size(), podId);
+                log.warn("Found {} stale sessions on this pod ({}) to clean up from memory.", staleSessionsOnThisPod.size(), appProperties.getPod().getId());
                 for (UserSession staleSession : staleSessionsOnThisPod) {
                     Sinks.Many<ServerSentEvent<String>> sink = userSinks.remove(staleSession.getSessionId());
                     if (sink != null) {
@@ -137,6 +128,21 @@ public class SseService {
          } catch (Exception e) {
             log.error("Error during stale session cleanup task: {}", e.getMessage(), e);
         }
+    }
+
+    @Transactional
+    public void registerConnection(String userId, String sessionId) {
+        UserSession session = UserSession.builder()
+            .userId(userId)
+            .sessionId(sessionId)
+            .podId(appProperties.getPod().getId())
+            .connectionStatus("ACTIVE")
+            .connectedAt(ZonedDateTime.now(ZoneOffset.UTC))
+            .lastHeartbeat(ZonedDateTime.now(ZoneOffset.UTC))
+            .build();
+        userSessionRepository.save(session);
+        cacheService.registerUserConnection(userId, sessionId, appProperties.getPod().getId());
+        log.info("User session saved for user: {}, session: {}", userId, sessionId);
     }
     
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String sessionId) {
@@ -180,7 +186,7 @@ public class SseService {
         if (wasRemoved) {
             userSinks.remove(sessionId);
             sessionIdToUserIdMap.remove(sessionId);
-            int updated = userSessionRepository.markSessionInactive(sessionId, podId);
+            int updated = userSessionRepository.markSessionInactive(sessionId, appProperties.getPod().getId());
             if (updated > 0) {
                 cacheService.unregisterUserConnection(userId, sessionId);
                 log.info("Cleanly disconnected session {} for user {}", sessionId, userId);
@@ -299,7 +305,7 @@ public class SseService {
     }
 
     private void startServerHeartbeat() {
-        serverHeartbeatSubscription = Flux.interval(Duration.ofMillis(heartbeatInterval), Schedulers.parallel())
+        serverHeartbeatSubscription = Flux.interval(Duration.ofMillis(appProperties.getSse().getHeartbeatInterval()), Schedulers.parallel())
             .doOnNext(tick -> {
                 try {
                     String payload = objectMapper.writeValueAsString(Map.of("timestamp", ZonedDateTime.now()));

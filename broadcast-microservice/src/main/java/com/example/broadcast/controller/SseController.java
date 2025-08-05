@@ -1,16 +1,14 @@
 package com.example.broadcast.controller;
 
-import com.example.broadcast.model.UserSession;
+
 import com.example.broadcast.repository.UserSessionRepository;
-import com.example.broadcast.service.CacheService;
 import com.example.broadcast.service.SseService;
 import com.example.broadcast.service.UserMessageService;
-import com.example.broadcast.util.Constants.BroadcastStatus;
+import com.example.broadcast.config.AppProperties;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -32,10 +30,8 @@ public class SseController {
     private final SseService sseService;
     private final UserSessionRepository userSessionRepository;
     private final UserMessageService userMessageService;
-    private final CacheService cacheService;
     
-    @Value("${broadcast.pod.id:pod-local}")
-    private String podId;
+    private final AppProperties appProperties;
 
     @GetMapping(value = "/connect", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RateLimiter(name = "sseConnectLimiter", fallbackMethod = "connectFallback")
@@ -51,18 +47,7 @@ public class SseController {
             sessionId = UUID.randomUUID().toString();
         }
         
-        UserSession session = UserSession.builder()
-                .userId(userId)
-                .sessionId(sessionId)
-                .podId(podId)
-                .connectionStatus(BroadcastStatus.ACTIVE.name())
-                .connectedAt(ZonedDateTime.now())
-                .lastHeartbeat(ZonedDateTime.now())
-                .build();
-        
-        userSessionRepository.save(session);
-        cacheService.registerUserConnection(userId, sessionId, podId);
-        
+        sseService.registerConnection(userId, sessionId);
         Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, sessionId);
         log.info("SSE connection established for user: {}, session: {}", userId, sessionId);
         return eventStream;
@@ -91,11 +76,11 @@ public class SseController {
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
         long totalActiveUsers = userSessionRepository.getTotalActiveUserCount();
         stats.put("totalActiveUsers", totalActiveUsers);
-        long podActiveUsers = userSessionRepository.getActiveUserCountByPod(podId);
+        long podActiveUsers = userSessionRepository.getActiveUserCountByPod(appProperties.getPod().getId());
         stats.put("podActiveUsers", podActiveUsers);
         int sseConnectedUsers = sseService.getConnectedUserCount();
         stats.put("sseConnectedUsers", sseConnectedUsers);
-        stats.put("podId", podId);
+        stats.put("podId", appProperties.getPod().getId());
         stats.put("timestamp", ZonedDateTime.now());
         return ResponseEntity.ok(stats);
     }

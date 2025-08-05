@@ -150,19 +150,19 @@ broadcast:
   cache:
     user-connections:
       maximum-size: 50000
-      expire-after-write: 1h
+      expire-after-write: PT1H
     user-messages:
       maximum-size: 100000
-      expire-after-write: 24h
+      expire-after-write: PT24H
     pending-events:
       maximum-size: 50000
-      expire-after-write: 6h
+      expire-after-write: PT6H
     user-session:
       maximum-size: 10000
-      expire-after-access: 30m
+      expire-after-access: PT30M
     broadcast-stats:
       maximum-size: 1000
-      expire-after-write: 5m
+      expire-after-write: PT5M
 
   # Database Configuration
   db:
@@ -172,9 +172,8 @@ broadcast:
   # Kafka Configuration
   kafka:
     topic:
-      name:
-        all: broadcast-events-all
-        selected: broadcast-events-selected
+      name-all: broadcast-events-all
+      name-selected: broadcast-events-selected
       partitions: 10
       replication-factor: 1
     consumer:

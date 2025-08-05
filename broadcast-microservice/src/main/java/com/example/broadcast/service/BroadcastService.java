@@ -20,7 +20,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +31,8 @@ import java.util.UUID;
 import com.example.broadcast.util.Constants.BroadcastStatus;
 import com.example.broadcast.util.Constants.DeliveryStatus;
 import com.example.broadcast.util.Constants.EventType;
+import com.example.broadcast.config.AppProperties;
+
 
 @Service
 @RequiredArgsConstructor
@@ -48,11 +49,7 @@ public class BroadcastService {
     private final ObjectMapper objectMapper;
     private final TestingConfigurationService testingConfigService;
 
-    @Value("${broadcast.kafka.topic.name.all:broadcast-events-all}")
-    private String allUsersTopicName;
-
-    @Value("${broadcast.kafka.topic.name.selected:broadcast-events-selected}")
-    private String selectedUsersTopicName;
+    private final AppProperties appProperties;
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
@@ -125,7 +122,7 @@ public class BroadcastService {
             broadcastStatisticsRepository.save(initialStats);
             userBroadcastRepository.batchInsert(userBroadcasts);
 
-            String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? allUsersTopicName : selectedUsersTopicName;
+            String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? appProperties.getKafka().getTopic().getNameAll() : appProperties.getKafka().getTopic().getNameSelected();
 
             for (UserBroadcastMessage userMessage : userBroadcasts) {
                 MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
@@ -177,7 +174,7 @@ public class BroadcastService {
         int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(id, DeliveryStatus.SUPERSEDED.name());
         log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
 
-        String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? allUsersTopicName : selectedUsersTopicName;
+        String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? appProperties.getKafka().getTopic().getNameAll() : appProperties.getKafka().getTopic().getNameSelected();
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
         for (UserBroadcastMessage userMessage : userBroadcasts) {
             MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
@@ -207,7 +204,7 @@ public class BroadcastService {
             log.info("Updated {} pending user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
 
             log.info("Broadcast expired: {}", broadcastId);
-            String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? allUsersTopicName : selectedUsersTopicName;
+            String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? appProperties.getKafka().getTopic().getNameAll() : appProperties.getKafka().getTopic().getNameSelected();
             List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);
             for (UserBroadcastMessage userMessage : userBroadcasts) {
                 MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()

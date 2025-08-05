@@ -10,9 +10,10 @@ import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.example.broadcast.config.AppProperties;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -28,11 +29,7 @@ public class UserMessageService {
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final MessageStatusService messageStatusService;
     
-    @Value("${broadcast.kafka.topic.name.all:broadcast-events-all}")
-    private String allUsersTopicName;
-
-    @Value("${broadcast.kafka.topic.name.selected:broadcast-events-selected}")
-    private String selectedUsersTopicName;
+    private final AppProperties appProperties;
 
     public List<UserBroadcastResponse> getUserMessages(String userId) {
         log.info("Getting messages for user: {}", userId);
@@ -64,8 +61,8 @@ public class UserMessageService {
                 .orElseThrow(() -> new IllegalStateException("Cannot publish READ event. Original broadcast (ID: " + userMessage.getBroadcastId() + ") not found."));
             
             String topicName = Constants.TargetType.ALL.name().equals(parentBroadcast.getTargetType()) 
-                ? allUsersTopicName 
-                : selectedUsersTopicName;
+                ? appProperties.getKafka().getTopic().getNameAll() 
+                : appProperties.getKafka().getTopic().getNameSelected();
 
             messageStatusService.publishReadEvent(userMessage.getBroadcastId(), userId, topicName);
             log.info("Successfully marked message {} as read for user {} and published READ event to topic {}.", messageId, userId, topicName);
