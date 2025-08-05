@@ -27,10 +27,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
-import java.util.List;
 
 @Service
 @Slf4j
@@ -94,7 +94,7 @@ public class DltService {
 
         acknowledgment.acknowledge();
     }
-    
+
     public Collection<DltMessage> getDltMessages() {
         return dltRepository.findAll();
     }

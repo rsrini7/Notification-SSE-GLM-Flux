@@ -1,7 +1,10 @@
 package com.example.broadcast.config;
 
+import com.example.broadcast.exception.MessageProcessingException;
+import com.example.broadcast.service.DltService;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
@@ -16,12 +19,16 @@ import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.*;
+import org.springframework.kafka.KafkaException;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.util.backoff.FixedBackOff;
 import com.example.broadcast.util.Constants;
+import com.example.broadcast.service.DltFailureHandler;
+
 
 import java.util.HashMap;
 import java.util.Map;
@@ -82,25 +89,32 @@ public class KafkaConfig {
         return factory;
     }
 
-    // --- START: DEFINITIVE AND FINAL FIX ---
-    @Bean
-    public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
+ @Bean
+    public DefaultErrorHandler errorHandler(ConsumerRecordRecoverer consumerRecordRecoverer) {
         FixedBackOff backOff = new FixedBackOff(1000L, 2L);
-        // We instantiate our new custom class here.
-        DefaultErrorHandler errorHandler = new ConciseLoggingErrorHandler(deadLetterPublishingRecoverer, backOff);
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(consumerRecordRecoverer, backOff);
+        errorHandler.setLogLevel(KafkaException.Level.WARN);
         errorHandler.setCommitRecovered(true);
         return errorHandler;
     }
-    // --- END: DEFINITIVE AND FINAL FIX ---
 
     @Bean
-    public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
-            @Qualifier("dltKafkaTemplate") KafkaTemplate<String, byte[]> dltKafkaTemplate) {
-        
-        BiFunction<org.apache.kafka.clients.consumer.ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
+    public ConsumerRecordRecoverer consumerRecordRecoverer(
+            @Qualifier("dltKafkaTemplate") KafkaTemplate<String, byte[]> dltKafkaTemplate,
+            DltFailureHandler dltFailureHandler) { // DEPEND ON THE NEW HANDLER
+
+        BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
                 new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
         
-        return new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
+        DeadLetterPublishingRecoverer dltRecoverer = new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
+
+        return (record, exception) -> {
+            if (exception.getCause() instanceof MessageProcessingException) {
+                // CALL THE NEW HANDLER
+                dltFailureHandler.handleProcessingFailure(((MessageProcessingException) exception.getCause()).getFailedEvent());
+            }
+            dltRecoverer.accept(record, exception);
+        };
     }
 
     @Bean

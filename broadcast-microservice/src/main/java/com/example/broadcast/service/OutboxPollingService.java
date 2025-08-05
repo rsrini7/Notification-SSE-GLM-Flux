@@ -7,7 +7,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -15,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,22 +40,26 @@ public class OutboxPollingService {
         for (OutboxEvent event : events) {
             try {
                 MessageDeliveryEvent payload = objectMapper.readValue(event.getPayload(), MessageDeliveryEvent.class);
-                // Use the topic from the event itself
-                kafkaTemplate.send(event.getTopic(), payload.getUserId(), payload)
-                        .whenComplete((result, ex) -> {
-                            if (ex != null) {
-                                log.error("Failed to send outbox event {} to Kafka", event.getId(), ex);
-                                // The transaction will roll back, and the event will be retried later.
-                                throw new RuntimeException("Kafka send failed", ex);
-                            }
-                        });
+                
+                // Make the Kafka send synchronous by calling .get()
+                // This will block until Kafka acknowledges the message or throws an exception.
+                kafkaTemplate.send(event.getTopic(), payload.getUserId(), payload).get();
+
             } catch (JsonProcessingException e) {
                 log.error("Failed to deserialize outbox event payload for event ID {}", event.getId(), e);
-                // Handle potentially unrecoverable message, maybe move to a dead-letter table
+                // This is a critical, likely unrecoverable error for this message.
+                // In a real system, you might move it to a separate "poison pill" table.
+                // For now, we will let the transaction roll back and retry later.
+                throw new RuntimeException("Failed to deserialize event payload", e);
+            } catch (InterruptedException | ExecutionException e) {
+                log.error("Failed to send outbox event {} to Kafka. The transaction will be rolled back.", event.getId(), e);
+                // Throwing a runtime exception ensures the transaction is rolled back,
+                // so the event remains in the outbox for the next polling cycle.
+                throw new RuntimeException("Kafka send failed", e);
             }
         }
         
-        // If all sends are successful, delete the events from the outbox
+        // This code will only be reached if ALL Kafka sends in the batch were successful.
         List<UUID> processedIds = events.stream().map(OutboxEvent::getId).collect(Collectors.toList());
         outboxRepository.deleteByIds(processedIds);
         log.trace("Successfully published and deleted {} events from outbox.", processedIds.size());
