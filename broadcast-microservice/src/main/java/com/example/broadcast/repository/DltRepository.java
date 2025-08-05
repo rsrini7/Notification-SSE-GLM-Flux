@@ -17,6 +17,7 @@ public class DltRepository {
     private final JdbcTemplate jdbcTemplate;
     private final RowMapper<DltMessage> rowMapper = (rs, rowNum) -> DltMessage.builder()
             .id(rs.getString("id"))
+            .originalKey(rs.getString("original_key")) // ADD THIS LINE
             .originalTopic(rs.getString("original_topic"))
             .originalPartition(rs.getInt("original_partition"))
             .originalOffset(rs.getLong("original_offset"))
@@ -26,9 +27,10 @@ public class DltRepository {
             .build();
 
     public void save(DltMessage dltMessage) {
-        String sql = "INSERT INTO dlt_messages (id, original_topic, original_partition, original_offset, exception_message, original_message_payload, failed_at) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO dlt_messages (id, original_key, original_topic, original_partition, original_offset, exception_message, original_message_payload, failed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         jdbcTemplate.update(sql,
                 dltMessage.getId(),
+                dltMessage.getOriginalKey(), // ADD THIS LINE
                 dltMessage.getOriginalTopic(),
                 dltMessage.getOriginalPartition(),
                 dltMessage.getOriginalOffset(),

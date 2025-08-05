@@ -7,16 +7,13 @@ import lombok.NoArgsConstructor;
 
 import java.time.ZonedDateTime;
 
-/**
- * DTO representing a message from the Dead Letter Topic (DLT).
- * It holds the failed message's payload and metadata about the failure.
- */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class DltMessage {
     private String id;
+    private String originalKey; // ADD THIS FIELD
     private String originalTopic;
     private int originalPartition;
     private long originalOffset;

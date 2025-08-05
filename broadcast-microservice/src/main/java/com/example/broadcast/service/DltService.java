@@ -54,6 +54,7 @@ public class DltService {
     @Transactional
     public void listenToDlt(
             @Payload byte[] payload,
+            @Header(KafkaHeaders.RECEIVED_KEY) String key,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.DLT_ORIGINAL_TOPIC) String originalTopic,
             @Header(KafkaHeaders.DLT_ORIGINAL_PARTITION) int originalPartition,
@@ -61,7 +62,7 @@ public class DltService {
             @Header(KafkaHeaders.DLT_EXCEPTION_FQCN) String exceptionFqcn,
             @Header(KafkaHeaders.DLT_EXCEPTION_MESSAGE) String exceptionMessage,
             @Header(KafkaHeaders.DLT_EXCEPTION_STACKTRACE) String exceptionStacktrace,
-            Acknowledgment acknowledgment) { 
+            Acknowledgment acknowledgment) {
         
         String payloadString = new String(payload, StandardCharsets.UTF_8);
         String id = UUID.randomUUID().toString();
@@ -78,9 +79,10 @@ public class DltService {
             displayTitle = exceptionMessage;
         }
         
-        log.error("DLT Received Message. Saving to database with ID: {}, From Topic: {}, Reason: {}", id, originalTopic, displayTitle);
+        log.error("DLT Received Message. Saving to database with ID: {}, Original Key: {}, From Topic: {}, Reason: {}", id, key, originalTopic, displayTitle);
         DltMessage dltMessage = DltMessage.builder()
                 .id(id)
+                .originalKey(key)
                 .originalTopic(originalTopic)
                 .originalPartition(originalPartition)
                 .originalOffset(originalOffset)
@@ -98,12 +100,6 @@ public class DltService {
     }
 
     @Transactional
-    public void deleteMessage(String id) {
-        dltRepository.deleteById(id);
-        log.info("Deleted DLT message with ID: {}", id);
-    }
-
-    @Transactional
     public void redriveMessage(String id) throws JsonProcessingException {
         DltMessage dltMessage = dltRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
@@ -117,7 +113,7 @@ public class DltService {
             kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload).get();
             
             String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
-            kafkaTemplate.send(dltTopicName, dltMessage.getId(), null).get();
+            kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null).get();
             
             dltRepository.deleteById(id);
             log.info("Successfully redriven and purged DLT message with ID: {}", id);
@@ -127,7 +123,6 @@ public class DltService {
         }
     }
     
-    // NEW METHOD to redrive all messages
     public void redriveAllMessages() {
         List<DltMessage> messagesToRedrive = dltRepository.findAll();
         if (messagesToRedrive.isEmpty()) {
@@ -183,17 +178,15 @@ public class DltService {
     }
     
     @Transactional
-    public void purgeMessage(String id) throws JsonProcessingException {
+    public void purgeMessage(String id) {
         DltMessage dltMessage = dltRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
-        dltRepository.deleteById(id);
-        log.info("Deleted DLT message with ID: {} from the database.", id);
         
-        String messageKey = dltMessage.getId();
         String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
+        kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null);
         
-        kafkaTemplate.send(dltTopicName, messageKey, null);
-        log.info("Sent tombstone message to Kafka topic {} with key {} to purge the message.", dltTopicName, messageKey);
+        dltRepository.deleteById(id);
+        log.info("Purged DLT message with ID: {} and sent tombstone to topic {} with key {}.", id, dltTopicName, dltMessage.getOriginalKey());
     }
 
     @Transactional
@@ -207,9 +200,8 @@ public class DltService {
         log.info("Purging all {} messages from the DLT.", messagesToPurge.size());
 
         for (DltMessage dltMessage : messagesToPurge) {
-            String messageKey = dltMessage.getId();
             String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
-            kafkaTemplate.send(dltTopicName, messageKey, null);
+            kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null);
         }
 
         dltRepository.deleteAll();

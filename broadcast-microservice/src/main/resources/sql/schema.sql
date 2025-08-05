@@ -120,8 +120,10 @@ CREATE INDEX idx_stats_broadcast_id ON broadcast_statistics (broadcast_id);
 CREATE INDEX idx_stats_calculated_at ON broadcast_statistics (calculated_at);
 -- Index for user preference lookups
 CREATE INDEX idx_user_preferences_user_id ON user_preferences (user_id);
+
 CREATE TABLE IF NOT EXISTS dlt_messages (
     id VARCHAR(255) PRIMARY KEY,
+    original_key VARCHAR(255), -- ADD THIS LINE
     original_topic VARCHAR(255) NOT NULL,
     original_partition INT NOT NULL,
     original_offset BIGINT NOT NULL,
@@ -140,7 +142,7 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     aggregate_type VARCHAR(255) NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,
     event_type VARCHAR(255) NOT NULL,
-    topic VARCHAR(255) NOT NULL, -- Add this column
+    topic VARCHAR(255) NOT NULL, 
     payload TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
