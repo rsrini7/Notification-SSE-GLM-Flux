@@ -38,17 +38,10 @@ public class DltController {
         }
     }
     
-    // NEW ENDPOINT to redrive all messages
     @PostMapping("/redrive-all")
     public ResponseEntity<Void> redriveAllMessages() {
         dltService.redriveAllMessages();
         return ResponseEntity.ok().build();
-    }
-
-    @DeleteMapping("/delete/{id}")
-    public ResponseEntity<Void> deleteMessage(@PathVariable String id) {
-        dltService.deleteMessage(id);
-        return ResponseEntity.noContent().build();
     }
     
     @DeleteMapping("/purge/{id}")
@@ -56,9 +49,6 @@ public class DltController {
         try {
             dltService.purgeMessage(id);
             return ResponseEntity.noContent().build();
-        } catch (JsonProcessingException e) {
-            log.error("Failed to parse DLT message payload for purge: {}", id, e);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Cannot parse message payload.", e);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         }
