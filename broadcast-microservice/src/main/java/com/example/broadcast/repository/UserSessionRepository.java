@@ -89,7 +89,7 @@ public class UserSessionRepository {
     }
 
     public Optional<UserSession> findByUserId(String userId) {
-        String sql = "SELECT * FROM user_sessions WHERE user_id = ? AND connection_status = 'ACTIVE' ORDER BY last_heartbeat DESC LIMIT 1";
+        String sql = "SELECT * FROM user_sessions WHERE user_id = ? AND connection_status = 'ACTIVE' ORDER BY last_heartbeat DESC FETCH FIRST 1 ROWS ONLY";
         List<UserSession> results = jdbcTemplate.query(sql, sessionRowMapper, userId);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }

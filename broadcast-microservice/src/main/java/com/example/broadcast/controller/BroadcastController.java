@@ -27,28 +27,13 @@ public class BroadcastController {
     private final BroadcastService broadcastService;
 
     @PostMapping
-    @RateLimiter(name = "createBroadcastLimiter", fallbackMethod = "createBroadcastFallback")
+    @RateLimiter(name = "createBroadcastLimiter")
     public ResponseEntity<BroadcastResponse> createBroadcast(
             @Valid @RequestBody BroadcastRequest request) {
         log.info("Received broadcast creation request from sender: {}", request.getSenderId());
         BroadcastResponse response = broadcastService.createBroadcast(request);
         log.info("Broadcast created successfully with ID: {}", response.getId());
         return ResponseEntity.ok(response);
-    }
-
-     // MODIFIED: Added a fallback method to handle rate-limiting exceptions
-    public ResponseEntity<?> createBroadcastFallback(BroadcastRequest request, RequestNotPermitted ex) {
-        log.warn("Rate limit exceeded for createBroadcast by sender: {}. Details: {}", request.getSenderId(), ex.getMessage());
-        ErrorResponse errorResponse = new ErrorResponse(
-                ZonedDateTime.now(),
-                HttpStatus.TOO_MANY_REQUESTS.value(),
-                "Too Many Requests",
-                "You have exceeded the request limit. Please try again later.",
-                "/api/broadcasts"
-        );
-
-        // Return a standard 429 Too Many Requests response
-        return new ResponseEntity<>(errorResponse, HttpStatus.TOO_MANY_REQUESTS);
     }
 
     @GetMapping("/{id}")

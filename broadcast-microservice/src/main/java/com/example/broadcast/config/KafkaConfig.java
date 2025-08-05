@@ -88,7 +88,8 @@ public class KafkaConfig {
     public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
         // After 2 retries (3 total attempts), the message will be sent to the DLT.
         FixedBackOff backOff = new FixedBackOff(1000L, 2L);
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(deadLetterPublishingRecoverer, backOff);
+        // Use the new ConciseLoggingErrorHandler to reduce log noise
+        DefaultErrorHandler errorHandler = new ConciseLoggingErrorHandler(deadLetterPublishingRecoverer, backOff);
         errorHandler.setLogLevel(KafkaException.Level.WARN);
         errorHandler.setCommitRecovered(true); // Commit the offset of the failed message
         return errorHandler;
