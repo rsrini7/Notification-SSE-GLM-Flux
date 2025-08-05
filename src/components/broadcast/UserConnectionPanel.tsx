@@ -52,6 +52,11 @@ const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string)
       default: return 'bg-gray-200 text-gray-900 border-gray-300';
     }
   };
+  
+  // FIX: Determine connection status variables based on both 'connected' and 'connecting' states.
+  const isConnected = sseConnection.connected && !sseConnection.connecting;
+  const connectionStatusText = isConnected ? 'Connected' : sseConnection.connecting ? 'Connecting...' : 'Disconnected';
+  const connectionStatusColor = isConnected ? 'text-green-600' : 'text-red-600';
 
   return (
     <Card className="border flex flex-col">
@@ -68,9 +73,10 @@ const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string)
         <CardDescription className="flex items-center justify-between">
             <span>Real-time messages and notifications</span>
             <div className="flex items-center gap-2">
-                {sseConnection.connected ? <Wifi className="h-4 w-4 text-green-600" /> : <WifiOff className="h-4 w-4 text-red-600" />}
-                <span className={`text-xs ${sseConnection.connected ? 'text-green-600' : 'text-red-600'}`}>
-                    {sseConnection.connected ? 'Connected' : 'Disconnected'}
+                {/* FIX: Show WifiOff icon if not connected OR if in the process of connecting/disconnecting */}
+                {isConnected ? <Wifi className="h-4 w-4 text-green-600" /> : <WifiOff className="h-4 w-4 text-red-600" />}
+                <span className={`text-xs ${connectionStatusColor}`}>
+                    {connectionStatusText}
                 </span>
             </div>
         </CardDescription>
@@ -112,8 +118,9 @@ const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string)
             <div>
                 <span>Total: {stats.total}</span> | <span className="font-bold text-blue-600">Unread: {stats.unread}</span>
             </div>
+            {/* FIX: Button label changes based on connecting and connected state */}
             <Button variant="outline" size="sm" onClick={toggleConnection} disabled={sseConnection.connecting}>
-                {sseConnection.connected ? 'Disconnect' : 'Connect'}
+                {sseConnection.connecting ? 'Connecting...' : (sseConnection.connected ? 'Disconnect' : 'Connect')}
             </Button>
         </div>
       </CardContent>
