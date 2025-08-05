@@ -49,13 +49,14 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const sessionIdRef = useRef<string | null>(null);
-  const disconnectRef = useRef<() => void>();
-
+  
+  // Use refs to hold the latest callbacks, preventing re-renders from causing dependency changes.
   const onConnectRef = useRef(onConnect);
   const onDisconnectRef = useRef(onDisconnect);
   const onErrorRef = useRef(onError);
   const onMessageRef = useRef(onMessage);
 
+  // Update refs when props change
   useEffect(() => {
     onConnectRef.current = onConnect;
     onDisconnectRef.current = onDisconnect;
@@ -78,85 +79,65 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
   }, []);
 
-  const disconnect = useCallback(() => {
-    const wasConnected = eventSourceRef.current?.readyState === EventSource.OPEN;
-    if (eventSourceRef.current) {
-      SSE_EVENT_TYPES.forEach(type => {
-        eventSourceRef.current?.removeEventListener(type, handleSseMessage as EventListener);
-      });
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-    reconnectAttemptsRef.current = 0;
-    if (sessionIdRef.current && wasConnected) {
-      navigator.sendBeacon(`${baseUrl}/api/sse/disconnect?userId=${userId}&sessionId=${sessionIdRef.current}`);
-    }
-    sessionIdRef.current = null;
-    if (state.connected) onDisconnectRef.current?.();
-    setState(prev => ({ ...prev, connected: false, connecting: false, sessionId: null, error: null, reconnectAttempt: 0 }));
-  }, [userId, baseUrl, state.connected, handleSseMessage]);
+  const connect = useCallback(() => {
+    if (eventSourceRef.current || state.connecting) return;
 
-  useEffect(() => {
-    disconnectRef.current = disconnect;
-  }, [disconnect]);
-
-  const scheduleReconnect = useCallback(() => {
-    if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-      // Calculate exponential backoff
-      const backoff = Math.min(MAX_RECONNECT_DELAY, BASE_RECONNECT_DELAY * 2 ** reconnectAttemptsRef.current);
-      // Add a random jitter of up to 1 second
-      const jitter = Math.random() * 1000;
-      const delay = backoff + jitter;
-      
-      console.log(`SSE: Scheduling reconnect for user ${userId} in ${delay.toFixed(0)}ms`);
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = setTimeout(() => connect(true), delay);
-    } else {
-      console.error(`SSE: Max reconnection attempts reached for user ${userId}.`);
-      setState(prev => ({ ...prev, error: 'Max reconnection attempts reached.', connecting: false }));
-    }
-  }, [userId]);
-
-  const connect = useCallback((isRetry = false) => {
-    if (eventSourceRef.current) eventSourceRef.current.close();
-    
-    if (isRetry) {
-      reconnectAttemptsRef.current++;
-    } else {
-      reconnectAttemptsRef.current = 1;
-    }
-    
-    setState(prev => ({ ...prev, connecting: true, error: isRetry ? `Reconnecting... (Attempt ${reconnectAttemptsRef.current})` : null, reconnectAttempt: reconnectAttemptsRef.current }));
+    reconnectAttemptsRef.current++;
+    setState(prev => ({ ...prev, connecting: true, error: prev.reconnectAttempt > 0 ? `Reconnecting... (Attempt ${reconnectAttemptsRef.current})` : null, reconnectAttempt: reconnectAttemptsRef.current }));
 
     const newSessionId = generateSessionId();
     sessionIdRef.current = newSessionId;
     const sseUrl = `${baseUrl}/api/sse/connect?userId=${userId}&sessionId=${newSessionId}`;
     
-    try {
-      eventSourceRef.current = new EventSource(sseUrl);
+    eventSourceRef.current = new EventSource(sseUrl);
 
-      eventSourceRef.current.onopen = () => {
-        setState(prev => ({ ...prev, connected: true, connecting: false, sessionId: newSessionId, error: null, reconnectAttempt: 0 }));
-        onConnectRef.current?.();
-        reconnectAttemptsRef.current = 0;
-      };
-      
-      SSE_EVENT_TYPES.forEach(type => {
-        eventSourceRef.current?.addEventListener(type, handleSseMessage as EventListener);
-      });
-      
-      eventSourceRef.current.onerror = () => {
-        eventSourceRef.current?.close();
-        onErrorRef.current?.(new Error('SSE connection error'));
-        scheduleReconnect();
-      };
-    } catch (error) {
-      console.error('Failed to create SSE connection:', error);
-      onErrorRef.current?.(error);
-      scheduleReconnect();
+    eventSourceRef.current.onopen = () => {
+      console.log(`SSE: Connection opened for ${userId}`);
+      reconnectAttemptsRef.current = 0;
+      setState(prev => ({ ...prev, connected: true, connecting: false, sessionId: newSessionId, error: null, reconnectAttempt: 0 }));
+      onConnectRef.current?.();
+    };
+    
+    SSE_EVENT_TYPES.forEach(type => {
+      eventSourceRef.current?.addEventListener(type, handleSseMessage as EventListener);
+    });
+    
+    eventSourceRef.current.onerror = () => {
+      console.error(`SSE: Connection error for ${userId}.`);
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+      setState(prev => ({...prev, connected: false, connecting: false}));
+      onErrorRef.current?.(new Error('SSE connection error'));
+
+      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        const backoff = Math.min(MAX_RECONNECT_DELAY, BASE_RECONNECT_DELAY * 2 ** reconnectAttemptsRef.current);
+        const jitter = Math.random() * 1000;
+        const delay = backoff + jitter;
+        console.log(`SSE: Scheduling reconnect for user ${userId} in ${delay.toFixed(0)}ms`);
+        reconnectTimeoutRef.current = setTimeout(connect, delay);
+      } else {
+        console.error(`SSE: Max reconnection attempts reached for user ${userId}.`);
+        setState(prev => ({ ...prev, error: 'Max reconnection attempts reached.' }));
+      }
+    };
+  }, [userId, baseUrl, state.connecting, generateSessionId, handleSseMessage]);
+
+  const disconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
-  }, [userId, baseUrl, generateSessionId, handleSseMessage, scheduleReconnect]);
+    if (sessionIdRef.current) {
+      navigator.sendBeacon(`${baseUrl}/api/sse/disconnect?userId=${userId}&sessionId=${sessionIdRef.current}`);
+    }
+    if (state.connected) {
+        onDisconnectRef.current?.();
+    }
+    reconnectAttemptsRef.current = 0;
+    sessionIdRef.current = null;
+    setState({ connected: false, connecting: false, sessionId: null, error: null, reconnectAttempt: 0 });
+  }, [userId, baseUrl, state.connected]);
 
   const markAsRead = useCallback(async (messageId: number) => {
     if (!sessionIdRef.current) {
@@ -177,13 +158,20 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   }, [userId, baseUrl]);
 
   useEffect(() => {
-    if (autoConnect && userId) connect();
+    if (autoConnect && userId) {
+      connect();
+    }
+    
     return () => {
-      disconnectRef.current?.();
+      disconnect();
     };
-  }, [autoConnect, userId, connect]);
+    // The dependency array is intentionally limited. 
+    // `connect` and `disconnect` are memoized with useCallback and only change if their own dependencies change.
+    // This prevents the effect from running on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect, userId]);
 
-  return { ...state, connect: () => connect(false), disconnect, markAsRead };
+  return { ...state, connect, disconnect, markAsRead };
 };
 
 export default useSseConnection;

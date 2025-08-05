@@ -37,8 +37,11 @@ public class BroadcastRequest {
     
     private String category;
     
-    // This field correctly matches the updated frontend payload
     private java.time.ZonedDateTime scheduledAt;
 
     private java.time.ZonedDateTime expiresAt;
+    
+    // This field was added to match the frontend payload correctly
+    @Builder.Default
+    private boolean isImmediate = true;
 }

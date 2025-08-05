@@ -29,7 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set; // Import Set
+import java.util.Set; 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -57,6 +57,7 @@ public class SseService {
     
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> userSessionMap = new ConcurrentHashMap<>();
+    private final Map<String, String> sessionIdToUserIdMap = new ConcurrentHashMap<>();
 
     private Disposable serverHeartbeatSubscription;
     
@@ -115,6 +116,7 @@ public class SseService {
                             userSessionMap.remove(staleSession.getUserId());
                         }
                     }
+                    sessionIdToUserIdMap.remove(staleSession.getSessionId());
                 }
             }
             
@@ -143,6 +145,7 @@ public class SseService {
         
         userSinks.put(sessionId, sink);
         userSessionMap.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
+        sessionIdToUserIdMap.put(sessionId, userId);
 
         sendPendingMessages(userId);
         
@@ -173,9 +176,9 @@ public class SseService {
             }
         }
         
-        // Only proceed with DB/cache cleanup if the session was actually found and removed from the map
         if (wasRemoved) {
             userSinks.remove(sessionId);
+            sessionIdToUserIdMap.remove(sessionId);
             int updated = userSessionRepository.markSessionInactive(sessionId, podId);
             if (updated > 0) {
                 cacheService.unregisterUserConnection(userId, sessionId);
@@ -220,7 +223,6 @@ public class SseService {
                     Sinks.EmitResult result = sink.tryEmitNext(event);
                     if (result.isFailure()) {
                         log.warn("Failed to emit SSE event for user {}, session {}. Result: {}. Proactively cleaning up stale connection.", userId, sessionId, result);
-                        // Call a separate, non-transactional method to avoid issues if sendEvent is called from within a transaction
                         cleanupFailedSessionAsync(userId, sessionId);
                     }
                 }
@@ -228,9 +230,7 @@ public class SseService {
         }
     }
     
-    // Helper method to avoid transactional conflicts
     private void cleanupFailedSessionAsync(String userId, String sessionId) {
-        // Run on a different thread to avoid blocking and potential transactional deadlocks
         Schedulers.boundedElastic().schedule(() -> removeEventStream(userId, sessionId));
     }
 
@@ -302,7 +302,15 @@ public class SseService {
                         .data(payload)
                         .build();
                     
-                    new ArrayList<>(userSessionMap.keySet()).forEach(userId -> sendEvent(userId, heartbeatEvent));
+                    new ArrayList<>(userSinks.keySet()).forEach(sessionId -> {
+                        String userId = sessionIdToUserIdMap.get(sessionId);
+                        if (userId != null) {
+                            Sinks.Many<ServerSentEvent<String>> sink = userSinks.get(sessionId);
+                            if (sink != null) {
+                                sink.tryEmitNext(heartbeatEvent);
+                            }
+                        }
+                    });
                 } catch (Exception e) {
                     log.error("Error in server heartbeat task: {}", e.getMessage());
                 }

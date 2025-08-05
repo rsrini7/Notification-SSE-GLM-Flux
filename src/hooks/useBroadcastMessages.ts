@@ -91,22 +91,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [toast, userId]);
 
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-        const now = new Date().getTime();
-        setMessages(prevMessages => {
-            const activeMessages = prevMessages.filter(message => {
-                if (!message.expiresAt) return true;
-                return new Date(message.expiresAt).getTime() > now;
-            });
-            if (activeMessages.length !== prevMessages.length) {
-                return activeMessages;
-            }
-            return prevMessages;
-        });
-    }, 60000);
-    return () => clearInterval(intervalId);
-  }, []);
+  // REMOVED: The setInterval polling logic is now gone. The component relies solely on SSE events.
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
