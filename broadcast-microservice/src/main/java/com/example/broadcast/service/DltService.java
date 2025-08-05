@@ -21,7 +21,6 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
@@ -66,23 +65,26 @@ public class DltService {
             Acknowledgment acknowledgment) {
         
         String payloadString = new String(payload, StandardCharsets.UTF_8);
-        String id = UUID.randomUUID().toString();
-        
+        MessageDeliveryEvent failedEvent = null;
         String displayTitle = "Failed to process message";
+
         try {
-            MessageDeliveryEvent event = objectMapper.readValue(payloadString, MessageDeliveryEvent.class);
-            if (event.getUserId() != null && event.getBroadcastId() != null) {
+            failedEvent = objectMapper.readValue(payloadString, MessageDeliveryEvent.class);
+            if (failedEvent.getUserId() != null && failedEvent.getBroadcastId() != null) {
+                // Step 1: Update original message status to FAILED
+                handleProcessingFailure(failedEvent);
                 displayTitle = String.format("Failed event '%s' for user %s (Broadcast: %d)",
-                    event.getEventType(), event.getUserId(), event.getBroadcastId());
+                    failedEvent.getEventType(), failedEvent.getUserId(), failedEvent.getBroadcastId());
             }
         } catch (JsonProcessingException e) {
-            log.warn("Could not parse DLT message payload to extract details for title.");
+            log.warn("Could not parse DLT message payload to extract details.", e);
             displayTitle = exceptionMessage;
         }
         
-        log.error("DLT Received Message. Saving to database with ID: {}, Original Key: {}, From Topic: {}, Reason: {}", id, key, originalTopic, displayTitle);
+        // Step 2: Save the record for the DLT UI
+        log.error("DLT Received Message. Saving to database. Original Key: {}, From Topic: {}, Reason: {}", key, originalTopic, displayTitle);
         DltMessage dltMessage = DltMessage.builder()
-                .id(id)
+                .id(UUID.randomUUID().toString())
                 .originalKey(key)
                 .originalTopic(originalTopic)
                 .originalPartition(originalPartition)
@@ -93,12 +95,12 @@ public class DltService {
                 .build();
         dltRepository.save(dltMessage);
 
+        // Step 3: Acknowledge the DLT message
         acknowledgment.acknowledge();
     }
     
-    // METHOD MOVED BACK INTO THIS CLASS
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void handleProcessingFailure(MessageDeliveryEvent event) {
+    // This method is now private and called from within the listener's transaction
+    private void handleProcessingFailure(MessageDeliveryEvent event) {
         if (event == null || event.getUserId() == null || event.getBroadcastId() == null) {
             log.error("Cannot handle processing failure: event or its key fields are null.");
             return;
@@ -106,8 +108,10 @@ public class DltService {
 
         userBroadcastRepository.findByUserIdAndBroadcastId(event.getUserId(), event.getBroadcastId())
             .ifPresent(userMessage -> {
-                userBroadcastRepository.updateDeliveryStatus(userMessage.getId(), DeliveryStatus.FAILED.name());
-                log.info("Marked UserBroadcastMessage (ID: {}) as FAILED for user {} due to processing error.", userMessage.getId(), event.getUserId());
+                if (!DeliveryStatus.FAILED.name().equals(userMessage.getDeliveryStatus())) {
+                    userBroadcastRepository.updateDeliveryStatus(userMessage.getId(), DeliveryStatus.FAILED.name());
+                    log.info("Marked UserBroadcastMessage (ID: {}) as FAILED for user {} due to processing error.", userMessage.getId(), event.getUserId());
+                }
             });
     }
 

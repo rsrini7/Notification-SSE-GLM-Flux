@@ -24,7 +24,6 @@ import org.springframework.kafka.KafkaException;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
-import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.util.backoff.FixedBackOff;
 import com.example.broadcast.util.Constants;
@@ -90,32 +89,22 @@ public class KafkaConfig {
     }
 
     @Bean
-    public DefaultErrorHandler errorHandler(ConsumerRecordRecoverer consumerRecordRecoverer) {
+    public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
         FixedBackOff backOff = new FixedBackOff(1000L, 2L);
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(consumerRecordRecoverer, backOff);
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(deadLetterPublishingRecoverer, backOff);
         errorHandler.setLogLevel(KafkaException.Level.WARN);
         errorHandler.setCommitRecovered(true);
         return errorHandler;
     }
 
     @Bean
-    public ConsumerRecordRecoverer consumerRecordRecoverer(
-            @Qualifier("dltKafkaTemplate") KafkaTemplate<String, byte[]> dltKafkaTemplate,
-            @Lazy DltService dltService) { // USE @Lazy to break the cycle
+    public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
+            @Qualifier("dltKafkaTemplate") KafkaTemplate<String, byte[]> dltKafkaTemplate) {
         
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
                 new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
         
-        DeadLetterPublishingRecoverer dltRecoverer = new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
-
-        return (record, exception) -> {
-            if (exception.getCause() instanceof MessageProcessingException) {
-                // This call now works because the DltService proxy will initialize the real bean.
-                dltService.handleProcessingFailure(((MessageProcessingException) exception.getCause()).getFailedEvent());
-            }
-            
-            dltRecoverer.accept(record, exception);
-        };
+        return new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
     }
 
     @Bean
