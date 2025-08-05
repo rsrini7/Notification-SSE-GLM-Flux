@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { userService } from '../services/api';
 
@@ -24,9 +24,9 @@ export const useUserPanelManager = () => {
     fetchAllUsers();
   }, [toast]);
   
-  const availableUsers = allUsers.filter(u => !users.includes(u));
+  const availableUsers = useMemo(() => allUsers.filter(u => !users.includes(u)), [allUsers, users]);
 
-  const addUser = () => {
+  const addUser = useCallback(() => {
     const userToAdd = selectedUserId || (availableUsers.length > 0 ? availableUsers[0] : '');
 
     if (userToAdd && !users.includes(userToAdd)) {
@@ -36,9 +36,9 @@ export const useUserPanelManager = () => {
     } else if (userToAdd && users.includes(userToAdd)) {
       toast({ title: 'User Exists', description: `A panel for ${userToAdd} is already open.`, variant: 'destructive' });
     }
-  };
+  }, [selectedUserId, users, availableUsers, toast]);
 
-  const addAllUsers = () => {
+  const addAllUsers = useCallback(() => {
     const usersToAdd = allUsers.filter(u => !users.includes(u));
     if (usersToAdd.length > 0) {
       setUsers(prevUsers => [...prevUsers, ...usersToAdd]);
@@ -52,9 +52,9 @@ export const useUserPanelManager = () => {
         description: 'All available users already have a panel open.',
       });
     }
-  };
+  }, [allUsers, users, toast]);
 
-  const removeAllUsers = () => {
+  const removeAllUsers = useCallback(() => {
     if (users.length > 0) {
       setUsers([]);
       toast({
@@ -62,7 +62,7 @@ export const useUserPanelManager = () => {
         description: 'All user connection panels have been closed.',
       });
     }
-  };
+  }, [users.length, toast]);
 
   const removeUser = useCallback((userIdToRemove: string) => {
     setUsers(users => users.filter(user => user !== userIdToRemove));

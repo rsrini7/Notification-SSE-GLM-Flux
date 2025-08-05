@@ -5,8 +5,6 @@ import * as ProgressPrimitive from "@radix-ui/react-progress"
 
 import { cn } from "@/lib/utils"
 
-// MODIFIED: Converted to a standard React.forwardRef functional component
-// This resolves the 'useMemo' and 'Invalid hook call' errors.
 const Progress = React.forwardRef<
   React.ElementRef<typeof ProgressPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof ProgressPrimitive.Root>

@@ -57,9 +57,8 @@ spec:
               fieldPath: metadata.name
         - name: JAVA_OPTS
           value: "-Xms2g -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2"
-        # NEW: Set the active Spring profile for the Kubernetes environment.
         - name: SPRING_PROFILES_ACTIVE
-          value: "dev-pg"
+          value: "k8s,redis"
         resources:
           requests:
             memory: "3Gi"

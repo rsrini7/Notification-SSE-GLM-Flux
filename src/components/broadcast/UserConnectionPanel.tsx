@@ -53,7 +53,6 @@ const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string)
     }
   };
   
-  // FIX: Determine connection status variables based on both 'connected' and 'connecting' states.
   const isConnected = sseConnection.connected && !sseConnection.connecting;
   const connectionStatusText = isConnected ? 'Connected' : sseConnection.connecting ? 'Connecting...' : 'Disconnected';
   const connectionStatusColor = isConnected ? 'text-green-600' : 'text-red-600';
@@ -73,7 +72,6 @@ const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string)
         <CardDescription className="flex items-center justify-between">
             <span>Real-time messages and notifications</span>
             <div className="flex items-center gap-2">
-                {/* FIX: Show WifiOff icon if not connected OR if in the process of connecting/disconnecting */}
                 {isConnected ? <Wifi className="h-4 w-4 text-green-600" /> : <WifiOff className="h-4 w-4 text-red-600" />}
                 <span className={`text-xs ${connectionStatusColor}`}>
                     {connectionStatusText}
@@ -118,7 +116,6 @@ const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string)
             <div>
                 <span>Total: {stats.total}</span> | <span className="font-bold text-blue-600">Unread: {stats.unread}</span>
             </div>
-            {/* FIX: Button label changes based on connecting and connected state */}
             <Button variant="outline" size="sm" onClick={toggleConnection} disabled={sseConnection.connecting}>
                 {sseConnection.connecting ? 'Connecting...' : (sseConnection.connected ? 'Disconnect' : 'Connect')}
             </Button>
