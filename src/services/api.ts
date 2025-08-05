@@ -125,6 +125,10 @@ export const dltService = {
   redriveDltMessage: async (id: string): Promise<void> => {
     await api.post(`/api/dlt/redrive/${id}`);
   },
+  // NEW METHOD to redrive all messages
+  redriveAllDltMessages: async (): Promise<void> => {
+    await api.post('/api/dlt/redrive-all');
+  },
   deleteDltMessage: async (id: string): Promise<void> => {
     await api.delete(`/api/dlt/delete/${id}`);
   },

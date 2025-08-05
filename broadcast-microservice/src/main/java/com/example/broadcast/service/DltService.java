@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -29,6 +30,7 @@ import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.List;
 
 @Service
 @Slf4j
@@ -58,12 +60,13 @@ public class DltService {
             @Header(KafkaHeaders.DLT_ORIGINAL_OFFSET) long originalOffset,
             @Header(KafkaHeaders.DLT_EXCEPTION_FQCN) String exceptionFqcn,
             @Header(KafkaHeaders.DLT_EXCEPTION_MESSAGE) String exceptionMessage,
-            @Header(KafkaHeaders.DLT_EXCEPTION_STACKTRACE) String exceptionStacktrace) {
+            @Header(KafkaHeaders.DLT_EXCEPTION_STACKTRACE) String exceptionStacktrace,
+            Acknowledgment acknowledgment) { 
         
         String payloadString = new String(payload, StandardCharsets.UTF_8);
         String id = UUID.randomUUID().toString();
         
-        String displayTitle = "Failed to process message"; // Default title
+        String displayTitle = "Failed to process message";
         try {
             MessageDeliveryEvent event = objectMapper.readValue(payloadString, MessageDeliveryEvent.class);
             if (event.getUserId() != null && event.getBroadcastId() != null) {
@@ -72,7 +75,7 @@ public class DltService {
             }
         } catch (JsonProcessingException e) {
             log.warn("Could not parse DLT message payload to extract details for title.");
-            displayTitle = exceptionMessage; // Fallback to the raw exception message
+            displayTitle = exceptionMessage;
         }
         
         log.error("DLT Received Message. Saving to database with ID: {}, From Topic: {}, Reason: {}", id, originalTopic, displayTitle);
@@ -81,11 +84,13 @@ public class DltService {
                 .originalTopic(originalTopic)
                 .originalPartition(originalPartition)
                 .originalOffset(originalOffset)
-                .exceptionMessage(displayTitle) // Use our new user-friendly title
+                .exceptionMessage(displayTitle)
                 .failedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .originalMessagePayload(payloadString)
                 .build();
         dltRepository.save(dltMessage);
+
+        acknowledgment.acknowledge();
     }
     
     public Collection<DltMessage> getDltMessages() {
@@ -109,21 +114,41 @@ public class DltService {
         log.info("Redriving message ID: {}. Sending to original topic: {}", id, dltMessage.getOriginalTopic());
         
         try {
-            // Step 1: Send the message back to its original topic for reprocessing.
             kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload).get();
             
-            // Step 2: If successful, purge the message from the DLQ topic by sending a tombstone record.
             String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
             kafkaTemplate.send(dltTopicName, dltMessage.getId(), null).get();
             
-            // Step 3: If both sends were successful, delete the message from the DLT database.
             dltRepository.deleteById(id);
             log.info("Successfully redriven and purged DLT message with ID: {}", id);
         } catch (InterruptedException | ExecutionException e) {
             log.error("Failed to redrive message with ID: {}. It will remain in the DLQ.", id, e);
-            // Re-throw as a runtime exception to ensure the transaction rolls back.
             throw new RuntimeException("Failed to send message to Kafka during redrive", e);
         }
+    }
+    
+    // NEW METHOD to redrive all messages
+    public void redriveAllMessages() {
+        List<DltMessage> messagesToRedrive = dltRepository.findAll();
+        if (messagesToRedrive.isEmpty()) {
+            log.info("No DLT messages to redrive.");
+            return;
+        }
+
+        log.info("Attempting to redrive all {} messages from the DLT.", messagesToRedrive.size());
+        int successCount = 0;
+        int failureCount = 0;
+
+        for (DltMessage dltMessage : messagesToRedrive) {
+            try {
+                redriveMessage(dltMessage.getId());
+                successCount++;
+            } catch (Exception e) {
+                failureCount++;
+                log.error("Failed to redrive DLT message with ID: {}. It will remain in the DLT. Reason: {}", dltMessage.getId(), e.getMessage());
+            }
+        }
+        log.info("Finished redriving all DLT messages. Success: {}, Failures: {}", successCount, failureCount);
     }
 
     private void prepareDatabaseForRedrive(MessageDeliveryEvent payload) {

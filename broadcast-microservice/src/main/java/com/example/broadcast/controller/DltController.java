@@ -37,6 +37,13 @@ public class DltController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         }
     }
+    
+    // NEW ENDPOINT to redrive all messages
+    @PostMapping("/redrive-all")
+    public ResponseEntity<Void> redriveAllMessages() {
+        dltService.redriveAllMessages();
+        return ResponseEntity.ok().build();
+    }
 
     @DeleteMapping("/delete/{id}")
     public ResponseEntity<Void> deleteMessage(@PathVariable String id) {

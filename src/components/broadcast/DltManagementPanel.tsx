@@ -51,6 +51,28 @@ const DltManagementPanel: React.FC = () => {
         }
     };
 
+    // NEW HANDLER for redriving all messages
+    const handleRedriveAll = async () => {
+        if (!window.confirm(`Are you sure you want to redrive all ${dltMessages.length} messages?`)) {
+            return;
+        }
+        try {
+            await dltService.redriveAllDltMessages();
+            toast({
+                title: "Success",
+                description: "All DLT messages have been sent for reprocessing.",
+            });
+            fetchDltMessages();
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred.';
+            toast({
+                title: "Error",
+                description: `Failed to redrive all messages: ${errorMessage}`,
+                variant: "destructive",
+            });
+        }
+    };
+
     const handlePurge = async (id: string) => {
         if (!window.confirm("Are you sure you want to permanently purge this message from both the database and Kafka? This action cannot be undone.")) {
             return;
@@ -107,18 +129,21 @@ const DltManagementPanel: React.FC = () => {
             <CardHeader>
                 <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2"><ServerCrash className="h-5 w-5" />Dead Letter Topic Management</CardTitle>
-                    {/* START OF CHANGE: Add Purge All button */}
                     <div className="flex items-center gap-2">
                         <Button variant="outline" size="sm" onClick={fetchDltMessages} disabled={loading}>
                             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                             Refresh
+                        </Button>
+                        {/* NEW "Redrive All" button */}
+                        <Button variant="outline" className="bg-blue-400 text-white" size="sm" onClick={handleRedriveAll} disabled={loading || dltMessages.length === 0}>
+                            <ArchiveRestore className="h-4 w-4 mr-2" />
+                            Redrive All
                         </Button>
                         <Button variant="outline" className="bg-red-400 text-white" size="sm" onClick={handlePurgeAll} disabled={loading || dltMessages.length === 0}>
                             <Flame className="h-4 w-4 mr-2" />
                             Purge All
                         </Button>
                     </div>
-                    {/* END OF CHANGE */}
                 </div>
                 <CardDescription>View, reprocess, or delete messages that failed processing.</CardDescription>
             </CardHeader>
