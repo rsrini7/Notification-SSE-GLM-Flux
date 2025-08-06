@@ -9,7 +9,6 @@ import com.example.broadcast.repository.DltRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.util.Constants;
 import com.example.broadcast.util.Constants.DeliveryStatus;
-import com.example.broadcast.util.Constants.ReadStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +27,6 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 

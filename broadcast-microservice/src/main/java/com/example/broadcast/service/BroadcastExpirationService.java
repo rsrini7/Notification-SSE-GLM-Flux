@@ -12,40 +12,36 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 
-/**
- * Service to handle the lifecycle of broadcasts, specifically expiration.
- * This service runs a scheduled job to check for and process expired messages.
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class BroadcastExpirationService {
 
     private final BroadcastRepository broadcastRepository;
-    private final BroadcastService broadcastService;
+    private final BroadcastLifecycleService broadcastLifecycleService; // Changed dependency
 
     /**
      * Periodically checks for active broadcasts that have passed their expiration time.
      * Runs every minute.
      */
-    @Scheduled(fixedRate = 60000) // Run every minute
+    @Scheduled(fixedRate = 60000)
     @Transactional
     public void processExpiredBroadcasts() {
         log.info("Checking for expired broadcasts to process...");
-        List<BroadcastMessage> broadcastsToExpire = broadcastRepository.findExpiredBroadcasts(ZonedDateTime.now(ZoneOffset.UTC));
+        List<BroadcastMessage> broadcastsToExpire = broadcastRepository.findExpiredBroadcasts(ZonedDateTime.now(ZoneOffset.UTC)); 
 
         if (broadcastsToExpire.isEmpty()) {
             log.info("No expired broadcasts to process at this time.");
-            return;
+            return; 
         }
 
         log.info("Found {} broadcasts to expire.", broadcastsToExpire.size());
-        for (BroadcastMessage broadcast : broadcastsToExpire) {
+        for (BroadcastMessage broadcast : broadcastsToExpire) { 
             try {
-                // Delegate the expiration logic to the main BroadcastService
-                broadcastService.expireBroadcast(broadcast.getId());
+                // Delegate the expiration logic to the new lifecycle service
+                broadcastLifecycleService.expireBroadcast(broadcast.getId());
             } catch (Exception e) {
-                log.error("Error expiring broadcast with ID: {}", broadcast.getId(), e);
+                log.error("Error expiring broadcast with ID: {}", broadcast.getId(), e); 
             }
         }
     }
