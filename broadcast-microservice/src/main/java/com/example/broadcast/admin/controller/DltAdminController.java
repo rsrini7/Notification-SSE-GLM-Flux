@@ -13,7 +13,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.Collection;
 
 @RestController
-@RequestMapping("/api/admin/dlt") // MODIFIED: Route is now namespaced under /admin
+@RequestMapping("/api/admin/dlt")
 @RequiredArgsConstructor
 @Slf4j
 public class DltAdminController {

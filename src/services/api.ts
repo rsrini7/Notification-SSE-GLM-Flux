@@ -77,31 +77,25 @@ export interface BroadcastRequest {
 
 export const broadcastService = {
   getBroadcasts: async (filter = 'all'): Promise<BroadcastMessage[]> => {
-    // MODIFIED: Added /admin namespace
     const response = await api.get(`/api/admin/broadcasts?filter=${filter}`);
     return response.data;
   },
   createBroadcast: async (broadcast: BroadcastRequest): Promise<BroadcastMessage> => {
-    // MODIFIED: Added /admin namespace
     const response = await api.post('/api/admin/broadcasts', broadcast);
     return response.data;
   },
   getBroadcast: async (id: string): Promise<BroadcastMessage> => {
-    // MODIFIED: Added /admin namespace
     const response = await api.get(`/api/admin/broadcasts/${id}`);
     return response.data;
   },
   cancelBroadcast: async (id: string): Promise<void> => {
-    // MODIFIED: Added /admin namespace
     await api.delete(`/api/admin/broadcasts/${id}`);
   },
   getBroadcastStats: async (id: string): Promise<BroadcastStats> => {
-    // MODIFIED: Added /admin namespace
     const response = await api.get(`/api/admin/broadcasts/${id}/stats`);
     return response.data;
   },
   getBroadcastDeliveries: async (id: string): Promise<any[]> => {
-    // MODIFIED: Added /admin namespace
     const response = await api.get(`/api/admin/broadcasts/${id}/deliveries`);
     return response.data;
   },
@@ -109,16 +103,13 @@ export const broadcastService = {
 
 export const userService = {
   getUserMessages: async (userId: string): Promise<UserBroadcastMessage[]> => {
-    // MODIFIED: Route is now more specific
     const response = await api.get(`/api/user/messages?userId=${userId}`);
     return response.data;
   },
   markMessageAsRead: async (userId: string, messageId: string): Promise<void> => {
-    // This endpoint is on the SseController, which is user-facing and remains unchanged
     await api.post(`/api/sse/read?userId=${userId}&messageId=${messageId}`);
   },
   getAllUsers: async (): Promise<string[]> => {
-    // MODIFIED: This endpoint now lives under the admin controller
     const response = await api.get('/api/admin/broadcasts/users/all-ids');
     return response.data;
   },
@@ -126,38 +117,33 @@ export const userService = {
 
 export const dltService = {
   getDltMessages: async (): Promise<DltMessage[]> => {
-    // MODIFIED: Added /admin namespace
     const response = await api.get('/api/admin/dlt/messages');
     return response.data;
   },
   redriveDltMessage: async (id: string): Promise<void> => {
-    // MODIFIED: Added /admin namespace
     await api.post(`/api/admin/dlt/redrive/${id}`);
   },
   redriveAllDltMessages: async (): Promise<void> => {
-    // MODIFIED: Added /admin namespace
     await api.post('/api/admin/dlt/redrive-all');
   },
+  // REMOVED deleteDltMessage as it is superseded by purge
   purgeDltMessage: async (id: string): Promise<void> => {
-    // MODIFIED: Added /admin namespace
     await api.delete(`/api/admin/dlt/purge/${id}`);
   },
   purgeAllDltMessages: async (): Promise<void> => {
-    // MODIFIED: Added /admin namespace
     await api.delete('/api/admin/dlt/purge-all');
   },
 };
 
 export const testingService = {
   getKafkaFailureStatus: async (): Promise<{ enabled: boolean }> => {
-    // MODIFIED: Added /admin namespace
     const response = await api.get('/api/admin/testing/kafka-consumer-failure');
     return response.data;
   },
   setKafkaFailureStatus: async (enabled: boolean): Promise<void> => {
-    // MODIFIED: Added /admin namespace
     await api.post('/api/admin/testing/kafka-consumer-failure', { enabled });
   },  
 };
+
 
 export default api;

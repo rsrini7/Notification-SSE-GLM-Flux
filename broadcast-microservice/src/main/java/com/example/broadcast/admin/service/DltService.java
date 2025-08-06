@@ -1,19 +1,17 @@
 package com.example.broadcast.admin.service;
 
 import com.example.broadcast.admin.dto.DltMessage;
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
+import com.example.broadcast.shared.dto.MessageRedriveRequestedEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.DltRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
+import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
-import com.example.broadcast.shared.service.MessageStatusService;
-import com.example.broadcast.shared.config.AppProperties;
-import com.example.broadcast.shared.service.OutboxEventPublisher;
-import com.example.broadcast.shared.dto.MessageRedriveRequestedEvent;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -45,8 +43,8 @@ public class DltService {
     private final DltRepository dltRepository;
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
-     private final AppProperties appProperties;
-     private final OutboxEventPublisher outboxEventPublisher;
+    private final AppProperties appProperties;
+    private final OutboxEventPublisher outboxEventPublisher;
 
     @KafkaListener(
             topics = {
@@ -64,53 +62,57 @@ public class DltService {
             @Header(KafkaHeaders.DLT_ORIGINAL_TOPIC) String originalTopic,
             @Header(KafkaHeaders.DLT_ORIGINAL_PARTITION) int originalPartition,
             @Header(KafkaHeaders.DLT_ORIGINAL_OFFSET) long originalOffset,
-            @Header(KafkaHeaders.DLT_EXCEPTION_FQCN) String exceptionFqcn,
             @Header(KafkaHeaders.DLT_EXCEPTION_MESSAGE) String exceptionMessage,
             @Header(KafkaHeaders.DLT_EXCEPTION_STACKTRACE) String exceptionStacktrace,
             Acknowledgment acknowledgment) {
         
         String payloadString = new String(payload, StandardCharsets.UTF_8);
-        MessageDeliveryEvent failedEvent = null;
-        String displayTitle = "Failed to process message";
+        MessageDeliveryEvent failedEvent;
+        String displayTitle;
 
+        // --- CORRECTED LOGIC: Restore parsing and failure handling ---
         try {
             failedEvent = objectMapper.readValue(payloadString, MessageDeliveryEvent.class);
             if (failedEvent.getUserId() != null && failedEvent.getBroadcastId() != null) {
-                // Step 1: Update original message status to FAILED
+                // Step 1: Update the original message status to FAILED
                 handleProcessingFailure(failedEvent);
+                // Step 2: Create a user-friendly title for the UI
                 displayTitle = String.format("Failed event '%s' for user %s (Broadcast: %d)",
                     failedEvent.getEventType(), failedEvent.getUserId(), failedEvent.getBroadcastId());
+            } else {
+                displayTitle = "Failed to process message with missing user or broadcast ID.";
             }
         } catch (JsonProcessingException e) {
-            log.warn("Could not parse DLT message payload to extract details.", e);
-            displayTitle = exceptionMessage;
+            log.warn("Could not parse DLT message payload into MessageDeliveryEvent. Storing with raw exception.", e);
+            displayTitle = exceptionMessage; // Fallback to the raw exception message
         }
+        // Step 3: Save the record for the DLT UI
+        log.error("DLT Received Message. Key: {}, From Topic: {}, Reason: {}. Saving to database.", key, originalTopic, displayTitle);
         
-        // Step 2: Save the record for the DLT UI
-        log.error("DLT Received Message. Saving to database. Original Key: {}, From Topic: {}, Reason: {}", key, originalTopic, displayTitle);
         DltMessage dltMessage = DltMessage.builder()
                 .id(UUID.randomUUID().toString())
                 .originalKey(key)
                 .originalTopic(originalTopic)
                 .originalPartition(originalPartition)
                 .originalOffset(originalOffset)
-                .exceptionMessage(displayTitle)
+                .exceptionMessage(displayTitle) // Use the friendly or fallback title
+                .exceptionStackTrace(exceptionStacktrace)
                 .failedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .originalMessagePayload(payloadString)
                 .build();
+        
         dltRepository.save(dltMessage);
 
-        // Step 3: Acknowledge the DLT message to commit the offset.
-        // This only happens after the transaction for steps 1 & 2 is successful.
+        // Step 4: Acknowledge the DLT message to commit the offset.
+        // This only happens after the transaction for steps 1,2 & 3 is successful.
         acknowledgment.acknowledge();
     }
     
+    /**
+     * Finds the corresponding UserBroadcastMessage and updates its status to FAILED.
+     * This is a critical step to ensure the system state reflects the processing failure.
+     */
     private void handleProcessingFailure(MessageDeliveryEvent event) {
-        if (event == null || event.getUserId() == null || event.getBroadcastId() == null) {
-            log.error("Cannot handle processing failure: event or its key fields are null.");
-            return;
-        }
-
         userBroadcastRepository.findByUserIdAndBroadcastId(event.getUserId(), event.getBroadcastId())
             .ifPresent(userMessage -> {
                 if (!DeliveryStatus.FAILED.name().equals(userMessage.getDeliveryStatus())) {
@@ -126,20 +128,21 @@ public class DltService {
         return dltRepository.findAll();
     }
 
-     @Transactional
+    @Transactional
     public void redriveMessage(String id) throws JsonProcessingException {
         DltMessage dltMessage = dltRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
-        
-        prepareForRedriveByPublishingEvent(dltMessage);
 
-        log.info("Redriving message ID: {}. Sending to original topic: {}", id, dltMessage.getOriginalTopic());
+        publishRedriveRequestedEvent(dltMessage);
+
+        log.info("Redriving message ID: {}. Sending original message back to topic: {}", id, dltMessage.getOriginalTopic());
         try {
             MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
             kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload).get();
             
             String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
             kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null).get();
+            
             dltRepository.deleteById(id);
             log.info("Successfully redriven and purged DLT message with ID: {}", id);
         } catch (InterruptedException | ExecutionException e) {
@@ -148,22 +151,19 @@ public class DltService {
         }
     }
     
-    private void prepareForRedriveByPublishingEvent(DltMessage dltMessage) throws JsonProcessingException {
+    private void publishRedriveRequestedEvent(DltMessage dltMessage) throws JsonProcessingException {
         MessageDeliveryEvent payload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
 
         BroadcastMessage parentBroadcast = broadcastRepository.findById(payload.getBroadcastId())
-            .orElseThrow(() -> new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") has been deleted."));
-        
+            .orElseThrow(() -> new IllegalStateException("Cannot redrive: original broadcast (ID: " + payload.getBroadcastId() + ") has been deleted."));
+            
         if (!Constants.BroadcastStatus.ACTIVE.name().equals(parentBroadcast.getStatus())) {
             throw new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") is " + parentBroadcast.getStatus() + ".");
-        }
-
+        }        
         UserBroadcastMessage existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(
             payload.getUserId(), payload.getBroadcastId()
-        ).orElseThrow(() -> new IllegalStateException("Cannot find original UserBroadcastMessage to redrive."));
+        ).orElseThrow(() -> new IllegalStateException("Cannot redrive: original UserBroadcastMessage not found."));
 
-        // --- CORRECTED LOGIC ---
-        // Create the new event type
         MessageRedriveRequestedEvent event = MessageRedriveRequestedEvent.builder()
                 .userBroadcastMessageId(existingMessage.getId())
                 .requestedAt(ZonedDateTime.now(ZoneOffset.UTC))
@@ -173,9 +173,7 @@ public class DltService {
         String eventType = "MessageRedriveRequested";
         String aggregateId = String.valueOf(existingMessage.getId());
 
-        // Call the new generic publish method with the correct parameters
         outboxEventPublisher.publish(event, aggregateId, eventType, commandsTopic);
-        
         log.info("Published MessageRedriveRequestedEvent for UserBroadcastMessage ID: {} to outbox for topic {}", existingMessage.getId(), commandsTopic);
     }
     
@@ -188,14 +186,13 @@ public class DltService {
         log.info("Attempting to redrive all {} messages from the DLT.", messagesToRedrive.size());
         int successCount = 0;
         int failureCount = 0;
-
         for (DltMessage dltMessage : messagesToRedrive) {
             try {
                 redriveMessage(dltMessage.getId());
                 successCount++;
             } catch (Exception e) {
                 failureCount++;
-                log.error("Failed to redrive DLT message with ID: {}. It will remain in the DLT. Reason: {}", dltMessage.getId(), e.getMessage());
+                log.error("Failed to redrive DLT message with ID: {}. Reason: {}", dltMessage.getId(), e.getMessage());
             }
         }
         log.info("Finished redriving all DLT messages. Success: {}, Failures: {}", successCount, failureCount);
@@ -205,10 +202,8 @@ public class DltService {
     public void purgeMessage(String id) {
         DltMessage dltMessage = dltRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
-        
         String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
         kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null);
-        
         dltRepository.deleteById(id);
         log.info("Purged DLT message with ID: {} and sent tombstone to topic {} with key {}.", id, dltTopicName, dltMessage.getOriginalKey());
     }
@@ -220,7 +215,6 @@ public class DltService {
             log.info("No DLT messages to purge.");
             return;
         }
-
         log.info("Purging all {} messages from the DLT.", messagesToPurge.size());
         for (DltMessage dltMessage : messagesToPurge) {
             String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
