@@ -2,8 +2,8 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.exception.MessageProcessingException;
+import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants.EventType;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -12,8 +12,6 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
-import com.example.broadcast.shared.service.cache.CacheService;
-
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,7 +33,7 @@ public class KafkaConsumerService {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void processAllUsersBroadcastEvent(
-            @Payload MessageDeliveryEvent event,
+            @Payload MessageDeliveryEvent event, // MODIFIED: Directly consume the deserialized object
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
@@ -50,7 +48,7 @@ public class KafkaConsumerService {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void processSelectedUsersBroadcastEvent(
-            @Payload MessageDeliveryEvent event,
+            @Payload MessageDeliveryEvent event, // MODIFIED: Directly consume the deserialized object
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
@@ -60,7 +58,7 @@ public class KafkaConsumerService {
     }
 
     private void processBroadcastEvent(
-           MessageDeliveryEvent event,
+            MessageDeliveryEvent event,
             String topic,
             String partition,
             long offset,
@@ -70,14 +68,12 @@ public class KafkaConsumerService {
             log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                     event.getEventId(), topic, partition, offset);
 
-            // --- CORRECTED LOGIC: Check for failure simulation FIRST ---
             if (event.isTransientFailure()) {
                 int attempts = TRANSIENT_FAILURE_ATTEMPTS.getOrDefault(event.getEventId(), 0);
                 if (attempts < MAX_AUTOMATIC_ATTEMPTS) {
                     TRANSIENT_FAILURE_ATTEMPTS.put(event.getEventId(), attempts + 1);
                     log.warn("Transient failure flag detected for eventId: {}. Simulating failure BEFORE processing, attempt {}/{}", 
                              event.getEventId(), attempts + 1, MAX_AUTOMATIC_ATTEMPTS);
-                    // This exception will trigger the retry/DLT flow correctly
                     throw new RuntimeException("Simulating a transient, recoverable error for DLT redrive testing.");
                 } else {
                     log.info("Successfully redriving eventId with transient failure flag: {}. Attempts ({}) exceeded max.", 
@@ -86,7 +82,6 @@ public class KafkaConsumerService {
                 }
             }
 
-            // This logic now only runs if the failure simulation is not triggered
             handleEvent(event);
             acknowledgment.acknowledge();
 
@@ -125,7 +120,6 @@ public class KafkaConsumerService {
 
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
         log.info("Handling broadcast created event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
-        
         boolean isOnline = cacheService.isUserOnline(event.getUserId()) || sseService.isUserConnected(event.getUserId());
         if (isOnline) {
             sseService.handleMessageEvent(event);

@@ -26,8 +26,7 @@
         <spring-cloud.version>2025.0.0</spring-cloud.version>
         <gatling.version>3.11.3</gatling.version>
         <gatling-maven-plugin.version>4.9.0</gatling-maven-plugin.version>
-        <scala-maven-plugin.version>4.8.1</scala-maven-plugin.version>
-        </properties>
+    </properties>
 
     <dependencyManagement>
         <dependencies>
@@ -181,18 +180,6 @@
                         <arg>-parameters</arg>
                     </compilerArgs>
                 </configuration>
-            </plugin>
-            <plugin>
-                <groupId>net.alchim31.maven</groupId>
-                <artifactId>scala-maven-plugin</artifactId>
-                <version>${scala-maven-plugin.version}</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>testCompile</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <plugin>
                 <groupId>io.gatling</groupId>
