@@ -1,12 +1,13 @@
 package com.example.broadcast.shared.config;
 
+import com.example.broadcast.shared.util.Constants;
+import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.serialization.ByteArrayDeserializer;
-import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.apache.kafka.common.errors.RecordDeserializationException;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -21,11 +22,9 @@ import org.springframework.kafka.core.*;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.util.backoff.FixedBackOff;
-import com.example.broadcast.shared.util.Constants;
-
-import lombok.RequiredArgsConstructor;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -38,7 +37,6 @@ public class KafkaConfig {
 
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
-    
     private final AppProperties appProperties;
 
     @Bean
@@ -56,21 +54,32 @@ public class KafkaConfig {
     }
 
     @Bean
-    public ConsumerFactory<String, byte[]> consumerFactory() {
+    public ConsumerFactory<String, Object> consumerFactory() {
         Map<String, Object> configProps = new HashMap<>();
         configProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        configProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        configProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
-        configProps.put(ConsumerConfig.GROUP_ID_CONFIG, "broadcast-service-group");
         configProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         configProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+
+        // --- CORRECTED CONFIGURATION ---
+        // ADD THIS LINE BACK - This is the mandatory configuration for the message key.
+        configProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+
+        // Configure the value deserializer
+        configProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+        configProps.put(JsonDeserializer.USE_TYPE_INFO_HEADERS, false);
+        configProps.put(JsonDeserializer.VALUE_DEFAULT_TYPE, "com.example.broadcast.shared.dto.MessageDeliveryEvent");
+        configProps.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
+
         return new DefaultKafkaConsumerFactory<>(configProps);
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, byte[]> kafkaListenerContainerFactory(DefaultErrorHandler errorHandler) {
-        ConcurrentKafkaListenerContainerFactory<String, byte[]> factory = new ConcurrentKafkaListenerContainerFactory<>();
-        factory.setConsumerFactory(consumerFactory());
+    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory(
+        ConsumerFactory<String, Object> consumerFactory,
+        DefaultErrorHandler errorHandler) {
+        
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory);
         factory.setConcurrency(3);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         factory.setCommonErrorHandler(errorHandler);
@@ -79,38 +88,37 @@ public class KafkaConfig {
 
     @Bean
     public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
-        // After 2 retries (3 total attempts), the message will be sent to the DLT.
         FixedBackOff backOff = new FixedBackOff(1000L, 2L);
-        // Use the new ConciseLoggingErrorHandler to reduce log noise
         DefaultErrorHandler errorHandler = new ConciseLoggingErrorHandler(deadLetterPublishingRecoverer, backOff);
+        
+        errorHandler.addNotRetryableExceptions(RecordDeserializationException.class);
+        
         errorHandler.setLogLevel(KafkaException.Level.WARN);
-        errorHandler.setCommitRecovered(true); // Commit the offset of the failed message
+        errorHandler.setCommitRecovered(true);
         return errorHandler;
     }
 
     @Bean
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
-            @Qualifier("dltKafkaTemplate") KafkaTemplate<String, byte[]> dltKafkaTemplate) {
+            @Qualifier("dltKafkaTemplate") KafkaTemplate<String, Object> dltKafkaTemplate) {
         
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
-                new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
-        
-        // This is a standard recoverer. Its only job is to publish the failed record to the DLT.
+                new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, cr.partition());
         return new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
     }
-
+    
     @Bean
-    public KafkaTemplate<String, byte[]> dltKafkaTemplate(
-            @Qualifier("dltProducerFactory") ProducerFactory<String, byte[]> dltProducerFactory) {
+    public KafkaTemplate<String, Object> dltKafkaTemplate(
+            @Qualifier("dltProducerFactory") ProducerFactory<String, Object> dltProducerFactory) {
         return new KafkaTemplate<>(dltProducerFactory);
     }
 
     @Bean
-    public ProducerFactory<String, byte[]> dltProducerFactory() {
+    public ProducerFactory<String, Object> dltProducerFactory() {
         Map<String, Object> configProps = new HashMap<>();
         configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class);
+        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
         return new DefaultKafkaProducerFactory<>(configProps);
     }
     

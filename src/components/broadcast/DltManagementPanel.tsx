@@ -5,7 +5,7 @@ import { Badge } from '../ui/badge';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
 import { useToast } from '../../hooks/use-toast';
-import { dltService, type DltMessage } from '../../services/api';
+import { dltService, type DltMessage, type RedriveAllResult } from '../../services/api';
 import { AlertCircle, ArchiveRestore, RefreshCw, ServerCrash, Flame } from 'lucide-react';
 
 const DltManagementPanel: React.FC = () => {
@@ -51,20 +51,30 @@ const DltManagementPanel: React.FC = () => {
         }
     };
 
-    // NEW HANDLER for redriving all messages
     const handleRedriveAll = async () => {
         if (!window.confirm(`Are you sure you want to redrive all ${dltMessages.length} messages?`)) {
             return;
         }
         try {
-            await dltService.redriveAllDltMessages();
-            toast({
-                title: "Success",
-                description: "All DLT messages have been sent for reprocessing.",
-            });
+            const result: RedriveAllResult = await dltService.redriveAllDltMessages();
+            
+            if (result.failureCount === 0) {
+                toast({
+                    title: "Success",
+                    description: `All ${result.successCount} DLT messages have been sent for reprocessing.`,
+                });
+            } else {
+                toast({
+                    title: "Partial Success",
+                    description: `Redrive complete: ${result.successCount} succeeded, ${result.failureCount} failed. Failed messages remain in the DLT.`,
+                    variant: "destructive",
+                });
+            }
+
             fetchDltMessages();
         } catch (error: any) {
-            const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred.';
+            const errorMessage = error.response?.data?.message ||
+                error.message || 'An unknown error occurred.';
             toast({
                 title: "Error",
                 description: `Failed to redrive all messages: ${errorMessage}`,

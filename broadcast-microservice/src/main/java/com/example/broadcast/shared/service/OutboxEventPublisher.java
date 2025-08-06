@@ -1,6 +1,6 @@
+// Location: src/main/java/com/example/broadcast/shared/service/OutboxEventPublisher.java
 package com.example.broadcast.shared.service;
 
-import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.repository.OutboxRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 /**
- * A dedicated service responsible for publishing events using the
+ * A dedicated, generic service responsible for publishing events using the
  * transactional outbox pattern. This centralizes serialization and persistence
  * logic for all outgoing Kafka events.
  */
@@ -27,28 +27,29 @@ public class OutboxEventPublisher {
     private final ObjectMapper objectMapper;
 
     /**
-     * Serializes a payload and saves it as an OutboxEvent within the current transaction.
-     * This method is marked with Propagation.MANDATORY to ensure it's always called
-     * from within an existing transaction, which is the core requirement of the outbox pattern.
+     * Serializes any given payload object and saves it as an OutboxEvent.
+     * This method must be called from within an existing transaction.
      *
-     * @param payload   The event data to publish.
-     * @param topicName The Kafka topic to which the event will be sent.
+     * @param payload       The event data object to publish.
+     * @param aggregateId   A key identifier for the event, often used as the Kafka message key.
+     * @param eventType     A string identifying the type of event.
+     * @param topicName     The Kafka topic to which the event will be sent.
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public void publish(MessageDeliveryEvent payload, String topicName) {
+    public void publish(Object payload, String aggregateId, String eventType, String topicName) {
         try {
             String payloadJson = objectMapper.writeValueAsString(payload);
             OutboxEvent outboxEvent = OutboxEvent.builder()
                     .id(UUID.randomUUID())
-                    .aggregateType("broadcast")
-                    .aggregateId(payload.getUserId())
-                    .eventType(payload.getEventType())
+                    .aggregateType(payload.getClass().getSimpleName()) // Use class name for aggregate type
+                    .aggregateId(aggregateId)
+                    .eventType(eventType)
                     .topic(topicName)
                     .payload(payloadJson)
                     .build();
             outboxRepository.save(outboxEvent);
         } catch (JsonProcessingException e) {
-            log.error("Critical: Failed to serialize event payload for outbox. Event for user {} will not be published.", payload.getUserId(), e);
+            log.error("Critical: Failed to serialize event payload for outbox. Event type {} for aggregate {} will not be published.", eventType, aggregateId, e);
             throw new RuntimeException("Failed to serialize event payload for outbox.", e);
         }
     }

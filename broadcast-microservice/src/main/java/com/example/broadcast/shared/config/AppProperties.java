@@ -1,3 +1,5 @@
+// Location: src/main/java/com/example/broadcast/shared/config/AppProperties.java
+
 package com.example.broadcast.shared.config;
 
 import jakarta.validation.constraints.NotBlank;
@@ -13,7 +15,7 @@ import java.time.Duration;
 @Configuration
 @ConfigurationProperties(prefix = "broadcast")
 @Data
-@Validated 
+@Validated
 public class AppProperties {
 
     private final Sse sse = new Sse();
@@ -25,15 +27,15 @@ public class AppProperties {
     @Data
     public static class Pod {
         @NotBlank
-        private final String id="pod-local";
+        private String id = "pod-local";
     }
 
     @Data
     public static class Sse {
         @Positive
-        private final long timeout = 300000L; // FIXED: Corrected default value
+        private long timeout = 300000L;
         @Positive
-        private final long heartbeatInterval = 30000L;
+        private long heartbeatInterval = 30000L;
     }
 
     @Data
@@ -43,86 +45,85 @@ public class AppProperties {
         private final PendingEvents pendingEvents = new PendingEvents();
         private final UserSession userSession = new UserSession();
         private final BroadcastStats broadcastStats = new BroadcastStats();
-
         @Data
         public static class UserConnections {
             @Positive
-            private final int maximumSize = 50000;
+            private int maximumSize = 50000;
             @NotNull
-            private final Duration expireAfterWrite = Duration.ofHours(1);
+            private Duration expireAfterWrite = Duration.ofHours(1);
         }
 
         @Data
         public static class UserMessages {
             @Positive
-            private final int maximumSize = 100000;
+            private int maximumSize = 100000;
             @NotNull
-            private final Duration expireAfterWrite = Duration.ofHours(24);
+            private Duration expireAfterWrite = Duration.ofHours(24);
         }
 
         @Data
         public static class PendingEvents {
             @Positive
-            private final int maximumSize = 50000;
+            private int maximumSize = 50000;
             @NotNull
-            private final Duration expireAfterWrite = Duration.ofHours(6);
+            private Duration expireAfterWrite = Duration.ofHours(6);
         }
 
         @Data
         public static class UserSession {
             @Positive
-            private final int maximumSize = 10000;
+            private int maximumSize = 10000;
             @NotNull
-            private final Duration expireAfterAccess = Duration.ofMinutes(30);
+            private Duration expireAfterAccess = Duration.ofMinutes(30);
         }
 
         @Data
         public static class BroadcastStats {
             @Positive
-            private final int maximumSize = 1000;
+            private int maximumSize = 1000;
             @NotNull
-            private final Duration expireAfterWrite = Duration.ofMinutes(5);
+            private Duration expireAfterWrite = Duration.ofMinutes(5);
         }
     }
 
     @Data
     public static class Db {
         @Positive
-        private final int batchSize = 1000;
+        private int batchSize = 1000;
         @Positive
-        private final int connectionPoolSize = 50;
+        private int connectionPoolSize = 50;
     }
 
     @Data
     public static class Kafka {
-        private  Topic topic = new Topic();
-        private  Consumer consumer = new Consumer(); 
-        private  Retry retry = new Retry();       
+        private final Topic topic = new Topic();
+        private final Consumer consumer = new Consumer();
+        private final Retry retry = new Retry();
 
         @Data
         public static class Topic {
             @NotBlank
-            private final String nameAll = "broadcast-events-all";
+            private String nameAll = "broadcast-events-all";
             @NotBlank
-            private final String nameSelected = "broadcast-events-selected";
+            private String nameSelected = "broadcast-events-selected";
             @Positive
-            private final int partitions = 10;
+            private int partitions = 10;
             @Positive
-            private final short replicationFactor = 1;
+            private short replicationFactor = 1;
         }
 
         @Data
         public static class Consumer {
             @NotBlank
-            private final String dltGroupId = "broadcast-dlt-group";
+            private String dltGroupId = "broadcast-dlt-group";
         }
 
         @Data
         public static class Retry {
             @Positive
-            private final int maxAttempts = 3;
+            private int maxAttempts = 3;
             @Positive
-            private final long backoffDelay = 1000L;
+            private long backoffDelay = 1000L;
         }
     }
 }

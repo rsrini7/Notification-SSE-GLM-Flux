@@ -3,13 +3,10 @@ package com.example.broadcast.shared.config;
 import com.example.broadcast.shared.dto.cache.*;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-
 import lombok.AllArgsConstructor;
-
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
 import java.util.List;
 
 @Configuration
@@ -63,5 +60,4 @@ public class CaffeineConfig {
                 .recordStats()
                 .build();
     }
-
 }

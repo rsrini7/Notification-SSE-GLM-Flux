@@ -1,4 +1,5 @@
 import axios from 'axios';
+
 const API_BASE_URL = ''; 
 
 const api = axios.create({
@@ -73,36 +74,45 @@ export interface BroadcastRequest {
   isImmediate: boolean;
 }
 
+export interface RedriveFailureDetail {
+  dltMessageId: string;
+  reason: string;
+}
+
+export interface RedriveAllResult {
+  totalMessages: number;
+  successCount: number;
+  failureCount: number;
+  failures: RedriveFailureDetail[];
+}
 
 export const broadcastService = {
-  // ... (keep existing broadcastService methods)
   getBroadcasts: async (filter = 'all'): Promise<BroadcastMessage[]> => {
-    const response = await api.get(`/api/broadcasts?filter=${filter}`);
+    const response = await api.get(`/api/admin/broadcasts?filter=${filter}`);
     return response.data;
   },
   createBroadcast: async (broadcast: BroadcastRequest): Promise<BroadcastMessage> => {
-    const response = await api.post('/api/broadcasts', broadcast);
+    const response = await api.post('/api/admin/broadcasts', broadcast);
     return response.data;
   },
   getBroadcast: async (id: string): Promise<BroadcastMessage> => {
-    const response = await api.get(`/api/broadcasts/${id}`);
+    const response = await api.get(`/api/admin/broadcasts/${id}`);
     return response.data;
   },
   cancelBroadcast: async (id: string): Promise<void> => {
-    await api.delete(`/api/broadcasts/${id}`);
+    await api.delete(`/api/admin/broadcasts/${id}`);
   },
   getBroadcastStats: async (id: string): Promise<BroadcastStats> => {
-    const response = await api.get(`/api/broadcasts/${id}/stats`);
+    const response = await api.get(`/api/admin/broadcasts/${id}/stats`);
     return response.data;
   },
   getBroadcastDeliveries: async (id: string): Promise<any[]> => {
-    const response = await api.get(`/api/broadcasts/${id}/deliveries`);
+    const response = await api.get(`/api/admin/broadcasts/${id}/deliveries`);
     return response.data;
   },
 };
 
 export const userService = {
-  // ... (keep existing userService methods)
   getUserMessages: async (userId: string): Promise<UserBroadcastMessage[]> => {
     const response = await api.get(`/api/user/messages?userId=${userId}`);
     return response.data;
@@ -111,42 +121,38 @@ export const userService = {
     await api.post(`/api/sse/read?userId=${userId}&messageId=${messageId}`);
   },
   getAllUsers: async (): Promise<string[]> => {
-    const response = await api.get('/api/user/all');
+    const response = await api.get('/api/admin/broadcasts/users/all-ids');
     return response.data;
   },
 };
 
 export const dltService = {
-  // ... (keep existing dltService methods)
   getDltMessages: async (): Promise<DltMessage[]> => {
-    const response = await api.get('/api/dlt/messages');
+    const response = await api.get('/api/admin/dlt/messages');
     return response.data;
   },
   redriveDltMessage: async (id: string): Promise<void> => {
-    await api.post(`/api/dlt/redrive/${id}`);
+    await api.post(`/api/admin/dlt/redrive/${id}`);
   },
-  // NEW METHOD to redrive all messages
-  redriveAllDltMessages: async (): Promise<void> => {
-    await api.post('/api/dlt/redrive-all');
-  },
-  deleteDltMessage: async (id: string): Promise<void> => {
-    await api.delete(`/api/dlt/delete/${id}`);
+ redriveAllDltMessages: async (): Promise<RedriveAllResult> => {
+    const response = await api.post('/api/admin/dlt/redrive-all');
+    return response.data;
   },
   purgeDltMessage: async (id: string): Promise<void> => {
-    await api.delete(`/api/dlt/purge/${id}`);
+    await api.delete(`/api/admin/dlt/purge/${id}`);
   },
   purgeAllDltMessages: async (): Promise<void> => {
-    await api.delete('/api/dlt/purge-all');
+    await api.delete('/api/admin/dlt/purge-all');
   },
 };
 
 export const testingService = {
   getKafkaFailureStatus: async (): Promise<{ enabled: boolean }> => {
-    const response = await api.get('/api/testing/kafka-consumer-failure');
+    const response = await api.get('/api/admin/testing/kafka-consumer-failure');
     return response.data;
   },
   setKafkaFailureStatus: async (enabled: boolean): Promise<void> => {
-    await api.post('/api/testing/kafka-consumer-failure', { enabled });
+    await api.post('/api/admin/testing/kafka-consumer-failure', { enabled });
   },  
 };
 
