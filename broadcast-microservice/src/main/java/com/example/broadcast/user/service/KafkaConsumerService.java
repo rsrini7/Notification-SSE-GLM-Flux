@@ -71,8 +71,6 @@ public class KafkaConsumerService {
                     event.getEventId(), topic, partition, offset);
 
             if (testingConfigService.isKafkaConsumerFailureEnabled()) {
-                 // Immediately reset the one-time flag to prevent subsequent messages from failing.
-                testingConfigService.setKafkaConsumerFailureEnabled(false);
                 int attempts = TRANSIENT_FAILURE_ATTEMPTS.getOrDefault(event.getEventId(), 0);
                 if (attempts < MAX_AUTOMATIC_ATTEMPTS) {
                     TRANSIENT_FAILURE_ATTEMPTS.put(event.getEventId(), attempts + 1);

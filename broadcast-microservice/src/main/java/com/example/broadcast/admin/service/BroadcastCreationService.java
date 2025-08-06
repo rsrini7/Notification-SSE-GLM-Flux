@@ -107,12 +107,6 @@ public class BroadcastCreationService {
      * @return A response DTO for the triggered broadcast.
      */
     private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
-        boolean shouldFail = testingConfigurationService.isKafkaConsumerFailureEnabled();
-        if (shouldFail) {
-            log.info("Kafka failure mode is enabled. This broadcast will be marked for transient failure.");
-            testingConfigurationService.setKafkaConsumerFailureEnabled(false);
-        }
-
         List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
         int totalTargeted = userBroadcasts.size();
         if (totalTargeted > 0) {

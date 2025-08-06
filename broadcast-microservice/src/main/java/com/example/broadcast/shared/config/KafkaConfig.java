@@ -102,7 +102,7 @@ public class KafkaConfig {
 
     @Bean
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
-            @Qualifier("dltKafkaTemplate") KafkaTemplate<String, byte[]> dltKafkaTemplate) {
+            @Qualifier("dltKafkaTemplate") KafkaTemplate<String, Object> dltKafkaTemplate) {
         
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
                 new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, cr.partition());
@@ -110,17 +110,17 @@ public class KafkaConfig {
     }
     
     @Bean
-    public KafkaTemplate<String, byte[]> dltKafkaTemplate(
-            @Qualifier("dltProducerFactory") ProducerFactory<String, byte[]> dltProducerFactory) {
+    public KafkaTemplate<String, Object> dltKafkaTemplate(
+            @Qualifier("dltProducerFactory") ProducerFactory<String, Object> dltProducerFactory) {
         return new KafkaTemplate<>(dltProducerFactory);
     }
 
     @Bean
-    public ProducerFactory<String, byte[]> dltProducerFactory() {
+    public ProducerFactory<String, Object> dltProducerFactory() {
         Map<String, Object> configProps = new HashMap<>();
         configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class);
+        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
         return new DefaultKafkaProducerFactory<>(configProps);
     }
     
