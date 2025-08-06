@@ -74,6 +74,17 @@ export interface BroadcastRequest {
   isImmediate: boolean;
 }
 
+export interface RedriveFailureDetail {
+  dltMessageId: string;
+  reason: string;
+}
+
+export interface RedriveAllResult {
+  totalMessages: number;
+  successCount: number;
+  failureCount: number;
+  failures: RedriveFailureDetail[];
+}
 
 export const broadcastService = {
   getBroadcasts: async (filter = 'all'): Promise<BroadcastMessage[]> => {
@@ -123,10 +134,10 @@ export const dltService = {
   redriveDltMessage: async (id: string): Promise<void> => {
     await api.post(`/api/admin/dlt/redrive/${id}`);
   },
-  redriveAllDltMessages: async (): Promise<void> => {
-    await api.post('/api/admin/dlt/redrive-all');
+ redriveAllDltMessages: async (): Promise<RedriveAllResult> => {
+    const response = await api.post('/api/admin/dlt/redrive-all');
+    return response.data;
   },
-  // REMOVED deleteDltMessage as it is superseded by purge
   purgeDltMessage: async (id: string): Promise<void> => {
     await api.delete(`/api/admin/dlt/purge/${id}`);
   },

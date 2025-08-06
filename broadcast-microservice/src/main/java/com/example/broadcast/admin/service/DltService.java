@@ -1,5 +1,7 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.admin.dto.RedriveAllResult;
+import com.example.broadcast.admin.dto.RedriveFailureDetail;
 import com.example.broadcast.admin.dto.DltMessage;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
@@ -29,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Collection;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -177,25 +180,38 @@ public class DltService {
         log.info("Published MessageRedriveRequestedEvent for UserBroadcastMessage ID: {} to outbox for topic {}", existingMessage.getId(), commandsTopic);
     }
     
-    public void redriveAllMessages() {
+    public RedriveAllResult redriveAllMessages() {
         List<DltMessage> messagesToRedrive = dltRepository.findAll();
         if (messagesToRedrive.isEmpty()) {
             log.info("No DLT messages to redrive.");
-            return;
+            return RedriveAllResult.builder().totalMessages(0).successCount(0).failureCount(0).failures(new ArrayList<>()).build();
         }
+
         log.info("Attempting to redrive all {} messages from the DLT.", messagesToRedrive.size());
         int successCount = 0;
-        int failureCount = 0;
+        List<RedriveFailureDetail> failures = new ArrayList<>();
+
         for (DltMessage dltMessage : messagesToRedrive) {
             try {
+                // The redriveMessage method is transactional, so each attempt is atomic.
                 redriveMessage(dltMessage.getId());
                 successCount++;
             } catch (Exception e) {
-                failureCount++;
+                // Instead of just logging, we now record the failure details.
+                failures.add(new RedriveFailureDetail(dltMessage.getId(), e.getMessage()));
                 log.error("Failed to redrive DLT message with ID: {}. Reason: {}", dltMessage.getId(), e.getMessage());
             }
         }
-        log.info("Finished redriving all DLT messages. Success: {}, Failures: {}", successCount, failureCount);
+
+        log.info("Finished redriving all DLT messages. Success: {}, Failures: {}", successCount, failures.size());
+
+        // Return the detailed result object.
+        return RedriveAllResult.builder()
+                .totalMessages(messagesToRedrive.size())
+                .successCount(successCount)
+                .failureCount(failures.size())
+                .failures(failures)
+                .build();
     }
     
     @Transactional

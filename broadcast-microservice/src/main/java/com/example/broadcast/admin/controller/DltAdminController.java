@@ -1,5 +1,6 @@
 package com.example.broadcast.admin.controller;
 
+import com.example.broadcast.admin.dto.RedriveAllResult;
 import com.example.broadcast.admin.dto.DltMessage;
 import com.example.broadcast.admin.service.DltService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -39,9 +40,9 @@ public class DltAdminController {
     }
     
     @PostMapping("/redrive-all")
-    public ResponseEntity<Void> redriveAllMessages() {
-        dltService.redriveAllMessages();
-        return ResponseEntity.ok().build();
+    public ResponseEntity<RedriveAllResult> redriveAllMessages() {
+        RedriveAllResult result = dltService.redriveAllMessages();
+        return ResponseEntity.ok(result);
     }
     
     @DeleteMapping("/purge/{id}")
