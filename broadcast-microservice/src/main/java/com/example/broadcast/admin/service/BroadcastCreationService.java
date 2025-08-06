@@ -138,7 +138,6 @@ public class BroadcastCreationService {
                     .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
                     .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                     .message(broadcast.getContent())
-                    .transientFailure(shouldFail)
                     .build(); 
                 outboxEventPublisher.publish(eventPayload, eventPayload.getUserId(), eventPayload.getEventType(), topicName); 
             }
