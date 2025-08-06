@@ -19,4 +19,6 @@ public class MessageDeliveryEvent {
     private ZonedDateTime timestamp;
     private String message;
     private String errorDetails;
+    @Builder.Default
+    private boolean transientFailure = false;
 }

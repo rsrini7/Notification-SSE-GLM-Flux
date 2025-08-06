@@ -24,8 +24,7 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CacheService cacheService;
-    private final TestingConfigurationService testingConfigService;
-        
+            
     private static final Map<String, Integer> TRANSIENT_FAILURE_ATTEMPTS = new ConcurrentHashMap<>();
     private static final int MAX_AUTOMATIC_ATTEMPTS = 3;
 
@@ -70,7 +69,7 @@ public class KafkaConsumerService {
             log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                     event.getEventId(), topic, partition, offset);
 
-            if (testingConfigService.isKafkaConsumerFailureEnabled()) {
+            if (event.isTransientFailure()) {
                 int attempts = TRANSIENT_FAILURE_ATTEMPTS.getOrDefault(event.getEventId(), 0);
                 if (attempts < MAX_AUTOMATIC_ATTEMPTS) {
                     TRANSIENT_FAILURE_ATTEMPTS.put(event.getEventId(), attempts + 1);

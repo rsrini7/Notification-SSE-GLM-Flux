@@ -107,6 +107,14 @@ public class BroadcastCreationService {
      * @return A response DTO for the triggered broadcast.
      */
     private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
+        // Check the global flag one time during creation
+        boolean shouldFail = testingConfigurationService.isKafkaConsumerFailureEnabled();
+        if (shouldFail) {
+            log.info("Kafka failure mode is enabled. This broadcast's events will be marked for failure.");
+            // Reset the global flag immediately so only this broadcast is affected
+            testingConfigurationService.setKafkaConsumerFailureEnabled(false);
+        }
+
         List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
         int totalTargeted = userBroadcasts.size();
         if (totalTargeted > 0) {
@@ -132,6 +140,7 @@ public class BroadcastCreationService {
                     .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
                     .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                     .message(broadcast.getContent())
+                    .transientFailure(shouldFail)
                     .build(); 
                 outboxEventPublisher.publish(eventPayload, eventPayload.getUserId(), eventPayload.getEventType(), topicName); 
             }
