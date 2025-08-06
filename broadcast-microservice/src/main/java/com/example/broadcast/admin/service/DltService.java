@@ -11,6 +11,7 @@ import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.DltRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.shared.util.JsonUtils;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -56,7 +57,7 @@ public class DltService {
     )
     @Transactional
     public void listenToDlt(
-            @Payload byte[] payload,
+            @Payload MessageDeliveryEvent failedEvent,
             @Header(KafkaHeaders.RECEIVED_KEY) String key,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.DLT_ORIGINAL_TOPIC) String originalTopic,
@@ -66,13 +67,17 @@ public class DltService {
             @Header(KafkaHeaders.DLT_EXCEPTION_STACKTRACE) String exceptionStacktrace,
             Acknowledgment acknowledgment) {
         
-        String payloadString = new String(payload, StandardCharsets.UTF_8);
-        MessageDeliveryEvent failedEvent;
-        String displayTitle;
+            String displayTitle;
+            String payloadJson;
 
-        // --- CORRECTED LOGIC: Restore parsing and failure handling ---
-        try {
-            failedEvent = objectMapper.readValue(payloadString, MessageDeliveryEvent.class);
+            // Use the injected ObjectMapper to serialize the failed event back to a JSON string
+            try {
+                payloadJson = objectMapper.writeValueAsString(failedEvent);
+            } catch (JsonProcessingException e) {
+                log.error("Critical: Could not re-serialize failed event for DLT storage. Storing raw payload.", e);
+                payloadJson = "{\"error\":\"Could not serialize payload\", \"originalMessage\":\"" + failedEvent.toString() + "\"}";
+            }
+
             if (failedEvent.getUserId() != null && failedEvent.getBroadcastId() != null) {
                 // Step 1: Update the original message status to FAILED
                 handleProcessingFailure(failedEvent);
@@ -82,30 +87,24 @@ public class DltService {
             } else {
                 displayTitle = "Failed to process message with missing user or broadcast ID.";
             }
-        } catch (JsonProcessingException e) {
-            log.warn("Could not parse DLT message payload into MessageDeliveryEvent. Storing with raw exception.", e);
-            displayTitle = exceptionMessage; // Fallback to the raw exception message
-        }
-        // Step 3: Save the record for the DLT UI
-        log.error("DLT Received Message. Key: {}, From Topic: {}, Reason: {}. Saving to database.", key, originalTopic, displayTitle);
-        
-        DltMessage dltMessage = DltMessage.builder()
-                .id(UUID.randomUUID().toString())
-                .originalKey(key)
-                .originalTopic(originalTopic)
-                .originalPartition(originalPartition)
-                .originalOffset(originalOffset)
-                .exceptionMessage(displayTitle) // Use the friendly or fallback title
-                .exceptionStackTrace(exceptionStacktrace)
-                .failedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .originalMessagePayload(payloadString)
-                .build();
-        
-        dltRepository.save(dltMessage);
 
-        // Step 4: Acknowledge the DLT message to commit the offset.
-        // This only happens after the transaction for steps 1,2 & 3 is successful.
-        acknowledgment.acknowledge();
+            // Step 3: Save the record for the DLT UI
+            log.error("DLT Received Message. Key: {}, From Topic: {}, Reason: {}. Saving to database.", key, originalTopic, displayTitle);
+            DltMessage dltMessage = DltMessage.builder()
+                    .id(UUID.randomUUID().toString())
+                    .originalKey(key)
+                    .originalTopic(originalTopic)
+                    .originalPartition(originalPartition)
+                    .originalOffset(originalOffset)
+                    .exceptionMessage(displayTitle)
+                    .exceptionStackTrace(exceptionStacktrace)
+                    .failedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                    .originalMessagePayload(payloadJson) // Use the serialized JSON string
+                    .build();
+            dltRepository.save(dltMessage);
+
+            // Step 4: Acknowledge the DLT message
+            acknowledgment.acknowledge();
     }
     
     /**
