@@ -46,11 +46,9 @@ public class OutboxEventPublisher {
                     .topic(topicName)
                     .payload(payloadJson)
                     .build();
-            outboxRepository.save(outboxEvent); 
+            outboxRepository.save(outboxEvent);
         } catch (JsonProcessingException e) {
             log.error("Critical: Failed to serialize event payload for outbox. Event for user {} will not be published.", payload.getUserId(), e);
-            // In a real-world scenario, you might throw a custom, unchecked exception here
-            // to ensure the wrapping business transaction fails.
             throw new RuntimeException("Failed to serialize event payload for outbox.", e);
         }
     }

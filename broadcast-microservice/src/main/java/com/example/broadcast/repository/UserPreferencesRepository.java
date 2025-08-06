@@ -1,6 +1,7 @@
 package com.example.broadcast.repository;
 
 import com.example.broadcast.model.UserPreferences;
+import com.example.broadcast.util.JsonUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -31,7 +32,7 @@ public class UserPreferencesRepository {
                     .notificationEnabled(rs.getBoolean("notification_enabled"))
                     .emailNotifications(rs.getBoolean("email_notifications"))
                     .pushNotifications(rs.getBoolean("push_notifications"))
-                    .preferredCategories(parseJsonArray(rs.getString("preferred_categories")))
+                    .preferredCategories(JsonUtils.parseJsonArray(rs.getString("preferred_categories"))) // REFACTORED
                     .quietHoursStart(rs.getTime("quiet_hours_start") != null ?
                             rs.getTime("quiet_hours_start").toLocalTime() : null)
                     .quietHoursEnd(rs.getTime("quiet_hours_end") != null ?
@@ -56,7 +57,6 @@ public class UserPreferencesRepository {
 
         List<UserPreferences> allPreferences = new ArrayList<>();
         int totalUsers = userIds.size();
-
         for (int i = 0; i < totalUsers; i += BATCH_SIZE) {
             int end = Math.min(i + BATCH_SIZE, totalUsers);
             List<String> batch = userIds.subList(i, end);
@@ -65,7 +65,6 @@ public class UserPreferencesRepository {
                 "SELECT * FROM user_preferences WHERE user_id IN (%s)",
                 String.join(",", java.util.Collections.nCopies(batch.size(), "?"))
             );
-            
             List<UserPreferences> batchResult = jdbcTemplate.query(sql, preferencesRowMapper, batch.toArray());
             allPreferences.addAll(batchResult);
         }
@@ -98,39 +97,15 @@ public class UserPreferencesRepository {
                 preferences.getNotificationEnabled(),
                 preferences.getEmailNotifications(),
                 preferences.getPushNotifications(),
-                toJsonArray(preferences.getPreferredCategories()),
+                JsonUtils.toJsonArray(preferences.getPreferredCategories()), // REFACTORED
                 preferences.getQuietHoursStart(),
                 preferences.getQuietHoursEnd(),
                 preferences.getTimezone());
-        
         return preferences;
     }
 
     public List<String> findAllUserIds() {
         String sql = "SELECT DISTINCT user_id FROM user_preferences ORDER BY user_id";
         return jdbcTemplate.queryForList(sql, String.class);
-    }
-
-    private List<String> parseJsonArray(String json) {
-        if (json == null || json.trim().isEmpty()) {
-            return List.of();
-        }
-        try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, 
-                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
-        } catch (Exception e) {
-            return List.of();
-        }
-    }
-
-    private String toJsonArray(List<String> list) {
-        if (list == null || list.isEmpty()) {
-            return null;
-        }
-        try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(list);
-        } catch (Exception e) {
-            return null;
-        }
     }
 }

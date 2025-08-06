@@ -4,6 +4,7 @@ import com.example.broadcast.config.AppProperties;
 import com.example.broadcast.dto.BroadcastRequest;
 import com.example.broadcast.dto.BroadcastResponse;
 import com.example.broadcast.dto.MessageDeliveryEvent;
+import com.example.broadcast.exception.ResourceNotFoundException;
 import com.example.broadcast.exception.UserServiceUnavailableException;
 import com.example.broadcast.mapper.BroadcastMapper;
 import com.example.broadcast.model.BroadcastMessage;
@@ -42,10 +43,12 @@ public class BroadcastService {
     private final BroadcastTargetingService broadcastTargetingService;
     private final UserPreferencesRepository userPreferencesRepository;
     private final UserService userService;
-    private final OutboxEventPublisher outboxEventPublisher;
     private final TestingConfigurationService testingConfigService;
-    private final BroadcastMapper broadcastMapper;
     private final AppProperties appProperties;
+
+    // --- REFACTORED DEPENDENCIES ---
+    private final OutboxEventPublisher outboxEventPublisher;
+    private final BroadcastMapper broadcastMapper;
 
     /**
      * Creates a new broadcast. If it's scheduled for the future, it's saved with a SCHEDULED status.
@@ -61,16 +64,16 @@ public class BroadcastService {
 
         if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
             log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());
-            broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name()); 
+            broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
             broadcast = broadcastRepository.save(broadcast);
-            return broadcastMapper.toBroadcastResponse(broadcast, 0);
+            return broadcastMapper.toBroadcastResponse(broadcast, 0); // REFACTORED
         }
 
         if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
             broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
             broadcast = broadcastRepository.save(broadcast);
             log.info("Broadcast with ID: {} is scheduled for: {}", broadcast.getId(), broadcast.getScheduledAt());
-            return broadcastMapper.toBroadcastResponse(broadcast, 0);
+            return broadcastMapper.toBroadcastResponse(broadcast, 0); // REFACTORED
         } else {
             broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
             broadcast = broadcastRepository.save(broadcast);
@@ -85,11 +88,9 @@ public class BroadcastService {
      */
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public void processScheduledBroadcast(Long broadcastId) {
-        log.info("Processing scheduled broadcast with ID: {}", broadcastId);
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
-                .orElseThrow(() -> new IllegalStateException("Scheduled broadcast not found with ID: " + broadcastId)); // Should not happen if locked
-        
-        broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name()); 
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
+        broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
         broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
         broadcastRepository.update(broadcast);
 
@@ -104,66 +105,139 @@ public class BroadcastService {
      * @return A response DTO for the triggered broadcast.
      */
     private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
-        boolean shouldFail = testingConfigService.isKafkaConsumerFailureEnabled(); 
+        boolean shouldFail = testingConfigService.isKafkaConsumerFailureEnabled();
         if (shouldFail) {
-            log.warn("Kafka failure mode is enabled. The next created broadcast will be marked for transient failure.");
-            testingConfigService.setKafkaConsumerFailureEnabled(false); 
+            log.info("Kafka failure mode is enabled. This broadcast will be marked for transient failure.");
+            testingConfigService.setKafkaConsumerFailureEnabled(false);
         }
 
         List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
-        int totalTargeted = userBroadcasts.size(); 
-
+        int totalTargeted = userBroadcasts.size();
         if (totalTargeted > 0) {
             log.info("Broadcast {} targeting {} users.", broadcast.getId(), totalTargeted);
-            
-            // Create initial statistics record
             BroadcastStatistics initialStats = BroadcastStatistics.builder()
                     .broadcastId(broadcast.getId())
                     .totalTargeted(totalTargeted)
                     .totalDelivered(0)
                     .totalRead(0)
-                    .totalFailed(0) 
+                    .totalFailed(0)
                     .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                     .build();
-            broadcastStatisticsRepository.save(initialStats); 
-
-            // Batch insert all user-specific message records
+            broadcastStatisticsRepository.save(initialStats);
             userBroadcastRepository.batchInsert(userBroadcasts);
 
-            // Publish a CREATED event for each user to the outbox
-            String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? appProperties.getKafka().getTopic().getNameAll() : appProperties.getKafka().getTopic().getNameSelected(); 
+            String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? appProperties.getKafka().getTopic().getNameAll() : appProperties.getKafka().getTopic().getNameSelected();
             for (UserBroadcastMessage userMessage : userBroadcasts) {
                 MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
                     .eventId(UUID.randomUUID().toString())
                     .broadcastId(broadcast.getId())
                     .userId(userMessage.getUserId())
-                    .eventType(Constants.EventType.CREATED.name()) 
+                    .eventType(Constants.EventType.CREATED.name())
                     .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
                     .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                     .message(broadcast.getContent())
                     .transientFailure(shouldFail)
                     .build();
                 
+                // REFACTORED: Use the dedicated publisher
                 outboxEventPublisher.publish(eventPayload, topicName);
             }
         } else {
             log.warn("Broadcast {} created, but no users were targeted after filtering.", broadcast.getId());
         }
         
+        // REFACTORED: Use the dedicated mapper
         return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
+    }
+    
+    // ... (keep cancelBroadcast and expireBroadcast as they are) ...
+    @Transactional
+    public void cancelBroadcast(Long id) {
+        BroadcastMessage broadcast = broadcastRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
+        broadcast.setStatus(Constants.BroadcastStatus.CANCELLED.name());
+        broadcastRepository.update(broadcast);
+        
+        int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
+        log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
+        String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? appProperties.getKafka().getTopic().getNameAll() : appProperties.getKafka().getTopic().getNameSelected();
+        List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
+        for (UserBroadcastMessage userMessage : userBroadcasts) {
+            MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .broadcastId(broadcast.getId())
+                .userId(userMessage.getUserId())
+                .eventType(Constants.EventType.CANCELLED.name())
+                .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                .message("Broadcast CANCELLED")
+                .build();
+            outboxEventPublisher.publish(eventPayload, topicName);
+        }
+        log.info("Broadcast cancelled: {}", id);
+    }
+
+    @Transactional
+    public void expireBroadcast(Long broadcastId) {
+        BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
+        if (Constants.BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) {
+            broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
+            broadcastRepository.update(broadcast);
+            int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(broadcastId, Constants.DeliveryStatus.SUPERSEDED.name());
+            log.info("Updated {} pending user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
+            log.info("Broadcast expired: {}", broadcastId);
+            String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? appProperties.getKafka().getTopic().getNameAll() : appProperties.getKafka().getTopic().getNameSelected();
+            List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);
+            for (UserBroadcastMessage userMessage : userBroadcasts) {
+                MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .broadcastId(broadcast.getId())
+                    .userId(userMessage.getUserId())
+                    .eventType(Constants.EventType.EXPIRED.name())
+                    .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                    .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                    .message("Broadcast EXPIRED")
+                    .build();
+                outboxEventPublisher.publish(eventPayload, topicName);
+            }
+        }
+    }
+    
+    // ... (keep getBroadcasts and user methods as they are) ...
+    public BroadcastResponse getBroadcast(Long id) {
+        return broadcastRepository.findBroadcastWithStatsById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
+    }
+
+    public List<BroadcastResponse> getActiveBroadcasts() {
+        return broadcastRepository.findActiveBroadcastsWithStats();
+    }
+    
+    public List<BroadcastResponse> getScheduledBroadcasts() {
+        return broadcastRepository.findScheduledBroadcastsWithStats();
+    }
+
+    public List<BroadcastResponse> getAllBroadcasts() {
+        return broadcastRepository.findAllBroadcastsWithStats();
     }
 
     @CircuitBreaker(name = "userService", fallbackMethod = "fallbackGetAllUserIds")
     public List<String> getAllUserIds() {
         log.info("Retrieving all unique user IDs from the authoritative user service.");
-        return userService.getAllUserIds(); 
+        return userService.getAllUserIds();
     }
 
     public List<String> fallbackGetAllUserIds(Throwable t) {
-        log.warn("UserService is unavailable, falling back to user preferences for the user list. Error: {}", t.getMessage()); 
-        throw new UserServiceUnavailableException("User service is unavailable, cannot determine target users.");
+        log.warn("UserService is unavailable, falling back to user preferences for the user list. Error: {}", t.getMessage());
+        return userPreferencesRepository.findAllUserIds();
     }
-
+    
+    public List<UserBroadcastMessage> getBroadcastDeliveries(Long broadcastId) {
+        log.info("Retrieving delivery details for broadcast ID: {}", broadcastId);
+        return userBroadcastRepository.findByBroadcastId(broadcastId);
+    }
+    
     private BroadcastMessage buildBroadcastFromRequest(BroadcastRequest request) {
         return BroadcastMessage.builder()
                 .senderId(request.getSenderId())
@@ -172,7 +246,7 @@ public class BroadcastService {
                 .targetType(request.getTargetType())
                 .targetIds(request.getTargetIds())
                 .priority(request.getPriority())
-                .category(request.getCategory()) 
+                .category(request.getCategory())
                 .scheduledAt(request.getScheduledAt())
                 .expiresAt(request.getExpiresAt())
                 .createdAt(ZonedDateTime.now(ZoneOffset.UTC))

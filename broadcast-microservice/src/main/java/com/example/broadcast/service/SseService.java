@@ -1,45 +1,43 @@
 package com.example.broadcast.service;
 
+import com.example.broadcast.config.AppProperties;
 import com.example.broadcast.dto.MessageDeliveryEvent;
 import com.example.broadcast.dto.UserBroadcastResponse;
+import com.example.broadcast.mapper.BroadcastMapper;
 import com.example.broadcast.model.BroadcastMessage;
 import com.example.broadcast.model.UserBroadcastMessage;
 import com.example.broadcast.model.UserSession;
 import com.example.broadcast.repository.BroadcastRepository;
 import com.example.broadcast.repository.UserBroadcastRepository;
 import com.example.broadcast.repository.UserSessionRepository;
+import com.example.broadcast.util.Constants.DeliveryStatus;
+import com.example.broadcast.util.Constants.EventType;
+import com.example.broadcast.util.Constants.SseEventType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
-import reactor.core.Disposable;
 
 import java.time.Duration;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set; 
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-import java.time.ZoneOffset;
-
-import com.example.broadcast.util.Constants.DeliveryStatus;
-import com.example.broadcast.util.Constants.EventType;
-import com.example.broadcast.util.Constants.SseEventType;
-import com.example.broadcast.config.AppProperties;
-
 
 @Service
 @Slf4j
@@ -52,16 +50,16 @@ public class SseService {
     private final BroadcastRepository broadcastRepository;
     private final MessageStatusService messageStatusService;
     private final CacheService cacheService;
-    
     private final AppProperties appProperties;
  
+    // --- REFACTORED DEPENDENCY ---
+    private final BroadcastMapper broadcastMapper;
     
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> userSessionMap = new ConcurrentHashMap<>();
     private final Map<String, String> sessionIdToUserIdMap = new ConcurrentHashMap<>();
 
     private Disposable serverHeartbeatSubscription;
-
 
     @PostConstruct
     public void init() {
@@ -91,7 +89,6 @@ public class SseService {
             List<UserSession> staleSessionsOnThisPod = allStaleSessions.stream()
                     .filter(session -> appProperties.getPod().getId().equals(session.getPodId()))
                     .collect(Collectors.toList());
-
             if (!staleSessionsOnThisPod.isEmpty()) {
                 log.warn("Found {} stale sessions on this pod ({}) to clean up from memory.", staleSessionsOnThisPod.size(), appProperties.getPod().getId());
                 for (UserSession staleSession : staleSessionsOnThisPod) {
@@ -116,16 +113,13 @@ public class SseService {
                     .map(UserSession::getUserId)
                     .distinct()
                     .collect(Collectors.toList());
-
             userSessionRepository.markSessionsInactiveForUsers(staleUserIds);
             log.info("Marked {} users as INACTIVE in the database.", staleUserIds.size());
-
             for (UserSession staleSession : allStaleSessions) {
                 cacheService.unregisterUserConnection(staleSession.getUserId(), staleSession.getSessionId());
             }
             log.info("Removed {} stale sessions from the cache.", allStaleSessions.size());
-
-         } catch (Exception e) {
+        } catch (Exception e) {
             log.error("Error during stale session cleanup task: {}", e.getMessage(), e);
         }
     }
@@ -154,7 +148,6 @@ public class SseService {
         sessionIdToUserIdMap.put(sessionId, userId);
 
         sendPendingMessages(userId);
-        
         try {
             String connectedPayload = objectMapper.writeValueAsString(Map.of("message", "SSE connection established with session " + sessionId));
             sendEvent(userId, ServerSentEvent.<String>builder()
@@ -182,7 +175,6 @@ public class SseService {
             }
         }
         
-        // Only proceed with DB/cache cleanup if the session was actually found and removed from the map
         if (wasRemoved) {
             userSinks.remove(sessionId);
             sessionIdToUserIdMap.remove(sessionId);
@@ -198,7 +190,6 @@ public class SseService {
         log.debug("Handling message event: {} for user: {}", event.getEventType(), event.getUserId());
         try {
             String payload = objectMapper.writeValueAsString(Map.of("broadcastId", event.getBroadcastId()));
-
             switch (EventType.valueOf(event.getEventType())) {
                 case CREATED:
                     deliverMessageToUser(event.getUserId(), event.getBroadcastId());
@@ -206,7 +197,6 @@ public class SseService {
                 case READ:
                 case EXPIRED:
                 case CANCELLED:
-                    // For any of these events, the action is the same: tell the client to remove the message.
                     sendEvent(event.getUserId(), ServerSentEvent.<String>builder().event(SseEventType.MESSAGE_REMOVED.name()).data(payload).build());
                     break;
             }
@@ -251,10 +241,13 @@ public class SseService {
         UserBroadcastMessage message = userBroadcastRepository
                 .findByUserIdAndBroadcastId(userId, broadcastId)
                 .filter(msg -> msg.getDeliveryStatus().equals(DeliveryStatus.PENDING.name()))
-                .orElseThrow(() -> new IllegalStateException(
-                        "Cannot deliver message. No PENDING UserBroadcastMessage found for user " + userId + " and broadcast " + broadcastId
-                ));
-        
+                .orElse(null);
+
+        if (message == null) {
+            log.warn("Skipping delivery. No PENDING UserBroadcastMessage found for user {} and broadcast {}", userId, broadcastId);
+            return;
+        }
+
         buildUserBroadcastResponse(message)
             .ifPresent(response -> {
                 try {
@@ -281,29 +274,15 @@ public class SseService {
     }
 
     private Optional<UserBroadcastResponse> buildUserBroadcastResponse(UserBroadcastMessage message) {
+        // REFACTORED: Delegate mapping to the central mapper
         return broadcastRepository.findById(message.getBroadcastId())
-            .map(broadcast -> buildUserBroadcastResponse(message, broadcast));
-    }
-    
-    private UserBroadcastResponse buildUserBroadcastResponse(UserBroadcastMessage message, BroadcastMessage broadcast) {
-        return UserBroadcastResponse.builder()
-                .id(message.getId())
-                .broadcastId(message.getBroadcastId())
-                .userId(message.getUserId())
-                .deliveryStatus(message.getDeliveryStatus())
-                .readStatus(message.getReadStatus())
-                .deliveredAt(message.getDeliveredAt())
-                .readAt(message.getReadAt())
-                .createdAt(message.getCreatedAt())
-                .senderName(broadcast.getSenderName())
-                .content(broadcast.getContent())
-                .priority(broadcast.getPriority())
-                .category(broadcast.getCategory())
-                .broadcastCreatedAt(broadcast.getCreatedAt())
-                .expiresAt(broadcast.getExpiresAt())
-                .build();
+            .map(broadcast -> broadcastMapper.toUserBroadcastResponse(message, broadcast));
     }
 
+    // This private method is now removed as its logic is in BroadcastMapper
+    // private UserBroadcastResponse buildUserBroadcastResponse(UserBroadcastMessage message, BroadcastMessage broadcast) { ... }
+    
+    // ... (rest of the methods from startServerHeartbeat onwards remain the same) ...
     private void startServerHeartbeat() {
         serverHeartbeatSubscription = Flux.interval(Duration.ofMillis(appProperties.getSse().getHeartbeatInterval()), Schedulers.parallel())
             .doOnNext(tick -> {
