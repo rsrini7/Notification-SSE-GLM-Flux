@@ -106,9 +106,6 @@ public class AppProperties {
             private String nameAll = "broadcast-events-all";
             @NotBlank
             private String nameSelected = "broadcast-events-selected";
-            // --- NEW TOPIC NAME ---
-            @NotBlank
-            private String nameCommands = "broadcast-commands";
             @Positive
             private int partitions = 10;
             @Positive
@@ -119,9 +116,6 @@ public class AppProperties {
         public static class Consumer {
             @NotBlank
             private String dltGroupId = "broadcast-dlt-group";
-            // --- NEW CONSUMER GROUP ID ---
-            @NotBlank
-            private String commandsGroupId = "broadcast-commands-group";
         }
 
         @Data

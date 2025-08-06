@@ -25,7 +25,6 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CacheService cacheService;
-    private final ObjectMapper objectMapper;
         
     private static final Map<String, Integer> TRANSIENT_FAILURE_ATTEMPTS = new ConcurrentHashMap<>();
     private static final int MAX_AUTOMATIC_ATTEMPTS = 3;
@@ -36,13 +35,13 @@ public class KafkaConsumerService {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void processAllUsersBroadcastEvent(
-            @Payload byte[] payload,
+            @Payload MessageDeliveryEvent event,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
         
-        processBroadcastEvent(payload, topic, partition, offset, acknowledgment);
+        processBroadcastEvent(event, topic, partition, offset, acknowledgment);
     }
     
     @KafkaListener(
@@ -51,35 +50,34 @@ public class KafkaConsumerService {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void processSelectedUsersBroadcastEvent(
-            @Payload byte[] payload,
+            @Payload MessageDeliveryEvent event,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
 
-        processBroadcastEvent(payload, topic, partition, offset, acknowledgment);
+        processBroadcastEvent(event, topic, partition, offset, acknowledgment);
     }
 
     private void processBroadcastEvent(
-            byte[] payload,
+           MessageDeliveryEvent event,
             String topic,
             String partition,
             long offset,
             Acknowledgment acknowledgment) {
         
-        MessageDeliveryEvent event = null;
         try {
-            event = objectMapper.readValue(payload, MessageDeliveryEvent.class);
             log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                     event.getEventId(), topic, partition, offset);
 
+            // --- CORRECTED LOGIC: Check for failure simulation FIRST ---
             if (event.isTransientFailure()) {
                 int attempts = TRANSIENT_FAILURE_ATTEMPTS.getOrDefault(event.getEventId(), 0);
-                
                 if (attempts < MAX_AUTOMATIC_ATTEMPTS) {
                     TRANSIENT_FAILURE_ATTEMPTS.put(event.getEventId(), attempts + 1);
-                    log.warn("Transient failure flag detected for eventId: {}. Simulating failure, attempt {}/{}", 
+                    log.warn("Transient failure flag detected for eventId: {}. Simulating failure BEFORE processing, attempt {}/{}", 
                              event.getEventId(), attempts + 1, MAX_AUTOMATIC_ATTEMPTS);
+                    // This exception will trigger the retry/DLT flow correctly
                     throw new RuntimeException("Simulating a transient, recoverable error for DLT redrive testing.");
                 } else {
                     log.info("Successfully redriving eventId with transient failure flag: {}. Attempts ({}) exceeded max.", 
@@ -88,6 +86,7 @@ public class KafkaConsumerService {
                 }
             }
 
+            // This logic now only runs if the failure simulation is not triggered
             handleEvent(event);
             acknowledgment.acknowledge();
 

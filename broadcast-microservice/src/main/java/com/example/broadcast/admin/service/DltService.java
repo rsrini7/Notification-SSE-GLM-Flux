@@ -3,15 +3,13 @@ package com.example.broadcast.admin.service;
 import com.example.broadcast.admin.dto.RedriveAllResult;
 import com.example.broadcast.admin.dto.RedriveFailureDetail;
 import com.example.broadcast.admin.dto.DltMessage;
-import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
-import com.example.broadcast.shared.dto.MessageRedriveRequestedEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
+import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.DltRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
-import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -46,8 +44,7 @@ public class DltService {
     private final DltRepository dltRepository;
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
-    private final AppProperties appProperties;
-    private final OutboxEventPublisher outboxEventPublisher;
+    private final MessageStatusService messageStatusService;
 
     @KafkaListener(
             topics = {
@@ -131,13 +128,15 @@ public class DltService {
         return dltRepository.findAll();
     }
 
-    @Transactional
+   @Transactional
     public void redriveMessage(String id) throws JsonProcessingException {
         DltMessage dltMessage = dltRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
 
-        publishRedriveRequestedEvent(dltMessage);
+        // Step 1: Prepare the database synchronously in a new transaction.
+        prepareDatabaseForRedrive(dltMessage);
 
+        // Step 2: Resend the original message and clean up.
         log.info("Redriving message ID: {}. Sending original message back to topic: {}", id, dltMessage.getOriginalTopic());
         try {
             MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
@@ -154,7 +153,11 @@ public class DltService {
         }
     }
     
-    private void publishRedriveRequestedEvent(DltMessage dltMessage) throws JsonProcessingException {
+    /**
+     * Prepares the database for a message redrive by validating state and resetting the
+     * original message's status to PENDING. This is a direct, synchronous call.
+     */
+    private void prepareDatabaseForRedrive(DltMessage dltMessage) throws JsonProcessingException {
         MessageDeliveryEvent payload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
 
         BroadcastMessage parentBroadcast = broadcastRepository.findById(payload.getBroadcastId())
@@ -162,22 +165,15 @@ public class DltService {
             
         if (!Constants.BroadcastStatus.ACTIVE.name().equals(parentBroadcast.getStatus())) {
             throw new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") is " + parentBroadcast.getStatus() + ".");
-        }        
+        }
+        
         UserBroadcastMessage existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(
             payload.getUserId(), payload.getBroadcastId()
         ).orElseThrow(() -> new IllegalStateException("Cannot redrive: original UserBroadcastMessage not found."));
 
-        MessageRedriveRequestedEvent event = MessageRedriveRequestedEvent.builder()
-                .userBroadcastMessageId(existingMessage.getId())
-                .requestedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .build();
-
-        String commandsTopic = appProperties.getKafka().getTopic().getNameCommands();
-        String eventType = "MessageRedriveRequested";
-        String aggregateId = String.valueOf(existingMessage.getId());
-
-        outboxEventPublisher.publish(event, aggregateId, eventType, commandsTopic);
-        log.info("Published MessageRedriveRequestedEvent for UserBroadcastMessage ID: {} to outbox for topic {}", existingMessage.getId(), commandsTopic);
+        // --- CORRECTED LOGIC: Direct call to the service ---
+        // This runs in a new transaction, ensuring the status is committed before we proceed.
+        messageStatusService.resetMessageForRedrive(existingMessage.getId());
     }
     
     public RedriveAllResult redriveAllMessages() {
