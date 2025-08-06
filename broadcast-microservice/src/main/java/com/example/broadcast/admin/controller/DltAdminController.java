@@ -5,15 +5,15 @@ import com.example.broadcast.admin.service.DltService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.HttpStatus;
 
 import java.util.Collection;
 
 @RestController
-@RequestMapping("/api/dlt")
+@RequestMapping("/api/admin/dlt") // MODIFIED: Route is now namespaced under /admin
 @RequiredArgsConstructor
 @Slf4j
 public class DltAdminController {

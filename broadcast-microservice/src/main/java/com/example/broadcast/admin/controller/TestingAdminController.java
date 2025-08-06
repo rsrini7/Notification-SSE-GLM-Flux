@@ -8,10 +8,9 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/testing")
+@RequestMapping("/api/admin/testing") // MODIFIED: Route is now namespaced under /admin
 @RequiredArgsConstructor
 public class TestingAdminController {
-
 
     private final TestingConfigurationService testingConfigService;
 

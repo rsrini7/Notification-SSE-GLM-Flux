@@ -1,4 +1,5 @@
 import axios from 'axios';
+
 const API_BASE_URL = ''; 
 
 const api = axios.create({
@@ -75,80 +76,88 @@ export interface BroadcastRequest {
 
 
 export const broadcastService = {
-  // ... (keep existing broadcastService methods)
   getBroadcasts: async (filter = 'all'): Promise<BroadcastMessage[]> => {
-    const response = await api.get(`/api/broadcasts?filter=${filter}`);
+    // MODIFIED: Added /admin namespace
+    const response = await api.get(`/api/admin/broadcasts?filter=${filter}`);
     return response.data;
   },
   createBroadcast: async (broadcast: BroadcastRequest): Promise<BroadcastMessage> => {
-    const response = await api.post('/api/broadcasts', broadcast);
+    // MODIFIED: Added /admin namespace
+    const response = await api.post('/api/admin/broadcasts', broadcast);
     return response.data;
   },
   getBroadcast: async (id: string): Promise<BroadcastMessage> => {
-    const response = await api.get(`/api/broadcasts/${id}`);
+    // MODIFIED: Added /admin namespace
+    const response = await api.get(`/api/admin/broadcasts/${id}`);
     return response.data;
   },
   cancelBroadcast: async (id: string): Promise<void> => {
-    await api.delete(`/api/broadcasts/${id}`);
+    // MODIFIED: Added /admin namespace
+    await api.delete(`/api/admin/broadcasts/${id}`);
   },
   getBroadcastStats: async (id: string): Promise<BroadcastStats> => {
-    const response = await api.get(`/api/broadcasts/${id}/stats`);
+    // MODIFIED: Added /admin namespace
+    const response = await api.get(`/api/admin/broadcasts/${id}/stats`);
     return response.data;
   },
   getBroadcastDeliveries: async (id: string): Promise<any[]> => {
-    const response = await api.get(`/api/broadcasts/${id}/deliveries`);
+    // MODIFIED: Added /admin namespace
+    const response = await api.get(`/api/admin/broadcasts/${id}/deliveries`);
     return response.data;
   },
 };
 
 export const userService = {
-  // ... (keep existing userService methods)
   getUserMessages: async (userId: string): Promise<UserBroadcastMessage[]> => {
+    // MODIFIED: Route is now more specific
     const response = await api.get(`/api/user/messages?userId=${userId}`);
     return response.data;
   },
   markMessageAsRead: async (userId: string, messageId: string): Promise<void> => {
+    // This endpoint is on the SseController, which is user-facing and remains unchanged
     await api.post(`/api/sse/read?userId=${userId}&messageId=${messageId}`);
   },
   getAllUsers: async (): Promise<string[]> => {
-    const response = await api.get('/api/user/all');
+    // MODIFIED: This endpoint now lives under the admin controller
+    const response = await api.get('/api/admin/broadcasts/users/all-ids');
     return response.data;
   },
 };
 
 export const dltService = {
-  // ... (keep existing dltService methods)
   getDltMessages: async (): Promise<DltMessage[]> => {
-    const response = await api.get('/api/dlt/messages');
+    // MODIFIED: Added /admin namespace
+    const response = await api.get('/api/admin/dlt/messages');
     return response.data;
   },
   redriveDltMessage: async (id: string): Promise<void> => {
-    await api.post(`/api/dlt/redrive/${id}`);
+    // MODIFIED: Added /admin namespace
+    await api.post(`/api/admin/dlt/redrive/${id}`);
   },
-  // NEW METHOD to redrive all messages
   redriveAllDltMessages: async (): Promise<void> => {
-    await api.post('/api/dlt/redrive-all');
-  },
-  deleteDltMessage: async (id: string): Promise<void> => {
-    await api.delete(`/api/dlt/delete/${id}`);
+    // MODIFIED: Added /admin namespace
+    await api.post('/api/admin/dlt/redrive-all');
   },
   purgeDltMessage: async (id: string): Promise<void> => {
-    await api.delete(`/api/dlt/purge/${id}`);
+    // MODIFIED: Added /admin namespace
+    await api.delete(`/api/admin/dlt/purge/${id}`);
   },
   purgeAllDltMessages: async (): Promise<void> => {
-    await api.delete('/api/dlt/purge-all');
+    // MODIFIED: Added /admin namespace
+    await api.delete('/api/admin/dlt/purge-all');
   },
 };
 
 export const testingService = {
   getKafkaFailureStatus: async (): Promise<{ enabled: boolean }> => {
-    const response = await api.get('/api/testing/kafka-consumer-failure');
+    // MODIFIED: Added /admin namespace
+    const response = await api.get('/api/admin/testing/kafka-consumer-failure');
     return response.data;
   },
   setKafkaFailureStatus: async (enabled: boolean): Promise<void> => {
-    await api.post('/api/testing/kafka-consumer-failure', { enabled });
+    // MODIFIED: Added /admin namespace
+    await api.post('/api/admin/testing/kafka-consumer-failure', { enabled });
   },  
 };
-
 
 export default api;
