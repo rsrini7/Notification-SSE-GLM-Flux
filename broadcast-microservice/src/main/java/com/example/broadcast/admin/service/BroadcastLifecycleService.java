@@ -42,18 +42,16 @@ public class BroadcastLifecycleService {
     public void cancelBroadcast(Long id) {
         BroadcastMessage broadcast = broadcastRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
-
         broadcast.setStatus(Constants.BroadcastStatus.CANCELLED.name());
         broadcastRepository.update(broadcast);
 
         int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
         log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
-
         String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? appProperties.getKafka().getTopic().getNameAll() : appProperties.getKafka().getTopic().getNameSelected();
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(id);
         for (UserBroadcastMessage userMessage : userBroadcasts) {
             MessageDeliveryEvent eventPayload = createLifecycleEvent(broadcast, userMessage.getUserId(), Constants.EventType.CANCELLED, "Broadcast CANCELLED");
-            outboxEventPublisher.publish(eventPayload, topicName);
+            outboxEventPublisher.publish(eventPayload, userMessage.getUserId(), eventPayload.getEventType(), topicName);
         }
         log.info("Broadcast cancelled: {}. Published cancellation events to outbox.", id);
     }
@@ -67,19 +65,18 @@ public class BroadcastLifecycleService {
     public void expireBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
-
         if (Constants.BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) { 
-            broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name()); 
+            broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
             broadcastRepository.update(broadcast);
             
-            int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(broadcastId, Constants.DeliveryStatus.SUPERSEDED.name()); 
-            log.info("Updated {} pending user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId); 
+            int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(broadcastId, Constants.DeliveryStatus.SUPERSEDED.name());
+            log.info("Updated {} pending user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
 
             String topicName = Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) ? appProperties.getKafka().getTopic().getNameAll() : appProperties.getKafka().getTopic().getNameSelected();
             List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcastId);
             for (UserBroadcastMessage userMessage : userBroadcasts) {
                 MessageDeliveryEvent eventPayload = createLifecycleEvent(broadcast, userMessage.getUserId(), Constants.EventType.EXPIRED, "Broadcast EXPIRED");
-                outboxEventPublisher.publish(eventPayload, topicName);
+                outboxEventPublisher.publish(eventPayload, userMessage.getUserId(), eventPayload.getEventType(), topicName);
             }
             log.info("Broadcast expired: {}. Published expiration events to outbox.", broadcastId);
         }

@@ -10,6 +10,9 @@ import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
 import com.example.broadcast.shared.service.MessageStatusService;
+import com.example.broadcast.shared.config.AppProperties;
+import com.example.broadcast.shared.service.OutboxEventPublisher;
+import com.example.broadcast.shared.dto.MessageRedriveRequestedEvent;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -42,7 +45,8 @@ public class DltService {
     private final DltRepository dltRepository;
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
-    private final MessageStatusService messageStatusService;
+     private final AppProperties appProperties;
+     private final OutboxEventPublisher outboxEventPublisher;
 
     @KafkaListener(
             topics = {
@@ -122,19 +126,18 @@ public class DltService {
         return dltRepository.findAll();
     }
 
-    @Transactional
+     @Transactional
     public void redriveMessage(String id) throws JsonProcessingException {
         DltMessage dltMessage = dltRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
-        MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
-
-        // This now calls the separate transactional method
-        prepareDatabaseForRedrive(originalPayload);
+        
+        prepareForRedriveByPublishingEvent(dltMessage);
 
         log.info("Redriving message ID: {}. Sending to original topic: {}", id, dltMessage.getOriginalTopic());
-        
         try {
+            MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
             kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload).get();
+            
             String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
             kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null).get();
             dltRepository.deleteById(id);
@@ -143,6 +146,37 @@ public class DltService {
             log.error("Failed to redrive message with ID: {}. It will remain in the DLQ.", id, e);
             throw new RuntimeException("Failed to send message to Kafka during redrive", e);
         }
+    }
+    
+    private void prepareForRedriveByPublishingEvent(DltMessage dltMessage) throws JsonProcessingException {
+        MessageDeliveryEvent payload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
+
+        BroadcastMessage parentBroadcast = broadcastRepository.findById(payload.getBroadcastId())
+            .orElseThrow(() -> new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") has been deleted."));
+        
+        if (!Constants.BroadcastStatus.ACTIVE.name().equals(parentBroadcast.getStatus())) {
+            throw new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") is " + parentBroadcast.getStatus() + ".");
+        }
+
+        UserBroadcastMessage existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(
+            payload.getUserId(), payload.getBroadcastId()
+        ).orElseThrow(() -> new IllegalStateException("Cannot find original UserBroadcastMessage to redrive."));
+
+        // --- CORRECTED LOGIC ---
+        // Create the new event type
+        MessageRedriveRequestedEvent event = MessageRedriveRequestedEvent.builder()
+                .userBroadcastMessageId(existingMessage.getId())
+                .requestedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .build();
+
+        String commandsTopic = appProperties.getKafka().getTopic().getNameCommands();
+        String eventType = "MessageRedriveRequested";
+        String aggregateId = String.valueOf(existingMessage.getId());
+
+        // Call the new generic publish method with the correct parameters
+        outboxEventPublisher.publish(event, aggregateId, eventType, commandsTopic);
+        
+        log.info("Published MessageRedriveRequestedEvent for UserBroadcastMessage ID: {} to outbox for topic {}", existingMessage.getId(), commandsTopic);
     }
     
     public void redriveAllMessages() {
@@ -165,22 +199,6 @@ public class DltService {
             }
         }
         log.info("Finished redriving all DLT messages. Success: {}, Failures: {}", successCount, failureCount);
-    }
-    
-    private void prepareDatabaseForRedrive(MessageDeliveryEvent payload) {
-        BroadcastMessage parentBroadcast = broadcastRepository.findById(payload.getBroadcastId())
-            .orElseThrow(() -> new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") has been deleted."));
-
-        if (!Constants.BroadcastStatus.ACTIVE.name().equals(parentBroadcast.getStatus())) {
-            throw new IllegalStateException("Cannot redrive message because the original broadcast (ID: " + payload.getBroadcastId() + ") is " + parentBroadcast.getStatus() + ".");
-        }
-
-        UserBroadcastMessage existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(
-            payload.getUserId(), payload.getBroadcastId()
-        ).orElseThrow(() -> new IllegalStateException("Cannot find original UserBroadcastMessage to redrive."));
-
-        // Call the new service method to update the status in a separate, committed transaction.
-        messageStatusService.resetMessageForRedrive(existingMessage.getId());
     }
     
     @Transactional

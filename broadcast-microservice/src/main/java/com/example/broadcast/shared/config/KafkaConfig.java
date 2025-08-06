@@ -133,6 +133,15 @@ public class KafkaConfig {
     }
 
     @Bean
+    public NewTopic commandsTopic() {
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameCommands())
+                .partitions(3) // Commands are usually lower volume, so fewer partitions are fine
+                .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
+                .config("retention.ms", "604800000") // 7 days
+                .build();
+    }
+
+    @Bean
     public NewTopic allUsersDeadLetterTopic() {
         return TopicBuilder.name(appProperties.getKafka().getTopic().getNameAll() + Constants.DLT_SUFFIX)
                 .partitions(1)
