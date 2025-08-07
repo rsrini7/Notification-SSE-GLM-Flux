@@ -23,7 +23,8 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap; // Import for locking
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock; // Import ReentrantLock
 import java.util.stream.Collectors;
 
 @Service
@@ -38,8 +39,8 @@ public class UserMessageService {
     private final CacheService cacheService;
     private final AppProperties appProperties;
 
-    // START OF CHANGE: Add a map to hold locks for cache rebuilding
-    private final ConcurrentHashMap<Long, Object> broadcastContentLocks = new ConcurrentHashMap<>();
+    // START OF CHANGE: Use ReentrantLock instead of Object for locking
+    private final ConcurrentHashMap<Long, ReentrantLock> broadcastContentLocks = new ConcurrentHashMap<>();
     // END OF CHANGE
 
     @Transactional(readOnly = true)
@@ -112,28 +113,27 @@ public class UserMessageService {
         );
     }
 
-    // START OF CHANGES: Implemented double-checked locking to prevent cache stampede
     private Optional<UserBroadcastResponse> enrichUserMessageInfo(UserMessageInfo info) {
         Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
 
         if (broadcastOpt.isEmpty()) {
-            // Get a specific lock object for the broadcastId
-            Object lock = broadcastContentLocks.computeIfAbsent(info.getBroadcastId(), k -> new Object());
-            
-            synchronized (lock) {
+            // Replace synchronized block with ReentrantLock
+            ReentrantLock lock = broadcastContentLocks.computeIfAbsent(info.getBroadcastId(), k -> new ReentrantLock());
+            lock.lock();
+            try {
                 // Double-check: Another thread might have rebuilt the cache while we were waiting for the lock.
                 broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
-                if (broadcastOpt.isPresent()) {
-                    log.info("Broadcast content for ID {} was populated by another thread. Using cached value.", info.getBroadcastId());
-                } else {
+                if (broadcastOpt.isEmpty()) {
                     // This is the only thread that will hit the DB for this key.
                     log.warn("Broadcast content for ID {} was not in cache. Fetching from DB.", info.getBroadcastId());
                     broadcastOpt = broadcastRepository.findById(info.getBroadcastId());
                     broadcastOpt.ifPresent(cacheService::cacheBroadcastContent);
                 }
+            } finally {
+                lock.unlock();
+                // Remove the lock object once we're done to prevent the map from growing indefinitely
+                broadcastContentLocks.remove(info.getBroadcastId(), lock);
             }
-            // Remove the lock object once we're done to prevent the map from growing indefinitely
-            broadcastContentLocks.remove(info.getBroadcastId());
         }
 
         if (broadcastOpt.isEmpty()) {
