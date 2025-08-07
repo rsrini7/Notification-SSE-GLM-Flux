@@ -20,7 +20,4 @@ public class MessageReadRequest {
     
     @NotNull(message = "Message ID is required")
     private Long messageId;
-    
-    @Builder.Default
-    private Boolean markAsRead = true;
 }

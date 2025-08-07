@@ -1,8 +1,9 @@
+//
 package com.example.broadcast.shared.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.*;
-import com.example.broadcast.shared.model.BroadcastMessage; // Import BroadcastMessage
+import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.util.Constants.ReadStatus;
 import com.github.benmanes.caffeine.cache.Cache;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +15,7 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional; // Import Optional
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -29,7 +30,7 @@ public class DefaultCacheService implements CacheService {
     private final Cache<String, List<PendingEventInfo>> pendingEventsCache;
     private final Cache<String, UserSessionInfo> userSessionCache;
     private final Cache<String, BroadcastStatsInfo> broadcastStatsCache;
-    private final Cache<Long, BroadcastMessage> broadcastContentCache; // Add broadcastContentCache
+    private final Cache<Long, BroadcastMessage> broadcastContentCache;
     private final ConcurrentHashMap<String, Boolean> onlineUsers = new ConcurrentHashMap<>();
 
     @Override
@@ -137,6 +138,7 @@ public class DefaultCacheService implements CacheService {
         pendingEventsCache.invalidate(userId);
     }
 
+    // START OF CHANGES
     @Override
     public void updateMessageReadStatus(String userId, Long broadcastId) {
         List<UserMessageInfo> messages = userMessagesCache.getIfPresent(userId);
@@ -144,13 +146,21 @@ public class DefaultCacheService implements CacheService {
             List<UserMessageInfo> updatedMessages = messages.stream()
                 .map(msg -> {
                     if (msg.getBroadcastId().equals(broadcastId)) {
-                        return new UserMessageInfo(msg.getMessageId(), msg.getBroadcastId(), msg.getContent(), msg.getPriority(), msg.getCreatedAt(), msg.getDeliveryStatus(), ReadStatus.READ.name());
+                        // Use the new simplified constructor
+                        return new UserMessageInfo(
+                            msg.getMessageId(), 
+                            msg.getBroadcastId(), 
+                            msg.getDeliveryStatus(), 
+                            ReadStatus.READ.name(), 
+                            msg.getCreatedAt()
+                        );
                     }
                     return msg;
                 }).collect(Collectors.toList());
             userMessagesCache.put(userId, updatedMessages);
         }
     }
+    // END OF CHANGES
 
     @Override
     public void cacheBroadcastStats(String statsKey, BroadcastStatsInfo stats) {
@@ -170,11 +180,10 @@ public class DefaultCacheService implements CacheService {
             "pendingEventsCache", pendingEventsCache.stats(),
             "userSessionCache", userSessionCache.stats(),
             "broadcastStatsCache", broadcastStatsCache.stats(),
-            "broadcastContentCache", broadcastContentCache.stats() // Add new cache stats
+            "broadcastContentCache", broadcastContentCache.stats()
         );
     }
 
-    // START OF CHANGES
     @Override
     public Optional<BroadcastMessage> getBroadcastContent(Long broadcastId) {
         return Optional.ofNullable(broadcastContentCache.getIfPresent(broadcastId));
@@ -186,5 +195,4 @@ public class DefaultCacheService implements CacheService {
             broadcastContentCache.put(broadcast.getId(), broadcast);
         }
     }
-    // END OF CHANGES
 }

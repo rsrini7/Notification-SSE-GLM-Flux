@@ -7,11 +7,14 @@ import java.time.ZonedDateTime;
 @Getter
 @AllArgsConstructor
 public class UserMessageInfo {
-    private final Long messageId;
+    // ID of the user_broadcast_messages record
+    private final Long messageId; 
+
+    // Foreign key to the broadcast_messages record
     private final Long broadcastId;
-    private final String content;
-    private final String priority;
-    private final ZonedDateTime createdAt;
+
+    // User-specific status fields
     private final String deliveryStatus;
     private final String readStatus;
+    private final ZonedDateTime createdAt;
 }
