@@ -32,6 +32,6 @@ public class BroadcastMessage {
     private ZonedDateTime createdAt;
     private ZonedDateTime updatedAt;
     private String status; // ACTIVE, EXPIRED, CANCELLED
-    private Boolean isFireAndForget;
-
+    @Builder.Default
+    private boolean isFireAndForget = false;
 }

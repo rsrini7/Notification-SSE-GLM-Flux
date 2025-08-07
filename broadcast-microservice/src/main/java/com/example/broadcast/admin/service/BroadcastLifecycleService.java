@@ -240,6 +240,7 @@ public class BroadcastLifecycleService {
                 .expiresAt(request.getExpiresAt())
                 .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .isFireAndForget(request.isFireAndForget())
                 .build();
     }
 

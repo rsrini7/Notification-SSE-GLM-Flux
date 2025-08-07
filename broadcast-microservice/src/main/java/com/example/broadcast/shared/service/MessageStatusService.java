@@ -87,6 +87,6 @@ public class MessageStatusService {
             // If not in cache, fall back to the database
             broadcastOpt = broadcastRepository.findById(broadcastId);
         }
-        return broadcastOpt.map(BroadcastMessage::getIsFireAndForget);
+        return broadcastOpt.map(BroadcastMessage::isFireAndForget);
     }
 }

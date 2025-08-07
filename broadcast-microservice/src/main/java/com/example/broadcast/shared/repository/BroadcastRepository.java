@@ -100,7 +100,7 @@ public class BroadcastRepository {
             ps.setString(10, broadcast.getStatus() != null ?
                     broadcast.getStatus() : BroadcastStatus.ACTIVE.name());
             
-            ps.setBoolean(11, broadcast.getIsFireAndForget()); // Set new parameter
+            ps.setBoolean(11, broadcast.isFireAndForget()); // Set new parameter
 
             return ps;
         }, keyHolder);
