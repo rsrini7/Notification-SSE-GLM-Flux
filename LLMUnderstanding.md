@@ -5,7 +5,7 @@ This project is a high-scale, real-time "Broadcast Messaging System" designed to
 
 Core Functionality:
 
-Admin Interface: An administrator can create broadcast messages, which can be sent immediately or scheduled for a later time. They can target all users, a select list of users, or users belonging to a specific role. The admin panel also includes a sophisticated Dead Letter Queue (DLQ) management interface to view, redrive, or purge failed messages.
+Admin Interface: An administrator can create broadcast messages, which can be sent immediately or scheduled for a later time. They can target all users, a select list of users, or users belonging to a specific role. The admin panel also includes a sophisticated Dead Letter Topic (DLT) management interface to view, redrive, or purge failed messages.
 
 User Interface: Users connect to the system and receive broadcast messages in real-time. They have a dedicated panel where they can view their messages and see their read/unread status.
 
@@ -62,7 +62,7 @@ The solution to Head-of-Line Blocking (a common Kafka anti-pattern) by using sep
 
 Robustness and Resilience:
 
-The system has a mature Dead Letter Queue (DLQ) strategy. Failed messages are not lost; they are routed to a DLT, stored, and can be managed (redriven or purged) via the UI. The custom 
+The system has a mature Dead Letter Topic (DLT) strategy. Failed messages are not lost; they are routed to a DLT, stored, and can be managed (redriven or purged) via the UI. The custom 
 
 ConciseLoggingErrorHandler is a thoughtful touch to reduce log noise during retries.
 

@@ -6,7 +6,7 @@ Backend: Java with Spring Boot and Netty
 ## Features
 
 - **Real-time Messaging**: Connects to the Java backend via HTTP SSE and `EventSource` for real-time message delivery.
-- **Admin Panel**: Create, manage, and monitor broadcast messages, including a panel for Dead Letter Queue (DLQ) management.
+- **Admin Panel**: Create, manage, and monitor broadcast messages, including a panel for Dead Letter Topic (DLT) management.
 - **User Panel**: Receive and manage broadcast messages with read/unread status.
 - **Modern UI**: Built with shadcn/ui components and Tailwind CSS.
 - **Responsive Design**: Works seamlessly on desktop and mobile devices.
@@ -68,7 +68,7 @@ Backend: Java with Spring Boot and Netty
 - **user_sessions**: Connection and session management
 - **user_preferences**: Notification preferences
 - **broadcast_statistics**: Performance metrics
-- **dlq_messages**: Dead Letter Queue for failed messages
+- **dlt_messages**: Dead Letter Topic for failed messages
 - **outbox_events**: Outbox table for event sourcing
 
 ## Scaling Guide
@@ -477,7 +477,7 @@ graph TD
         C -- "HTTP SSE" --> D(Broadcast Microservice)
         click D "https://github.com/rsrini7/Notification-SSE-GLM-Flux/blob/main/broadcast-microservice/src/main/java/com/example/broadcast/BroadcastApplication.java"
         D -- "Kafka Messages" --> E(Kafka Broker)
-        E -- "DLQ Messages" --> F(Kafka DLQ Topic)
+        E -- "DLT Messages" --> F(Kafka DLT Topic)
         D -- "DB Operations" --> G(PostgreSQL Database)
     end
 

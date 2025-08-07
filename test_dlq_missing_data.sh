@@ -11,4 +11,4 @@ fi
 echo "✅ Found Kafka container: $KAFKA_CONTAINER_ID"
 echo "✉️  Sending message with missing data reference to topic '$TOPIC_NAME'..."
 echo "$USER_KEY:$INVALID_PAYLOAD" | docker exec -i "$KAFKA_CONTAINER_ID" kafka-console-producer --bootstrap-server localhost:9092 --topic "$TOPIC_NAME" --property "parse.key=true" --property "key.separator=:"
-echo "🚀 Message sent. It will fail processing and land in the DLQ."
+echo "🚀 Message sent. It will fail processing and land in the DLT."

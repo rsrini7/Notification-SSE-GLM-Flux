@@ -6,7 +6,7 @@ import lombok.Getter;
 /**
  * Custom exception to hold the failed message event along with the cause.
  * This ensures that business context (like userId and broadcastId) is not lost
- * when an error is propagated to the DLQ handler.
+ * when an error is propagated to the DLT handler.
  */
 @Getter
 public class MessageProcessingException extends RuntimeException {

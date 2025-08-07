@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # A script to send a message that causes a NullPointerException,
-# which is not handled gracefully and will reliably trigger the DLQ.
+# which is not handled gracefully and will reliably trigger the DLT.
 
 # --- Configuration ---
 TOPIC_NAME="broadcast-events-selected"
@@ -32,4 +32,4 @@ echo "$USER_KEY:$INVALID_PAYLOAD" | docker exec -i "$KAFKA_CONTAINER_ID" \
     --property "key.separator=:"
 
 echo "🚀 Message sent successfully!"
-echo "👀 The message should now appear in the DLQ Management panel after the configured retries."
+echo "👀 The message should now appear in the DLT Management panel after the configured retries."

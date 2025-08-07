@@ -147,7 +147,7 @@ public class DltService {
             dltRepository.deleteById(id);
             log.info("Successfully redriven and purged DLT message with ID: {}", id);
         } catch (InterruptedException | ExecutionException e) {
-            log.error("Failed to redrive message with ID: {}. It will remain in the DLQ.", id, e);
+            log.error("Failed to redrive message with ID: {}. It will remain in the DLT.", id, e);
             throw new RuntimeException("Failed to send message to Kafka during redrive", e);
         }
     }

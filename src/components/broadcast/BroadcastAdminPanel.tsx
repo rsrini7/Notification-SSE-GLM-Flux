@@ -74,7 +74,7 @@ const BroadcastAdminPanel: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-red-800 dark:text-red-700">
             <AlertCircle className="h-5 w-5 text-red-800 dark:text-red-900" />
-            DLQ Test Mode
+            DLT Test Mode
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -101,7 +101,7 @@ const BroadcastAdminPanel: React.FC = () => {
           <TabsTrigger className='data-[state=active]:bg-yellow-400' value="create">Create Broadcast</TabsTrigger>
           <TabsTrigger className='data-[state=active]:bg-yellow-400' value="manage">Manage Broadcasts</TabsTrigger>
           <TabsTrigger className='data-[state=active]:bg-yellow-400' value="stats">Statistics</TabsTrigger>
-          <TabsTrigger className='data-[state=active]:bg-yellow-400' value="dlt">DLQ Management</TabsTrigger>
+          <TabsTrigger className='data-[state=active]:bg-yellow-400' value="dlt">DLT Management</TabsTrigger>
         </TabsList>
 
         <TabsContent value="create">
