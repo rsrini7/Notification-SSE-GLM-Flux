@@ -75,7 +75,6 @@ public class RedisConfig {
         return template;
     }
 
-    // START OF CHANGES
     @Bean
     public RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
         RedisTemplate<String, BroadcastMessage> template = new RedisTemplate<>();
@@ -85,5 +84,4 @@ public class RedisConfig {
         template.setValueSerializer(serializer);
         return template;
     }
-    // END OF CHANGES
 }

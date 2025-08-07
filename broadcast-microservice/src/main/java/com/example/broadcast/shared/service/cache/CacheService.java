@@ -42,18 +42,7 @@ public interface CacheService {
 
     Map<String, Object> getCacheStats();
 
-    // START OF CHANGES
-    /**
-     * Retrieves a broadcast message from the cache.
-     * @param broadcastId The ID of the broadcast to retrieve.
-     * @return An Optional containing the cached BroadcastMessage, or empty if not found.
-     */
     Optional<BroadcastMessage> getBroadcastContent(Long broadcastId);
 
-    /**
-     * Caches a broadcast message object.
-     * @param broadcast The BroadcastMessage object to cache.
-     */
     void cacheBroadcastContent(BroadcastMessage broadcast);
-    // END OF CHANGES
 }

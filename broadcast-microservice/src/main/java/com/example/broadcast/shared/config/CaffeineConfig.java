@@ -62,7 +62,6 @@ public class CaffeineConfig {
                 .build();
     }
 
-    // START OF CHANGES
     @Bean
     public Cache<Long, BroadcastMessage> broadcastContentCache() {
         return Caffeine.newBuilder()
@@ -71,5 +70,4 @@ public class CaffeineConfig {
                 .recordStats()
                 .build();
     }
-    // END OF CHANGES
 }

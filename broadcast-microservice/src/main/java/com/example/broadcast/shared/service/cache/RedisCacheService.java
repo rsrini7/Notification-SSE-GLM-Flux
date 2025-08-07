@@ -167,7 +167,6 @@ public class RedisCacheService implements CacheService {
         pendingEventsRedisTemplate.delete(PENDING_EVENTS_KEY_PREFIX + userId);
     }
 
-    // START OF CHANGES
     @Override
     public void updateMessageReadStatus(String userId, Long broadcastId) {
         String key = USER_MESSAGES_KEY_PREFIX + userId;
@@ -190,7 +189,6 @@ public class RedisCacheService implements CacheService {
             userMessagesRedisTemplate.opsForValue().set(key, updatedMessages, 24, TimeUnit.HOURS);
         }
     }
-    // END OF CHANGES
 
     @Override
     public void cacheBroadcastStats(String statsKey, BroadcastStatsInfo stats) {

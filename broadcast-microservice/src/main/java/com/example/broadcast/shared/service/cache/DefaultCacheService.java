@@ -1,4 +1,3 @@
-//
 package com.example.broadcast.shared.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
@@ -138,7 +137,6 @@ public class DefaultCacheService implements CacheService {
         pendingEventsCache.invalidate(userId);
     }
 
-    // START OF CHANGES
     @Override
     public void updateMessageReadStatus(String userId, Long broadcastId) {
         List<UserMessageInfo> messages = userMessagesCache.getIfPresent(userId);
@@ -160,7 +158,6 @@ public class DefaultCacheService implements CacheService {
             userMessagesCache.put(userId, updatedMessages);
         }
     }
-    // END OF CHANGES
 
     @Override
     public void cacheBroadcastStats(String statsKey, BroadcastStatsInfo stats) {

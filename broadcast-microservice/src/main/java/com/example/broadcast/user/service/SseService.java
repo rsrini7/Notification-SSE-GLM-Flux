@@ -138,7 +138,6 @@ public class SseService {
                     if (isUserConnected(userId)) {
                         messageStatusService.updateMessageToDelivered(message.getId(), broadcastId);
                         
-                        // START OF CHANGE: Add the newly delivered message to the user's cache
                         UserMessageInfo messageToCache = new UserMessageInfo(
                             message.getId(),
                             message.getBroadcastId(),
@@ -148,7 +147,6 @@ public class SseService {
                         );
                         cacheService.addMessageToUserCache(userId, messageToCache);
                         log.info("Added newly delivered message to cache for user: {}", userId);
-                        // END OF CHANGE
             
                         log.info("Message delivered to online user: {}, broadcast: {}", userId, broadcastId);
                     } else {

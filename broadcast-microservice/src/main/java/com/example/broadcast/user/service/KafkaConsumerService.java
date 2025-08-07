@@ -136,23 +136,17 @@ public class KafkaConsumerService {
 
     private void handleBroadcastCancelled(MessageDeliveryEvent event) {
         log.info("Handling broadcast cancelled event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
-        // START OF CHANGES
-        // Invalidate both pending and active message caches
         cacheService.removePendingEvent(event.getUserId(), event.getBroadcastId());
         cacheService.removeMessageFromUserCache(event.getUserId(), event.getBroadcastId());
         log.debug("Removed cancelled message from pending and active caches for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
-        // END OF CHANGES
         sseService.handleMessageEvent(event);
     }
 
     private void handleBroadcastExpired(MessageDeliveryEvent event) {
         log.info("Handling broadcast expired event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
-        // START OF CHANGES
-        // Invalidate both pending and active message caches
         cacheService.removePendingEvent(event.getUserId(), event.getBroadcastId());
         cacheService.removeMessageFromUserCache(event.getUserId(), event.getBroadcastId());
         log.debug("Removed expired message from pending and active caches for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
-        // END OF CHANGES
         sseService.handleMessageEvent(event);
     }
 }

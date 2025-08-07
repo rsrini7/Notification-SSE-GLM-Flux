@@ -36,7 +36,7 @@ public class UserMessageService {
     private final CacheService cacheService; // Inject CacheService
     private final AppProperties appProperties;
 
-    // START OF CHANGES: Implemented cache-aside pattern
+    // Implemented cache-aside pattern
     @Transactional(readOnly = true)
     public List<UserBroadcastResponse> getUserMessages(String userId) {
         log.info("Getting messages for user: {}", userId);
@@ -65,7 +65,6 @@ public class UserMessageService {
 
         return dbMessages;
     }
-    // END OF CHANGES
 
     public List<UserBroadcastResponse> getUnreadMessages(String userId) {
         log.info("Getting unread messages for user: {}", userId);
@@ -101,7 +100,6 @@ public class UserMessageService {
         }
     }
 
-    // START OF CHANGES: Helper methods for mapping between DTOs
     /**
      * Converts a full UserBroadcastResponse from the database into a lean UserMessageInfo for caching.
      */
@@ -139,5 +137,5 @@ public class UserMessageService {
             .expiresAt(broadcast.getExpiresAt())
             .build();
     }
-    // END OF CHANGES
+
 }
