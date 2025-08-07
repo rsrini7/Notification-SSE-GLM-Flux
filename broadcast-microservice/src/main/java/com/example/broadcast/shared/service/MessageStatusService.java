@@ -53,6 +53,7 @@ public class MessageStatusService {
             isFireAndForget(broadcastId).ifPresent(isFire -> {
                 if (isFire) {
                     log.info("Broadcast {} is Fire-and-Forget. Triggering expiration via manager.", broadcastId);
+                    // This call now correctly crosses a Spring proxy boundary
                     broadcastExpirationManager.expireFireAndForgetBroadcast(broadcastId);
                 }
             });
