@@ -193,7 +193,6 @@ public class BroadcastRepository {
             WHERE status = 'SCHEDULED' AND scheduled_at <= ?
             ORDER BY scheduled_at
             LIMIT ?
-            FOR UPDATE SKIP LOCKED
             """;
         return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime(), limit);
     }

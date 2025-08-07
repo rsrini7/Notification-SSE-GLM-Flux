@@ -5,6 +5,7 @@ import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,14 +24,19 @@ public class BroadcastSchedulingService {
 
     private static final int BATCH_LIMIT = 100;
 
+    /**
+     * Periodically processes scheduled broadcasts that are due.
+     * The SchedulerLock ensures this only runs on one pod at a time.
+     */
     @Scheduled(fixedRate = 60000) // Run every minute
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
+    @SchedulerLock(name = "processScheduledBroadcasts", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     public void processScheduledBroadcasts() {
         log.info("Checking for scheduled broadcasts to process...");
         List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findAndLockScheduledBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT); 
 
         if (broadcastsToProcess.isEmpty()) {
-            log.info("No scheduled broadcasts to process at this time."); 
+            log.info("No scheduled broadcasts to process at this time.");
             return;
         }
 

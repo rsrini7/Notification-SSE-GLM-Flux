@@ -3,6 +3,7 @@ package com.example.broadcast.user.service;
 import com.example.broadcast.shared.repository.UserSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,9 +26,11 @@ public class UserSessionCleanupService {
     /**
      * Periodically purges old, inactive user sessions from the database.
      * This job runs at 2 AM every day to enforce the data retention policy.
+     * The SchedulerLock ensures this heavy deletion task runs on only one pod.
      */
     @Scheduled(cron = "0 0 2 * * *") // Run daily at 2:00 AM
     @Transactional
+    @SchedulerLock(name = "purgeOldInactiveSessions", lockAtMostFor = "PT15M")
     public void purgeOldInactiveSessions() {
         log.info("Starting scheduled job to purge old, inactive user sessions...");
 

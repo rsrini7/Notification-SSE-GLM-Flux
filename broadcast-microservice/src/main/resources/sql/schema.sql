@@ -71,11 +71,10 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     connected_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     disconnected_at TIMESTAMP WITH TIME ZONE,
     last_heartbeat TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
+     
     -- Unique constraint for active sessions
     UNIQUE (user_id, session_id, pod_id)
 );
-
 -- Broadcast Statistics Table (for monitoring and analytics)
 -- Tracks performance metrics and delivery statistics
 CREATE TABLE IF NOT EXISTS broadcast_statistics (
@@ -106,10 +105,10 @@ CREATE TABLE IF NOT EXISTS user_preferences (
     quiet_hours_start TIME,
     quiet_hours_end TIME,
     timezone VARCHAR(50) DEFAULT 'UTC',
+    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-
 -- Indexes for fast session lookups
 CREATE INDEX idx_user_sessions_user_id ON user_sessions (user_id);
 CREATE INDEX idx_user_sessions_pod_id ON user_sessions (pod_id);
@@ -120,7 +119,6 @@ CREATE INDEX idx_stats_broadcast_id ON broadcast_statistics (broadcast_id);
 CREATE INDEX idx_stats_calculated_at ON broadcast_statistics (calculated_at);
 -- Index for user preference lookups
 CREATE INDEX idx_user_preferences_user_id ON user_preferences (user_id);
-
 CREATE TABLE IF NOT EXISTS dlt_messages (
     id VARCHAR(255) PRIMARY KEY,
     original_key VARCHAR(255), -- ADD THIS LINE
@@ -131,11 +129,8 @@ CREATE TABLE IF NOT EXISTS dlt_messages (
     failed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     original_message_payload TEXT
 );
-
 -- Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_dlt_failed_at ON dlt_messages (failed_at);
-
-
 -- Add the outbox table for the Transactional Outbox pattern
 CREATE TABLE IF NOT EXISTS outbox_events (
     id UUID PRIMARY KEY,
@@ -146,7 +141,6 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     payload TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-
 CREATE INDEX IF NOT EXISTS idx_outbox_created_at ON outbox_events (created_at);
 
 -- Create sequence for ID generation
@@ -155,3 +149,13 @@ CREATE SEQUENCE IF NOT EXISTS user_broadcast_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS session_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS stats_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS preferences_seq START WITH 1 INCREMENT BY 1;
+
+-- START OF SHEDLOCK TABLE
+-- This table is used by ShedLock to coordinate scheduled tasks across multiple pods.
+CREATE TABLE IF NOT EXISTS shedlock (
+    name VARCHAR(64) NOT NULL PRIMARY KEY,
+    lock_until TIMESTAMP(3) NOT NULL,
+    locked_at TIMESTAMP(3) NOT NULL,
+    locked_by VARCHAR(255) NOT NULL
+);
+-- END OF SHEDLOCK TABLE

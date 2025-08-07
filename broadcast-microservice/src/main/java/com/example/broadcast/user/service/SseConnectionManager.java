@@ -9,6 +9,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -28,9 +29,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-
 /**
  * Manages the low-level technical aspects of Server-Sent Event (SSE) connections.
+ * This class is the single source of truth for in-memory connection state on this pod.
  * Its responsibilities include:
  * - Creating and storing in-memory sinks for each client connection.
  * - Tracking active user-to-session mappings.
@@ -43,7 +44,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SseConnectionManager {
 
-    // In-memory state for active connections on this specific pod
+    // MOVED FROM SseService: This class now owns all in-memory connection state.
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> userSessionMap = new ConcurrentHashMap<>();
     private final Map<String, String> sessionIdToUserIdMap = new ConcurrentHashMap<>();
@@ -82,7 +83,7 @@ public class SseConnectionManager {
         userSinks.put(sessionId, sink);
         userSessionMap.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
         sessionIdToUserIdMap.put(sessionId, userId);
-
+        
         return sink.asFlux()
                 .doOnCancel(() -> removeEventStream(userId, sessionId))
                 .doOnError(throwable -> removeEventStream(userId, sessionId))
@@ -129,7 +130,10 @@ public class SseConnectionManager {
         }
 
         if (wasRemoved) {
-            userSinks.remove(sessionId);
+            Sinks.Many<ServerSentEvent<String>> sink = userSinks.remove(sessionId);
+            if (sink != null) {
+                sink.tryEmitComplete();
+            }
             sessionIdToUserIdMap.remove(sessionId);
             int updated = userSessionRepository.markSessionInactive(sessionId, appProperties.getPod().getId());
             if (updated > 0) {
@@ -168,6 +172,7 @@ public class SseConnectionManager {
      */
     @Scheduled(fixedRate = 60000)
     @Transactional
+    @SchedulerLock(name = "cleanupStaleSseSessions", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     public void cleanupStaleSessions() {
         try {
             long staleThresholdSeconds = (appProperties.getSse().getHeartbeatInterval() / 1000) * 3;
@@ -194,6 +199,7 @@ public class SseConnectionManager {
                     .map(UserSession::getUserId)
                     .distinct()
                     .collect(Collectors.toList());
+
             userSessionRepository.markSessionsInactiveForUsers(staleUserIds);
             log.info("Marked {} users as INACTIVE in the database.", staleUserIds.size());
 
@@ -202,6 +208,7 @@ public class SseConnectionManager {
                 cacheService.unregisterUserConnection(staleSession.getUserId(), staleSession.getSessionId());
             }
             log.info("Removed {} stale sessions from the cache.", allStaleSessions.size());
+
         } catch (Exception e) {
             log.error("Error during stale session cleanup task: {}", e.getMessage(), e);
         }
