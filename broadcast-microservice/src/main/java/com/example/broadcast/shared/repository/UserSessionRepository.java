@@ -17,6 +17,7 @@ import java.time.ZoneOffset;
 public class UserSessionRepository {
 
     private final JdbcTemplate jdbcTemplate;
+
     public UserSessionRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -32,7 +33,7 @@ public class UserSessionRepository {
                     .connectionStatus(rs.getString("connection_status"))
                     .connectedAt(rs.getTimestamp("connected_at").toInstant().atZone(ZoneOffset.UTC))
                     .disconnectedAt(rs.getTimestamp("disconnected_at") != null ? 
-                            rs.getTimestamp("disconnected_at").toInstant().atZone(ZoneOffset.UTC) : null)
+                        rs.getTimestamp("disconnected_at").toInstant().atZone(ZoneOffset.UTC) : null)
                     .lastHeartbeat(rs.getTimestamp("last_heartbeat").toInstant().atZone(ZoneOffset.UTC))
                     .build();
         }
@@ -60,7 +61,6 @@ public class UserSessionRepository {
                 INSERT (user_id, session_id, pod_id, connection_status, connected_at, last_heartbeat)
                 VALUES (s.user_id, s.session_id, s.pod_id, s.connection_status, s.connected_at, s.last_heartbeat)
             """;
-        
         jdbcTemplate.update(sql,
                 session.getUserId(),
                 session.getSessionId(),
@@ -68,7 +68,6 @@ public class UserSessionRepository {
                 session.getConnectionStatus(),
                 session.getConnectedAt().toOffsetDateTime(),
                 session.getLastHeartbeat().toOffsetDateTime());
-        
         return session;
     }
 
@@ -113,6 +112,18 @@ public class UserSessionRepository {
             String.join(",", java.util.Collections.nCopies(userIds.size(), "?"))
         );
         return jdbcTemplate.update(sql, userIds.toArray());
+    }
+
+    /**
+     * Deletes inactive user sessions that were disconnected before the specified threshold.
+     * This is used for long-term data purging.
+     *
+     * @param threshold The timestamp before which inactive sessions should be deleted.
+     * @return The number of records deleted.
+     */
+    public int deleteInactiveSessionsBefore(ZonedDateTime threshold) {
+        String sql = "DELETE FROM user_sessions WHERE connection_status = 'INACTIVE' AND disconnected_at < ?";
+        return jdbcTemplate.update(sql, threshold.toOffsetDateTime());
     }
 
     public long getActiveUserCountByPod(String podId) {
