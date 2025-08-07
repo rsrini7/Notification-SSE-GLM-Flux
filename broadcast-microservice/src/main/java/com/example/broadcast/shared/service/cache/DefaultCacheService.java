@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,14 +29,13 @@ public class DefaultCacheService implements CacheService {
     private final Cache<String, UserSessionInfo> userSessionCache;
     private final Cache<String, BroadcastStatsInfo> broadcastStatsCache;
     private final Cache<Long, BroadcastMessage> broadcastContentCache;
-    private final ConcurrentHashMap<String, Boolean> onlineUsers = new ConcurrentHashMap<>();
+    private final Cache<String, Boolean> onlineUsersCache;
 
     @Override
     public void registerUserConnection(String userId, String sessionId, String podId) {
         UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, sessionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
         userConnectionsCache.put(userId, connectionInfo);
-        onlineUsers.put(userId, true);
-        
+        onlineUsersCache.put(userId, true);
         UserSessionInfo sessionInfo = new UserSessionInfo(userId, sessionId, podId, ZonedDateTime.now());
         userSessionCache.put(sessionId, sessionInfo);
         log.debug("User connection registered in Caffeine: {} on pod {}", userId, podId);
@@ -46,7 +44,7 @@ public class DefaultCacheService implements CacheService {
     @Override
     public void unregisterUserConnection(String userId, String sessionId) {
         userConnectionsCache.invalidate(userId);
-        onlineUsers.remove(userId);
+        onlineUsersCache.invalidate(userId);
         userSessionCache.invalidate(sessionId);
         log.debug("User connection unregistered from Caffeine: {}", userId);
     }
@@ -65,7 +63,7 @@ public class DefaultCacheService implements CacheService {
 
     @Override
     public boolean isUserOnline(String userId) {
-        return onlineUsers.getOrDefault(userId, false);
+        return onlineUsersCache.getIfPresent(userId) != null;
     }
 
     @Override
@@ -75,7 +73,7 @@ public class DefaultCacheService implements CacheService {
 
     @Override
     public List<String> getOnlineUsers() {
-        return new ArrayList<>(onlineUsers.keySet());
+        return new ArrayList<>(onlineUsersCache.asMap().keySet());
     }
 
     @Override
@@ -144,7 +142,6 @@ public class DefaultCacheService implements CacheService {
             List<UserMessageInfo> updatedMessages = messages.stream()
                 .map(msg -> {
                     if (msg.getBroadcastId().equals(broadcastId)) {
-                        // Use the new simplified constructor
                         return new UserMessageInfo(
                             msg.getMessageId(), 
                             msg.getBroadcastId(), 
@@ -177,7 +174,8 @@ public class DefaultCacheService implements CacheService {
             "pendingEventsCache", pendingEventsCache.stats(),
             "userSessionCache", userSessionCache.stats(),
             "broadcastStatsCache", broadcastStatsCache.stats(),
-            "broadcastContentCache", broadcastContentCache.stats()
+            "broadcastContentCache", broadcastContentCache.stats(),
+            "onlineUsersCache", onlineUsersCache.stats()
         );
     }
 
