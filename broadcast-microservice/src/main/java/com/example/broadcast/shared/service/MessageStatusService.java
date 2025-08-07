@@ -1,7 +1,7 @@
 package com.example.broadcast.shared.service;
 
+import com.example.broadcast.admin.service.BroadcastExpirationManager;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
-import com.example.broadcast.shared.event.FireAndForgetTriggerEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
@@ -10,7 +10,6 @@ import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,7 +29,7 @@ public class MessageStatusService {
     private final OutboxEventPublisher outboxEventPublisher;
     private final BroadcastRepository broadcastRepository;
     private final CacheService cacheService;
-    private final ApplicationEventPublisher eventPublisher;
+    private final BroadcastExpirationManager broadcastExpirationManager; // Inject the new manager
 
     /**
      * Resets a message's status to PENDING in a new, independent transaction.
@@ -53,8 +52,8 @@ public class MessageStatusService {
             
             isFireAndForget(broadcastId).ifPresent(isFire -> {
                 if (isFire) {
-                    log.info("Broadcast {} is Fire-and-Forget. Publishing expiration trigger event.", broadcastId);
-                    eventPublisher.publishEvent(new FireAndForgetTriggerEvent(this, broadcastId));
+                    log.info("Broadcast {} is Fire-and-Forget. Triggering expiration via manager.", broadcastId);
+                    broadcastExpirationManager.expireFireAndForgetBroadcast(broadcastId);
                 }
             });
         }
