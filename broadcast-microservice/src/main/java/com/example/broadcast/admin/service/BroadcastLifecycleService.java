@@ -21,6 +21,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy; // Import Lazy
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,13 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Manages the full lifecycle of a broadcast, from creation and scheduling
- * to cancellation and expiration. This service handles all state-changing
- * (command) operations for broadcasts.
- */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class BroadcastLifecycleService {
 
@@ -52,10 +47,34 @@ public class BroadcastLifecycleService {
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
 
-    /**
-     * Creates a new broadcast.
-     * If scheduled, it's saved with a SCHEDULED status; otherwise, it's processed immediately.
-     */
+    // START OF CHANGE: Self-injection to solve the proxy issue
+    private final BroadcastLifecycleService self;
+
+    public BroadcastLifecycleService(
+            BroadcastRepository broadcastRepository,
+            UserBroadcastRepository userBroadcastRepository,
+            BroadcastStatisticsRepository broadcastStatisticsRepository,
+            BroadcastTargetingService broadcastTargetingService,
+            TestingConfigurationService testingConfigurationService,
+            OutboxEventPublisher outboxEventPublisher,
+            BroadcastMapper broadcastMapper,
+            AppProperties appProperties,
+            ObjectMapper objectMapper,
+            @Lazy BroadcastLifecycleService self // Use @Lazy to break the circular dependency
+    ) {
+        this.broadcastRepository = broadcastRepository;
+        this.userBroadcastRepository = userBroadcastRepository;
+        this.broadcastStatisticsRepository = broadcastStatisticsRepository;
+        this.broadcastTargetingService = broadcastTargetingService;
+        this.testingConfigurationService = testingConfigurationService;
+        this.outboxEventPublisher = outboxEventPublisher;
+        this.broadcastMapper = broadcastMapper;
+        this.appProperties = appProperties;
+        this.objectMapper = objectMapper;
+        this.self = self;
+    }
+    // END OF CHANGE
+
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
@@ -129,15 +148,19 @@ public class BroadcastLifecycleService {
         }
     }
 
+    // START OF CHANGE: Call the transactional method through the self-injected proxy
     @TransactionalEventListener(phase = org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT)
     public void handleFireAndForgetExpiration(FireAndForgetTriggerEvent event) {
         log.info("Received committed event to expire Fire-and-Forget broadcast: {}", event.getBroadcastId());
         try {
-            expireBroadcast(event.getBroadcastId());
+            // This now calls the method through the Spring proxy,
+            // which correctly applies the REQUIRES_NEW propagation.
+            self.expireBroadcast(event.getBroadcastId());
         } catch (Exception e) {
             log.error("Failed to process Fire-and-Forget expiration for broadcast ID: {}", event.getBroadcastId(), e);
         }
     }
+    // END OF CHANGE
 
     private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
         boolean shouldFail = testingConfigurationService.isKafkaConsumerFailureEnabled();
