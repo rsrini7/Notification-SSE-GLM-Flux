@@ -1,12 +1,8 @@
 package com.example.broadcast.shared.service;
 
-import com.example.broadcast.admin.service.BroadcastExpirationManager;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
-import com.example.broadcast.shared.model.BroadcastMessage;
-import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
-import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -27,9 +22,6 @@ public class MessageStatusService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final OutboxEventPublisher outboxEventPublisher;
-    private final BroadcastRepository broadcastRepository;
-    private final CacheService cacheService;
-    private final BroadcastExpirationManager broadcastExpirationManager; // Inject the new manager
 
     /**
      * Resets a message's status to PENDING in a new, independent transaction.
@@ -49,14 +41,6 @@ public class MessageStatusService {
         if (updatedRows > 0) {
             broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
             log.info("Updated message {} to DELIVERED and incremented stats for broadcast {}.", userBroadcastMessageId, broadcastId);
-            
-            isFireAndForget(broadcastId).ifPresent(isFire -> {
-                if (isFire) {
-                    log.info("Broadcast {} is Fire-and-Forget. Triggering expiration via manager.", broadcastId);
-                    // This call now correctly crosses a Spring proxy boundary
-                    broadcastExpirationManager.expireFireAndForgetBroadcast(broadcastId);
-                }
-            });
         }
     }
 
@@ -79,11 +63,4 @@ public class MessageStatusService {
         );
     }
 
-    private Optional<Boolean> isFireAndForget(Long broadcastId) {
-        Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(broadcastId);
-        if (broadcastOpt.isEmpty()) {
-            broadcastOpt = broadcastRepository.findById(broadcastId);
-        }
-        return broadcastOpt.map(BroadcastMessage::isFireAndForget);
-    }
 }

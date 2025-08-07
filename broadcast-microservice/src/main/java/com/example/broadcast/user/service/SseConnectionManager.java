@@ -1,6 +1,10 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.admin.service.BroadcastExpirationService;
 import com.example.broadcast.shared.config.AppProperties;
+import com.example.broadcast.shared.dto.UserDisconnectedEvent;
+import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -8,6 +12,7 @@ import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -35,7 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class SseConnectionManager {
+public class SseConnectionManager implements SseUserStatusService {
 
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> userSessionMap = new ConcurrentHashMap<>();
@@ -45,6 +50,8 @@ public class SseConnectionManager {
     private final CacheService cacheService;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher eventPublisher;
+
     private Disposable serverHeartbeatSubscription;
 
     @PostConstruct
@@ -112,6 +119,7 @@ public class SseConnectionManager {
             sessionIdToUserIdMap.remove(sessionId);
             sessionManager.removeSession(userId, sessionId, appProperties.getPod().getId());
             cacheService.unregisterUserConnection(userId, sessionId);
+            eventPublisher.publishEvent(new UserDisconnectedEvent(this, userId));
             log.info("Cleanly disconnected session {} for user {}", sessionId, userId);
         }
     }
@@ -203,6 +211,7 @@ public class SseConnectionManager {
         return userSinks.size();
     }
 
+    @Override
     public boolean isUserConnected(String userId) {
         Set<String> sessions = userSessionMap.get(userId);
         return sessions != null && !sessions.isEmpty();

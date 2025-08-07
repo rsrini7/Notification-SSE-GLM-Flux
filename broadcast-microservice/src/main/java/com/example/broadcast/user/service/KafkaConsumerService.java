@@ -122,7 +122,7 @@ public class KafkaConsumerService {
         if (isOnline) {
             sseService.handleMessageEvent(event);
             log.info("Broadcast event for online user {} forwarded to SSE service.", event.getUserId());
-        } else {
+        } else if (!event.isFireAndForget()) {
             log.info("User {} is offline, message remains pending", event.getUserId());
             cacheService.cachePendingEvent(event);
         }

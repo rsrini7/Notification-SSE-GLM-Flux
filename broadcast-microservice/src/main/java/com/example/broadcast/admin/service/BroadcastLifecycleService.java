@@ -193,6 +193,7 @@ public class BroadcastLifecycleService {
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .message(broadcast.getContent())
                 .transientFailure(transientFailure)
+                .isFireAndForget(broadcast.isFireAndForget())
                 .build();
     }
 

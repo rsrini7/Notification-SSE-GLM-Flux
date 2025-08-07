@@ -219,4 +219,14 @@ public class UserBroadcastRepository {
         """;
         return jdbcTemplate.update(sql, newStatus, broadcastId);
     }
+
+    public List<Long> findActiveBroadcastIdsByUserId(String userId) {
+        String sql = "SELECT broadcast_id FROM user_broadcast_messages WHERE user_id = ? AND delivery_status = 'DELIVERED'";
+        return jdbcTemplate.queryForList(sql, Long.class, userId);
+    }
+
+    public List<String> findBroadcastReceivers(Long broadcastId) {
+        String sql = "SELECT user_id FROM user_broadcast_messages WHERE broadcast_id = ?";
+        return jdbcTemplate.queryForList(sql, String.class, broadcastId);
+    }
 }
