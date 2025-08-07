@@ -34,7 +34,7 @@ public class UserBroadcastRepository {
             .deliveryStatus(rs.getString("delivery_status"))
             .readStatus(rs.getString("read_status"))
             .deliveredAt(rs.getTimestamp("delivered_at") != null ? 
-                    rs.getTimestamp("delivered_at").toInstant().atZone(ZoneOffset.UTC) : null)
+                rs.getTimestamp("delivered_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .readAt(rs.getTimestamp("read_at") != null ? 
                     rs.getTimestamp("read_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
@@ -56,10 +56,10 @@ public class UserBroadcastRepository {
             .category(rs.getString("category"))
             .broadcastCreatedAt(rs.getTimestamp("broadcast_created_at").toInstant().atZone(ZoneOffset.UTC))
             .scheduledAt(rs.getTimestamp("scheduled_at") != null ?
-                    rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
+                rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .expiresAt(rs.getTimestamp("expires_at") != null ? rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
             .build();
-
+            
     public UserBroadcastMessage save(UserBroadcastMessage userBroadcast) {
         String sql = """
             INSERT INTO user_broadcast_messages 
@@ -87,7 +87,6 @@ public class UserBroadcastRepository {
 
             return ps;
         }, keyHolder);
-        
         if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
             Map<String, Object> keys = keyHolder.getKeyList().get(0);
             Number id = (Number) keys.get("id");
@@ -125,7 +124,8 @@ public class UserBroadcastRepository {
             JOIN
                 broadcast_messages bm ON ubm.broadcast_id = bm.id
             WHERE
-                ubm.user_id = ? AND ubm.delivery_status != 'FAILED' 
+                ubm.user_id = ?
+                AND ubm.delivery_status != 'FAILED'
                 AND ubm.read_status = 'UNREAD'
                 AND bm.status IN ('ACTIVE', 'SCHEDULED')
                 AND (bm.expires_at IS NULL OR bm.expires_at > CURRENT_TIMESTAMP)
@@ -221,5 +221,4 @@ public class UserBroadcastRepository {
         """;
         return jdbcTemplate.update(sql, newStatus, broadcastId);
     }
-
 }

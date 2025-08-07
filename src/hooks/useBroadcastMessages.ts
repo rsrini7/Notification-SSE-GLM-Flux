@@ -23,16 +23,13 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
+      // The API now returns only valid, non-expired messages.
       const serverMessages = await userService.getUserMessages(userId);
-      const now = new Date().getTime();
-      const validMessages = serverMessages.filter(msg => 
-        !msg.expiresAt || new Date(msg.expiresAt).getTime() > now
-      );
-      setMessages(validMessages);
+      setMessages(serverMessages);
     } catch (error) {
       toast({
         title: 'Error',
-        description: `Failed to fetch messages for ${userId}`,
+         description: `Failed to fetch messages for ${userId}`,
         variant: 'destructive',
       });
     } finally {
@@ -78,7 +75,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
 
       case 'HEARTBEAT':
-        // This is a server-to-client heartbeat, we can ignore it in the UI.
         break;
       default:
         console.log('Unhandled SSE event type:', event.type);
@@ -90,14 +86,10 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     fetchMessages();
   }, [toast, fetchMessages, userId]);
 
-  // MODIFIED: This callback is now empty to avoid showing a "Disconnected" toast
-  // during automatic reconnections. It will still be shown for manual disconnects if you add logic here.
   const onDisconnect = useCallback(() => {
     // Intentionally left blank to make reconnections silent.
   }, []);
 
-  // MODIFIED: This callback is now empty to avoid showing an error toast
-  // for a recoverable connection loss.
   const onError = useCallback(() => {
     // Intentionally left blank. The hook will log the error to the console.
   }, []);
