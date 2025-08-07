@@ -2,6 +2,7 @@ package com.example.broadcast.shared.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.*;
+import com.example.broadcast.shared.model.BroadcastMessage; // Import BroadcastMessage
 import com.example.broadcast.shared.util.Constants.ReadStatus;
 import com.github.benmanes.caffeine.cache.Cache;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional; // Import Optional
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -27,9 +29,9 @@ public class DefaultCacheService implements CacheService {
     private final Cache<String, List<PendingEventInfo>> pendingEventsCache;
     private final Cache<String, UserSessionInfo> userSessionCache;
     private final Cache<String, BroadcastStatsInfo> broadcastStatsCache;
+    private final Cache<Long, BroadcastMessage> broadcastContentCache; // Add broadcastContentCache
     private final ConcurrentHashMap<String, Boolean> onlineUsers = new ConcurrentHashMap<>();
 
-    // ... (methods before getPendingEvents are unchanged)
     @Override
     public void registerUserConnection(String userId, String sessionId, String podId) {
         UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, sessionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
@@ -167,7 +169,22 @@ public class DefaultCacheService implements CacheService {
             "userMessagesCache", userMessagesCache.stats(),
             "pendingEventsCache", pendingEventsCache.stats(),
             "userSessionCache", userSessionCache.stats(),
-            "broadcastStatsCache", broadcastStatsCache.stats()
+            "broadcastStatsCache", broadcastStatsCache.stats(),
+            "broadcastContentCache", broadcastContentCache.stats() // Add new cache stats
         );
     }
+
+    // START OF CHANGES
+    @Override
+    public Optional<BroadcastMessage> getBroadcastContent(Long broadcastId) {
+        return Optional.ofNullable(broadcastContentCache.getIfPresent(broadcastId));
+    }
+
+    @Override
+    public void cacheBroadcastContent(BroadcastMessage broadcast) {
+        if (broadcast != null && broadcast.getId() != null) {
+            broadcastContentCache.put(broadcast.getId(), broadcast);
+        }
+    }
+    // END OF CHANGES
 }

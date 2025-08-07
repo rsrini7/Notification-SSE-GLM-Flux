@@ -1,6 +1,7 @@
 package com.example.broadcast.shared.config;
 
 import com.example.broadcast.shared.dto.cache.*;
+import com.example.broadcast.shared.model.BroadcastMessage; // Import BroadcastMessage
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.AllArgsConstructor;
@@ -8,6 +9,7 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import java.util.List;
+import java.time.Duration; // Import Duration
 
 @Configuration
 @EnableCaching
@@ -15,7 +17,6 @@ import java.util.List;
 public class CaffeineConfig {
 
     private final AppProperties appProperties;
-
     @Bean
     public Cache<String, UserConnectionInfo> userConnectionsCache() {
         return Caffeine.newBuilder()
@@ -60,4 +61,15 @@ public class CaffeineConfig {
                 .recordStats()
                 .build();
     }
+
+    // START OF CHANGES
+    @Bean
+    public Cache<Long, BroadcastMessage> broadcastContentCache() {
+        return Caffeine.newBuilder()
+                .maximumSize(1000) // Cache the latest 1000 broadcasts
+                .expireAfterWrite(Duration.ofHours(1)) // Keep broadcast content for 1 hour
+                .recordStats()
+                .build();
+    }
+    // END OF CHANGES
 }

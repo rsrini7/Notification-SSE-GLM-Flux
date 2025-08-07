@@ -3,9 +3,11 @@ package com.example.broadcast.user.service;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.user.dto.UserBroadcastResponse;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
+import com.example.broadcast.shared.model.BroadcastMessage; // Import BroadcastMessage
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
+import com.example.broadcast.shared.service.cache.CacheService; // Import CacheService
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
 import com.example.broadcast.shared.util.Constants.EventType;
 import com.example.broadcast.shared.util.Constants.SseEventType;
@@ -34,6 +36,7 @@ public class SseService {
     private final MessageStatusService messageStatusService;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
+    private final CacheService cacheService; // Inject CacheService
 
     @Transactional
     public void registerConnection(String userId, String sessionId) {
@@ -42,12 +45,10 @@ public class SseService {
     
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String sessionId) {
         log.info("Orchestrating event stream creation for user: {}, session: {}", userId, sessionId);
-        
         Flux<ServerSentEvent<String>> eventStream = sseConnectionManager.createEventStream(userId, sessionId);
 
         // This service's responsibility is now higher-level logic, like sending pending messages on connect.
         sendPendingMessages(userId);
-        
         try {
             String connectedPayload = objectMapper.writeValueAsString(Map.of("message", "SSE connection established with session " + sessionId));
             sseConnectionManager.sendEvent(userId, ServerSentEvent.<String>builder()
@@ -85,15 +86,34 @@ public class SseService {
         }
     }
 
+    // START OF CHANGES: Modified to use the cache
     private void sendPendingMessages(String userId) {
-        List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
-        for (UserBroadcastMessage message : pendingMessages) {
-            deliverMessageToUser(userId, message.getBroadcastId());
+        // Step 1: Prioritize fetching from the cache
+        List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
+
+        if (!pendingEvents.isEmpty()) {
+            log.info("Found {} pending messages in cache for user: {}", pendingEvents.size(), userId);
+            for (MessageDeliveryEvent event : pendingEvents) {
+                // Reuse existing delivery logic
+                deliverMessageToUser(event.getUserId(), event.getBroadcastId());
+            }
+            // Step 2: Clear the cache after processing to prevent re-delivery
+            cacheService.clearPendingEvents(userId);
+            return; // Exit after processing cached events
         }
+
+        // Step 3: Fallback to database only if cache is empty
+        List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
         if (!pendingMessages.isEmpty()) {
-            log.info("Sent {} pending messages to user: {}", pendingMessages.size(), userId);
+            log.warn("Cache was empty, but found {} pending messages in DB for user: {}", pendingMessages.size(), userId);
+            for (UserBroadcastMessage message : pendingMessages) {
+                deliverMessageToUser(userId, message.getBroadcastId());
+            }
+        }else{
+            log.info("No pending messages found in cache or DB for user: {}", userId);
         }
     }
+    // END OF CHANGES
 
     @Transactional
     public void deliverMessageToUser(String userId, Long broadcastId) {
@@ -130,11 +150,21 @@ public class SseService {
                 }
             });
     }
-
+    
+    // START OF CHANGES: Modified to use the cache
     private Optional<UserBroadcastResponse> buildUserBroadcastResponse(UserBroadcastMessage message) {
-        return broadcastRepository.findById(message.getBroadcastId())
-            .map(broadcast -> broadcastMapper.toUserBroadcastResponse(message, broadcast));
+        // First, try to get the broadcast from the cache
+        Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(message.getBroadcastId());
+
+        if (broadcastOpt.isEmpty()) {
+            // If not in cache, fetch from DB and populate the cache
+            broadcastOpt = broadcastRepository.findById(message.getBroadcastId());
+            broadcastOpt.ifPresent(cacheService::cacheBroadcastContent);
+        }
+
+        return broadcastOpt.map(broadcast -> broadcastMapper.toUserBroadcastResponse(message, broadcast));
     }
+    // END OF CHANGES
 
     public int getConnectedUserCount() {
         return sseConnectionManager.getConnectedUserCount();

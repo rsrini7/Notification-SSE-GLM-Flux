@@ -1,6 +1,6 @@
 package com.example.broadcast.shared.config;
-
 import com.example.broadcast.shared.dto.cache.*;
+import com.example.broadcast.shared.model.BroadcastMessage; // Import BroadcastMessage
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
@@ -10,7 +10,6 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
-
 import java.util.List;
 
 @Configuration
@@ -75,4 +74,16 @@ public class RedisConfig {
         template.setValueSerializer(serializer);
         return template;
     }
+
+    // START OF CHANGES
+    @Bean
+    public RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
+        RedisTemplate<String, BroadcastMessage> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+        Jackson2JsonRedisSerializer<BroadcastMessage> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, BroadcastMessage.class);
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(serializer);
+        return template;
+    }
+    // END OF CHANGES
 }

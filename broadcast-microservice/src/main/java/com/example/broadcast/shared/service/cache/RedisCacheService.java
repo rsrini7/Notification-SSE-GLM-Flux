@@ -2,6 +2,7 @@ package com.example.broadcast.shared.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.*;
+import com.example.broadcast.shared.model.BroadcastMessage; // Import BroadcastMessage
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ public class RedisCacheService implements CacheService {
     private final RedisTemplate<String, List<PendingEventInfo>> pendingEventsRedisTemplate;
     private final RedisTemplate<String, UserSessionInfo> userSessionRedisTemplate;
     private final RedisTemplate<String, BroadcastStatsInfo> broadcastStatsRedisTemplate;
+    private final RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate; // Add broadcastMessageRedisTemplate
 
     private static final String USER_CONNECTION_KEY_PREFIX = "user-conn:";
     private static final String ONLINE_USERS_KEY = "online-users";
@@ -39,6 +41,7 @@ public class RedisCacheService implements CacheService {
     private static final String PENDING_EVENTS_KEY_PREFIX = "pending-evt:";
     private static final String BROADCAST_STATS_KEY_PREFIX = "broadcast-stats:";
     private static final String USER_SESSION_KEY_PREFIX = "user-sess:";
+    private static final String BROADCAST_CONTENT_KEY_PREFIX = "broadcast-content:"; // Add key prefix
 
     @Override
     public void registerUserConnection(String userId, String sessionId, String podId) {
@@ -50,7 +53,6 @@ public class RedisCacheService implements CacheService {
         UserSessionInfo sessionInfo = new UserSessionInfo(userId, sessionId, podId, ZonedDateTime.now());
         String sessionKey = USER_SESSION_KEY_PREFIX + sessionId;
         userSessionRedisTemplate.opsForValue().set(sessionKey, sessionInfo, 30, TimeUnit.MINUTES);
-
         log.debug("User connection and session registered in Redis: {} on pod {}", userId, podId);
     }
 
@@ -114,7 +116,7 @@ public class RedisCacheService implements CacheService {
         if (messages == null) {
             messages = new ArrayList<>();
         }
-        messages.add(0, message); // Add to the beginning
+        messages.add(0, message);
         userMessagesRedisTemplate.opsForValue().set(key, messages, 24, TimeUnit.HOURS);
     }
 
@@ -202,17 +204,16 @@ public class RedisCacheService implements CacheService {
                 stats.put("fragmentationRatio", info.getProperty("mem_fragmentation_ratio"));
             }
             stats.put("totalKeys", connection.serverCommands().dbSize());
-
             Map<String, Long> keyCounts = new LinkedHashMap<>();
             keyCounts.put("userConnections", countKeysByPattern(connection, USER_CONNECTION_KEY_PREFIX + "*"));
             keyCounts.put("userMessages", countKeysByPattern(connection, USER_MESSAGES_KEY_PREFIX + "*"));
             keyCounts.put("pendingEvents", countKeysByPattern(connection, PENDING_EVENTS_KEY_PREFIX + "*"));
             keyCounts.put("userSessions", countKeysByPattern(connection, USER_SESSION_KEY_PREFIX + "*"));
             keyCounts.put("broadcastStats", countKeysByPattern(connection, BROADCAST_STATS_KEY_PREFIX + "*"));
+            keyCounts.put("broadcastContent", countKeysByPattern(connection, BROADCAST_CONTENT_KEY_PREFIX + "*")); // Add new count
             keyCounts.put("onlineUsersSetSize", connection.setCommands().sCard(ONLINE_USERS_KEY.getBytes()));
 
             stats.put("keyCountsByPrefix", keyCounts);
-
         } catch (Exception e) {
             log.error("Failed to get Redis cache stats", e);
             stats.put("error", e.getMessage());
@@ -232,4 +233,20 @@ public class RedisCacheService implements CacheService {
         }
         return count;
     }
+
+    // START OF CHANGES
+    @Override
+    public Optional<BroadcastMessage> getBroadcastContent(Long broadcastId) {
+        String key = BROADCAST_CONTENT_KEY_PREFIX + broadcastId;
+        return Optional.ofNullable(broadcastMessageRedisTemplate.opsForValue().get(key));
+    }
+
+    @Override
+    public void cacheBroadcastContent(BroadcastMessage broadcast) {
+        if (broadcast != null && broadcast.getId() != null) {
+            String key = BROADCAST_CONTENT_KEY_PREFIX + broadcast.getId();
+            broadcastMessageRedisTemplate.opsForValue().set(key, broadcast, 1, TimeUnit.HOURS);
+        }
+    }
+    // END OF CHANGES
 }
