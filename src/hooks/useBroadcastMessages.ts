@@ -16,7 +16,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     baseUrl = '',
     autoConnect = true
   } = options;
-
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -56,12 +55,11 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
               return [payload, ...prev];
             }
             return prev;
-           });
+          });
         }
         break;
       
       case 'READ_RECEIPT':
-        // This event can now be used for more subtle UI feedback if needed, but it won't remove the message.
         console.log(`Read receipt for broadcast ${payload.broadcastId} acknowledged.`);
         break;
       
@@ -80,9 +78,8 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
 
       case 'HEARTBEAT':
-        console.log(`Heartbeat received for user: ${userId}`, payload);
+        // This is a server-to-client heartbeat, we can ignore it in the UI.
         break;
-
       default:
         console.log('Unhandled SSE event type:', event.type);
     }
@@ -93,13 +90,17 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     fetchMessages();
   }, [toast, fetchMessages, userId]);
 
+  // MODIFIED: This callback is now empty to avoid showing a "Disconnected" toast
+  // during automatic reconnections. It will still be shown for manual disconnects if you add logic here.
   const onDisconnect = useCallback(() => {
-    toast({ title: 'Disconnected', description: `Real-time updates disabled for ${userId}`, variant: 'destructive' });
-  }, [toast, userId]);
+    // Intentionally left blank to make reconnections silent.
+  }, []);
 
+  // MODIFIED: This callback is now empty to avoid showing an error toast
+  // for a recoverable connection loss.
   const onError = useCallback(() => {
-    toast({ title: 'Connection Error', description: `Failed to connect for ${userId}`, variant: 'destructive' });
-  }, [toast, userId]);
+    // Intentionally left blank. The hook will log the error to the console.
+  }, []);
 
   const sseConnection = useSseConnection({
     userId,
@@ -110,17 +111,16 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     onDisconnect,
     onError,
   });
-  
+
   const markAsRead = useCallback(async (messageId: number) => {
-    // The function no longer performs optimistic updates.
-    // It just sends the request to the server. The server's response (via SSE) will trigger the UI change.
     try {
       await sseConnection.markAsRead(messageId);
       toast({
         title: 'Action Sent',
         description: `Message marked as read for ${userId}. It will be removed shortly.`,
       });
-    } catch (error) {
+    } catch (error) 
+    {
      toast({ 
         title: 'Error', 
         description: `Failed to mark message as read for ${userId}.`, 
@@ -128,7 +128,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
      });
     }
   }, [sseConnection, toast, userId]);
-  
+
   const stats = useMemo(() => {
     const total = messages.length;
     const unread = messages.filter(msg => msg.readStatus === 'UNREAD').length;
