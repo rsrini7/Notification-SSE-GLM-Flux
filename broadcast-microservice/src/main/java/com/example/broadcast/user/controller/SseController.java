@@ -1,10 +1,9 @@
 package com.example.broadcast.user.controller;
 
-
-import com.example.broadcast.shared.repository.UserSessionRepository;
+import com.example.broadcast.shared.config.AppProperties;
+import com.example.broadcast.user.service.DistributedSessionManager;
 import com.example.broadcast.user.service.SseService;
 import com.example.broadcast.user.service.UserMessageService;
-import com.example.broadcast.shared.config.AppProperties;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
@@ -28,9 +27,8 @@ import java.util.UUID;
 public class SseController {
 
     private final SseService sseService;
-    private final UserSessionRepository userSessionRepository;
     private final UserMessageService userMessageService;
-    
+    private final DistributedSessionManager sessionManager;
     private final AppProperties appProperties;
 
     @GetMapping(value = "/connect", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -39,24 +37,24 @@ public class SseController {
             @RequestParam String userId,
             @RequestParam(required = false) String sessionId,
             ServerWebExchange exchange) {
-        
-        log.info("SSE connection request from user: {}, session: {}, IP: {}", 
+
+        log.info("SSE connection request from user: {}, session: {}, IP: {}",
                  userId, sessionId, exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
-        
+
         if (sessionId == null || sessionId.trim().isEmpty()) {
             sessionId = UUID.randomUUID().toString();
         }
-        
+
         sseService.registerConnection(userId, sessionId);
         Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, sessionId);
         log.info("SSE connection established for user: {}, session: {}", userId, sessionId);
         return eventStream;
     }
-    
+
     public Flux<ServerSentEvent<String>> connectFallback(String userId, String sessionId, ServerWebExchange exchange, RequestNotPermitted ex) {
-        log.warn("Connection rate limit exceeded for user: {}. IP: {}. Details: {}", 
-            userId, 
-            exchange.getRequest().getRemoteAddress(), 
+        log.warn("Connection rate limit exceeded for user: {}. IP: {}. Details: {}",
+            userId,
+            exchange.getRequest().getRemoteAddress(),
             ex.getMessage());
         return Flux.error(new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Connection rate limit exceeded. Please try again later."));
     }
@@ -65,7 +63,7 @@ public class SseController {
     public ResponseEntity<String> disconnect(
             @RequestParam String userId,
             @RequestParam String sessionId) {
-        
+
         log.info("Disconnect request from user: {}, session: {}", userId, sessionId);
         sseService.removeEventStream(userId, sessionId);
         return ResponseEntity.ok("Disconnected successfully");
@@ -74,12 +72,9 @@ public class SseController {
     @GetMapping("/stats")
     public ResponseEntity<java.util.Map<String, Object>> getStats() {
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
-        long totalActiveUsers = userSessionRepository.getTotalActiveUserCount();
-        stats.put("totalActiveUsers", totalActiveUsers);
-        long podActiveUsers = userSessionRepository.getActiveUserCountByPod(appProperties.getPod().getId());
-        stats.put("podActiveUsers", podActiveUsers);
-        int sseConnectedUsers = sseService.getConnectedUserCount();
-        stats.put("sseConnectedUsers", sseConnectedUsers);
+        stats.put("totalActiveUsers", sessionManager.getTotalActiveUsers());
+        stats.put("podActiveUsers", sessionManager.getPodActiveUsers(appProperties.getPod().getId()));
+        stats.put("sseConnectedUsers", sseService.getConnectedUserCount());
         stats.put("podId", appProperties.getPod().getId());
         stats.put("timestamp", ZonedDateTime.now());
         return ResponseEntity.ok(stats);

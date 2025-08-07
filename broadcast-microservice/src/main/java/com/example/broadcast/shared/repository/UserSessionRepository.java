@@ -157,4 +157,21 @@ public class UserSessionRepository {
             ps.setTimestamp(6, Timestamp.from(session.getLastHeartbeat().toInstant()));
         });
     }
+
+    public Optional<UserSession> findBySessionId(String sessionId) {
+        String sql = "SELECT * FROM user_sessions WHERE session_id = ? FETCH FIRST 1 ROWS ONLY";
+        List<UserSession> results = jdbcTemplate.query(sql, sessionRowMapper, sessionId);
+        return results.stream().findFirst();
+    }
+
+    public int markSessionsInactive(List<String> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return 0;
+        }
+        String sql = String.format(
+            "UPDATE user_sessions SET connection_status = 'INACTIVE', disconnected_at = CURRENT_TIMESTAMP WHERE session_id IN (%s)",
+            String.join(",", java.util.Collections.nCopies(sessionIds.size(), "?"))
+        );
+        return jdbcTemplate.update(sql, sessionIds.toArray());
+    }
 }

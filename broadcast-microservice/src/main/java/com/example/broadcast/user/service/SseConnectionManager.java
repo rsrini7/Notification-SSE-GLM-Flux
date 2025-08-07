@@ -1,8 +1,6 @@
 package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.config.AppProperties;
-import com.example.broadcast.shared.model.UserSession;
-import com.example.broadcast.shared.repository.UserSessionRepository;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -13,21 +11,16 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * Manages the low-level technical aspects of Server-Sent Event (SSE) connections.
@@ -44,16 +37,14 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SseConnectionManager {
 
-    // MOVED FROM SseService: This class now owns all in-memory connection state.
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> userSessionMap = new ConcurrentHashMap<>();
     private final Map<String, String> sessionIdToUserIdMap = new ConcurrentHashMap<>();
 
-    private final UserSessionRepository userSessionRepository;
+    private final DistributedSessionManager sessionManager;
     private final CacheService cacheService;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
-
     private Disposable serverHeartbeatSubscription;
 
     @PostConstruct
@@ -79,11 +70,9 @@ public class SseConnectionManager {
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String sessionId) {
         log.debug("Creating SSE event stream for user: {}, session: {}", userId, sessionId);
         Sinks.Many<ServerSentEvent<String>> sink = Sinks.many().multicast().onBackpressureBuffer();
-
         userSinks.put(sessionId, sink);
         userSessionMap.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
         sessionIdToUserIdMap.put(sessionId, userId);
-        
         return sink.asFlux()
                 .doOnCancel(() -> removeEventStream(userId, sessionId))
                 .doOnError(throwable -> removeEventStream(userId, sessionId))
@@ -96,17 +85,8 @@ public class SseConnectionManager {
      * @param userId    The user's ID.
      * @param sessionId The session's unique ID.
      */
-    @Transactional
     public void registerConnection(String userId, String sessionId) {
-        UserSession session = UserSession.builder()
-                .userId(userId)
-                .sessionId(sessionId)
-                .podId(appProperties.getPod().getId())
-                .connectionStatus("ACTIVE")
-                .connectedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .lastHeartbeat(ZonedDateTime.now(ZoneOffset.UTC))
-                .build();
-        userSessionRepository.save(session);
+        sessionManager.registerSession(userId, sessionId, appProperties.getPod().getId());
         cacheService.registerUserConnection(userId, sessionId, appProperties.getPod().getId());
         log.info("User session saved for user: {}, session: {}", userId, sessionId);
     }
@@ -118,31 +98,80 @@ public class SseConnectionManager {
      * @param userId    The user's ID.
      * @param sessionId The session's unique ID.
      */
-    @Transactional
     public void removeEventStream(String userId, String sessionId) {
-        boolean wasRemoved = false;
-        Set<String> sessions = userSessionMap.get(userId);
-        if (sessions != null) {
-            wasRemoved = sessions.remove(sessionId);
-            if (sessions.isEmpty()) {
-                userSessionMap.remove(userId);
-            }
-        }
-
-        if (wasRemoved) {
-            Sinks.Many<ServerSentEvent<String>> sink = userSinks.remove(sessionId);
-            if (sink != null) {
-                sink.tryEmitComplete();
+        Sinks.Many<ServerSentEvent<String>> sink = userSinks.remove(sessionId);
+        if (sink != null) {
+            sink.tryEmitComplete();
+            Set<String> sessions = userSessionMap.get(userId);
+            if (sessions != null) {
+                sessions.remove(sessionId);
+                if (sessions.isEmpty()) {
+                    userSessionMap.remove(userId);
+                }
             }
             sessionIdToUserIdMap.remove(sessionId);
-            int updated = userSessionRepository.markSessionInactive(sessionId, appProperties.getPod().getId());
-            if (updated > 0) {
-                cacheService.unregisterUserConnection(userId, sessionId);
-                log.info("Cleanly disconnected session {} for user {}", sessionId, userId);
-            }
+            sessionManager.removeSession(userId, sessionId, appProperties.getPod().getId());
+            cacheService.unregisterUserConnection(userId, sessionId);
+            log.info("Cleanly disconnected session {} for user {}", sessionId, userId);
         }
     }
-    
+
+    /**
+     * Scheduled job to find and mark stale sessions as INACTIVE across the cluster.
+     * It also cleans up any corresponding in-memory sinks on the current pod.
+     */
+    @Scheduled(fixedRate = 60000)
+    @SchedulerLock(name = "cleanupStaleSseSessions", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
+    public void cleanupStaleSessions() {
+        try {
+            long staleThresholdSeconds = (appProperties.getSse().getHeartbeatInterval() / 1000) * 3;
+            long thresholdTimestamp = ZonedDateTime.now().minusSeconds(staleThresholdSeconds).toEpochSecond();
+            Set<String> staleSessionIds = sessionManager.getStaleSessionIds(thresholdTimestamp);
+            if (staleSessionIds.isEmpty()) return;
+
+            log.warn("Found {} total stale sessions cluster-wide to clean up.", staleSessionIds.size());
+
+            for (String sessionId : staleSessionIds) {
+                sessionManager.getSessionDetails(sessionId).ifPresent(details -> {
+                    if (appProperties.getPod().getId().equals(details.getPodId())) {
+                        removeEventStream(details.getUserId(), sessionId);
+                    } else {
+                        cacheService.unregisterUserConnection(details.getUserId(), sessionId);
+                    }
+                });
+            }
+            sessionManager.removeSessions(staleSessionIds);
+        } catch (Exception e) {
+            log.error("Error during stale session cleanup task: {}", e.getMessage(), e);
+        }
+    }
+
+    private void startServerHeartbeat() {
+        serverHeartbeatSubscription = Flux.interval(Duration.ofMillis(appProperties.getSse().getHeartbeatInterval()), Schedulers.parallel())
+            .doOnNext(tick -> {
+                try {
+                    Set<String> sessionIdsOnThisPod = userSinks.keySet();
+                    if (sessionIdsOnThisPod.isEmpty()) return;
+                    
+                    sessionManager.updateHeartbeats(appProperties.getPod().getId(), sessionIdsOnThisPod);
+
+                    String payload = objectMapper.writeValueAsString(Map.of("timestamp", ZonedDateTime.now()));
+                    ServerSentEvent<String> heartbeatEvent = ServerSentEvent.<String>builder()
+                            .event("HEARTBEAT").data(payload).build();
+
+                    for (String sessionId : sessionIdsOnThisPod) {
+                        String userId = sessionIdToUserIdMap.get(sessionId);
+                        if (userId != null) {
+                            sendEvent(userId, heartbeatEvent);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("Error in server heartbeat task: {}", e.getMessage());
+                }
+            })
+            .subscribe();
+    }
+
     /**
      * Pushes an event to all active sessions for a given user.
      * If emitting an event fails, it triggers an asynchronous cleanup of the failed session.
@@ -164,85 +193,6 @@ public class SseConnectionManager {
                 }
             }
         }
-    }
-
-    /**
-     * Scheduled job to find and mark stale sessions as INACTIVE across the cluster.
-     * It also cleans up any corresponding in-memory sinks on the current pod.
-     */
-    @Scheduled(fixedRate = 60000)
-    @Transactional
-    @SchedulerLock(name = "cleanupStaleSseSessions", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
-    public void cleanupStaleSessions() {
-        try {
-            long staleThresholdSeconds = (appProperties.getSse().getHeartbeatInterval() / 1000) * 3;
-            ZonedDateTime threshold = ZonedDateTime.now().minusSeconds(staleThresholdSeconds);
-
-            List<UserSession> allStaleSessions = userSessionRepository.findStaleSessions(threshold);
-            if (allStaleSessions.isEmpty()) return;
-
-            // Step 1: Clean up in-memory sinks for stale sessions that belong to THIS pod
-            List<UserSession> staleSessionsOnThisPod = allStaleSessions.stream()
-                    .filter(session -> appProperties.getPod().getId().equals(session.getPodId()))
-                    .collect(Collectors.toList());
-
-            if (!staleSessionsOnThisPod.isEmpty()) {
-                log.warn("Found {} stale sessions on this pod ({}) to clean up from memory.", staleSessionsOnThisPod.size(), appProperties.getPod().getId());
-                for (UserSession staleSession : staleSessionsOnThisPod) {
-                    removeEventStream(staleSession.getUserId(), staleSession.getSessionId());
-                }
-            }
-            
-            // Step 2: Mark ALL stale sessions as INACTIVE in the database
-            log.warn("Found {} total stale sessions cluster-wide to mark as INACTIVE.", allStaleSessions.size());
-            List<String> staleUserIds = allStaleSessions.stream()
-                    .map(UserSession::getUserId)
-                    .distinct()
-                    .collect(Collectors.toList());
-
-            userSessionRepository.markSessionsInactiveForUsers(staleUserIds);
-            log.info("Marked {} users as INACTIVE in the database.", staleUserIds.size());
-
-            // Step 3: Remove all stale sessions from the cache
-            for (UserSession staleSession : allStaleSessions) {
-                cacheService.unregisterUserConnection(staleSession.getUserId(), staleSession.getSessionId());
-            }
-            log.info("Removed {} stale sessions from the cache.", allStaleSessions.size());
-
-        } catch (Exception e) {
-            log.error("Error during stale session cleanup task: {}", e.getMessage(), e);
-        }
-    }
-
-    private void startServerHeartbeat() {
-        serverHeartbeatSubscription = Flux.interval(Duration.ofMillis(appProperties.getSse().getHeartbeatInterval()), Schedulers.parallel())
-                .doOnNext(tick -> {
-                    try {
-                        List<String> sessionIds = new ArrayList<>(userSinks.keySet());
-                        if (sessionIds.isEmpty()) {
-                            return;
-                        }
-                        
-                        // Update heartbeat timestamp in the database for all active sessions on this pod
-                        userSessionRepository.updateLastHeartbeatForActiveSessions(sessionIds, appProperties.getPod().getId());
-
-                        String payload = objectMapper.writeValueAsString(Map.of("timestamp", ZonedDateTime.now()));
-                        ServerSentEvent<String> heartbeatEvent = ServerSentEvent.<String>builder()
-                                .event("HEARTBEAT")
-                                .data(payload)
-                                .build();
-
-                        for (String sessionId : sessionIds) {
-                            String userId = sessionIdToUserIdMap.get(sessionId);
-                            if (userId != null) {
-                                sendEvent(userId, heartbeatEvent);
-                            }
-                        }
-                    } catch (Exception e) {
-                        log.error("Error in server heartbeat task: {}", e.getMessage());
-                    }
-                })
-                .subscribe();
     }
 
     private void cleanupFailedSessionAsync(String userId, String sessionId) {
