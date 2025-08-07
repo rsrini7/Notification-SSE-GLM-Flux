@@ -35,7 +35,7 @@ public class BroadcastRepository {
             .senderName(rs.getString("sender_name"))
             .content(rs.getString("content"))
             .targetType(rs.getString("target_type"))
-            .targetIds(JsonUtils.parseJsonArray(rs.getString("target_ids"))) // REFACTORED
+            .targetIds(JsonUtils.parseJsonArray(rs.getString("target_ids")))
             .priority(rs.getString("priority"))
             .category(rs.getString("category"))
             .scheduledAt(rs.getTimestamp("scheduled_at") != null ?
@@ -45,6 +45,7 @@ public class BroadcastRepository {
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
             .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
             .status(rs.getString("status"))
+            .isFireAndForget(rs.getBoolean("is_fire_and_forget")) // Read new column
             .build();
 
     private final RowMapper<BroadcastResponse> broadcastResponseRowMapper = (rs, rowNum) -> BroadcastResponse.builder()
@@ -70,8 +71,8 @@ public class BroadcastRepository {
     public BroadcastMessage save(BroadcastMessage broadcast) {
         String sql = """
             INSERT INTO broadcast_messages
-            (sender_id, sender_name, content, target_type, target_ids, priority, category, scheduled_at, expires_at, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (sender_id, sender_name, content, target_type, target_ids, priority, category, scheduled_at, expires_at, status, is_fire_and_forget)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
@@ -80,7 +81,7 @@ public class BroadcastRepository {
             ps.setString(2, broadcast.getSenderName());
             ps.setString(3, broadcast.getContent());
             ps.setString(4, broadcast.getTargetType());
-            ps.setString(5, JsonUtils.toJsonArray(broadcast.getTargetIds())); // REFACTORED
+            ps.setString(5, JsonUtils.toJsonArray(broadcast.getTargetIds()));
             ps.setString(6, broadcast.getPriority());
             ps.setString(7, broadcast.getCategory());
 
@@ -89,6 +90,7 @@ public class BroadcastRepository {
             } else {
                 ps.setNull(8, Types.TIMESTAMP_WITH_TIMEZONE);
             }
+        
             if (broadcast.getExpiresAt() != null) {
                 ps.setObject(9, broadcast.getExpiresAt().toOffsetDateTime());
             } else {
@@ -97,6 +99,9 @@ public class BroadcastRepository {
 
             ps.setString(10, broadcast.getStatus() != null ?
                     broadcast.getStatus() : BroadcastStatus.ACTIVE.name());
+            
+            ps.setBoolean(11, broadcast.getIsFireAndForget()); // Set new parameter
+
             return ps;
         }, keyHolder);
         

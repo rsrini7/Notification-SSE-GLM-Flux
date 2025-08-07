@@ -41,7 +41,10 @@ public class BroadcastRequest {
 
     private java.time.ZonedDateTime expiresAt;
     
-    // This field was added to match the frontend payload correctly
     @Builder.Default
     private boolean isImmediate = true;
+    
+    @Builder.Default
+    private boolean isFireAndForget = false;
+
 }

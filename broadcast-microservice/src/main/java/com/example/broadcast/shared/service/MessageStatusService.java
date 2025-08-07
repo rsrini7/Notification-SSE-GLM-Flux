@@ -1,7 +1,10 @@
-// Location: src/main/java/com/example/broadcast/shared/service/MessageStatusService.java
 package com.example.broadcast.shared.service;
 
+import com.example.broadcast.admin.service.BroadcastLifecycleService;
+import com.example.broadcast.shared.service.cache.CacheService;
+import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
+import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
@@ -13,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -23,6 +27,9 @@ public class MessageStatusService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final OutboxEventPublisher outboxEventPublisher;
+    private final BroadcastLifecycleService broadcastLifecycleService;
+    private final BroadcastRepository broadcastRepository;
+    private final CacheService cacheService;
 
  /**
      * Resets a message's status to PENDING in a new, independent transaction.
@@ -42,6 +49,14 @@ public class MessageStatusService {
         if (updatedRows > 0) {
             broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
             log.info("Updated message {} to DELIVERED and incremented stats for broadcast {}.", userBroadcastMessageId, broadcastId);
+            
+            // Check if this message should be expired immediately after delivery
+            isFireAndForget(broadcastId).ifPresent(isFire -> {
+                if (isFire) {
+                    log.info("Broadcast {} is Fire-and-Forget. Triggering immediate expiration.", broadcastId);
+                    broadcastLifecycleService.expireBroadcast(broadcastId);
+                }
+            });
         }
     }
 
@@ -63,5 +78,15 @@ public class MessageStatusService {
             eventPayload.getEventType(),
             topicName
         );
+    }
+
+    private Optional<Boolean> isFireAndForget(Long broadcastId) {
+        // First, check the cache for the broadcast content
+        Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(broadcastId);
+        if (broadcastOpt.isEmpty()) {
+            // If not in cache, fall back to the database
+            broadcastOpt = broadcastRepository.findById(broadcastId);
+        }
+        return broadcastOpt.map(BroadcastMessage::getIsFireAndForget);
     }
 }

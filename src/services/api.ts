@@ -72,6 +72,7 @@ export interface BroadcastRequest {
   scheduledAt?: string;
   expiresAt?: string;
   isImmediate: boolean;
+  isFireAndForget?: boolean;
 }
 
 export interface RedriveFailureDetail {

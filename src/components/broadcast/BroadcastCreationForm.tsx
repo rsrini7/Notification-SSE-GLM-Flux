@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Import useEffect
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -22,10 +22,27 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
         targetIds: '',
         priority: 'NORMAL',
         category: 'GENERAL',
-        isImmediate: true,
+        scheduleType: 'immediate', // Changed from isImmediate boolean
         scheduledAt: '',
         expiresAt: ''
     });
+
+    // START OF CHANGE: Add effect to handle "Fire and Forget" selection
+    useEffect(() => {
+        if (formData.scheduleType === 'fireAndForget') {
+            setFormData(prev => ({
+                ...prev,
+                category: 'Force Logoff',
+                priority: 'URGENT',
+                expiresAt: '',
+                scheduledAt: ''
+            }));
+        } else if (formData.category === 'Force Logoff') {
+            // Reset category if switching away from Fire and Forget
+            setFormData(prev => ({ ...prev, category: 'GENERAL' }));
+        }
+    }, [formData.scheduleType]);
+    // END OF CHANGE
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -37,12 +54,14 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
             targetIds: formData.targetType === 'ALL' ? [] : formData.targetIds.split(',').map(id => id.trim()),
             priority: formData.priority,
             category: formData.category,
-            scheduledAt: formData.isImmediate ? undefined : new Date(formData.scheduledAt).toISOString(),
+            // START OF CHANGE: Update payload creation logic
+            scheduledAt: formData.scheduleType === 'scheduled' ? new Date(formData.scheduledAt).toISOString() : undefined,
             expiresAt: formData.expiresAt ? new Date(formData.expiresAt).toISOString() : undefined,
-            isImmediate: formData.isImmediate,
+            isImmediate: formData.scheduleType !== 'scheduled',
+            isFireAndForget: formData.scheduleType === 'fireAndForget',
+            // END OF CHANGE
         };
         onCreateBroadcast(payload);
-        // Reset form after submission is handled by parent
         setFormData({
             senderId: 'admin-001',
             senderName: 'System Administrator',
@@ -51,11 +70,15 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
             targetIds: '',
             priority: 'NORMAL',
             category: 'GENERAL',
-            isImmediate: true,
+            scheduleType: 'immediate',
             scheduledAt: '',
             expiresAt: ''
         });
     };
+    
+    // START OF CHANGE: Helper for conditional disabling
+    const isFireAndForget = formData.scheduleType === 'fireAndForget';
+    // END OF CHANGE
     
     return (
         <Card className="border z-50 overflow-visible">
@@ -95,7 +118,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                         </div>
                         <div className="grid gap-1.5">
                             <Label htmlFor="priority">Priority</Label>
-                            <Select value={formData.priority} onValueChange={(value) => setFormData(prev => ({ ...prev, priority: value }))}>
+                            <Select value={formData.priority} onValueChange={(value) => setFormData(prev => ({ ...prev, priority: value }))} disabled={isFireAndForget}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent position="popper" sideOffset={20}>
                                     <SelectItem value="LOW">Low</SelectItem>
@@ -107,7 +130,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                         </div>
                         <div className="grid gap-1.5">
                             <Label htmlFor="category">Category</Label>
-                            <Input id="category" value={formData.category} onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))} />
+                            <Input id="category" value={formData.category} onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))} disabled={isFireAndForget} />
                         </div>
                     </div>
 
@@ -121,24 +144,25 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-1.5">
                             <Label htmlFor="scheduleType">Schedule Type</Label>
-                            <Select value={formData.isImmediate ? 'immediate' : 'scheduled'} onValueChange={(value) => setFormData(prev => ({ ...prev, isImmediate: value === 'immediate' }))}>
+                            <Select value={formData.scheduleType} onValueChange={(value) => setFormData(prev => ({ ...prev, scheduleType: value }))}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent position="popper" sideOffset={20}>
                                     <SelectItem value="immediate">Publish Immediately</SelectItem>
                                     <SelectItem value="scheduled">Schedule for Later</SelectItem>
+                                    <SelectItem value="fireAndForget">Fire and Forget</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
                         <div className="grid gap-1.5">
                             <Label htmlFor="expiresAt">Expires At (optional)</Label>
-                            <Input id="expiresAt" type="datetime-local" value={formData.expiresAt} onChange={(e) => setFormData(prev => ({ ...prev, expiresAt: e.target.value }))} />
+                            <Input id="expiresAt" type="datetime-local" value={formData.expiresAt} onChange={(e) => setFormData(prev => ({ ...prev, expiresAt: e.target.value }))} disabled={isFireAndForget} />
                         </div>
                     </div>
 
-                    {!formData.isImmediate && (
+                    {formData.scheduleType === 'scheduled' && (
                         <div className="grid gap-1.5">
                             <Label htmlFor="scheduledAt">Start Date & Time</Label>
-                            <Input id="scheduledAt" type="datetime-local" value={formData.scheduledAt} onChange={(e) => setFormData(prev => ({ ...prev, scheduledAt: e.target.value }))} required={!formData.isImmediate} />
+                            <Input id="scheduledAt" type="datetime-local" value={formData.scheduledAt} onChange={(e) => setFormData(prev => ({ ...prev, scheduledAt: e.target.value }))} required={formData.scheduleType === 'scheduled'} />
                         </div>
                     )}
 
