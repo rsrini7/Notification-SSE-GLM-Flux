@@ -16,7 +16,7 @@ public class MonitoringAspect {
 
     private final MonitoringConfig.BroadcastMetricsCollector metricsCollector;
 
-    @Around("execution(* com.example.broadcast.admin.service.BroadcastCreationService.*(..))")
+    @Around("execution(* com.example.broadcast.admin.service.BroadcastLifecycleService.*(..))")
     public Object monitorBroadcastService(ProceedingJoinPoint joinPoint) throws Throwable {
         String methodName = joinPoint.getSignature().getName();
         long startTime = System.currentTimeMillis();

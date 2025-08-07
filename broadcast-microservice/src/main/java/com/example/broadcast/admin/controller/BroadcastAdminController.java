@@ -2,7 +2,6 @@ package com.example.broadcast.admin.controller;
 
 import com.example.broadcast.admin.dto.BroadcastRequest;
 import com.example.broadcast.admin.dto.BroadcastResponse;
-import com.example.broadcast.admin.service.BroadcastCreationService;
 import com.example.broadcast.admin.service.BroadcastLifecycleService;
 import com.example.broadcast.admin.service.BroadcastQueryService;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
@@ -18,22 +17,21 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/admin/broadcasts") // MODIFIED: Route is now namespaced under /admin
+@RequestMapping("/api/admin/broadcasts")
 @RequiredArgsConstructor
 @Slf4j
 public class BroadcastAdminController {
 
-    private final BroadcastCreationService broadcastCreationService;
-    private final BroadcastQueryService broadcastQueryService;
     private final BroadcastLifecycleService broadcastLifecycleService;
-    private final UserService userService; // Added for the getAllUserIds endpoint
+    private final BroadcastQueryService broadcastQueryService;
+    private final UserService userService;
 
     @PostMapping
     @RateLimiter(name = "createBroadcastLimiter")
     public ResponseEntity<BroadcastResponse> createBroadcast(
             @Valid @RequestBody BroadcastRequest request) {
         log.info("Received broadcast creation request from sender: {}", request.getSenderId());
-        BroadcastResponse response = broadcastCreationService.createBroadcast(request);
+        BroadcastResponse response = broadcastLifecycleService.createBroadcast(request);
         log.info("Broadcast created successfully with ID: {}", response.getId());
         return ResponseEntity.ok(response);
     }
@@ -95,7 +93,6 @@ public class BroadcastAdminController {
         return ResponseEntity.ok(deliveries);
     }
 
-    // NEW: Moved from UserMessageController as this is an admin-level function
     @GetMapping("/users/all-ids")
     public ResponseEntity<List<String>> getAllUserIds() {
         log.info("Admin retrieving all unique user IDs.");

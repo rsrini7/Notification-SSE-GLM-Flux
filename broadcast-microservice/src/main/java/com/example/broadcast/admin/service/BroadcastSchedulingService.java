@@ -20,7 +20,7 @@ import java.util.List;
 public class BroadcastSchedulingService {
 
     private final BroadcastRepository broadcastRepository;
-    private final BroadcastCreationService broadcastCreationService; 
+    private final BroadcastLifecycleService broadcastLifecycleService; // Updated dependency
 
     private static final int BATCH_LIMIT = 100;
 
@@ -33,7 +33,7 @@ public class BroadcastSchedulingService {
     @SchedulerLock(name = "processScheduledBroadcasts", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     public void processScheduledBroadcasts() {
         log.info("Checking for scheduled broadcasts to process...");
-        List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findAndLockScheduledBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT); 
+        List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findAndLockScheduledBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
 
         if (broadcastsToProcess.isEmpty()) {
             log.info("No scheduled broadcasts to process at this time.");
@@ -41,10 +41,10 @@ public class BroadcastSchedulingService {
         }
 
         log.info("Found and locked {} scheduled broadcasts to process.", broadcastsToProcess.size());
-        for (BroadcastMessage broadcast : broadcastsToProcess) { 
+        for (BroadcastMessage broadcast : broadcastsToProcess) {
             try {
-                // The main broadcast service now handles the processing logic
-                broadcastCreationService.processScheduledBroadcast(broadcast.getId());
+                // Call the method on the unified lifecycle service
+                broadcastLifecycleService.processScheduledBroadcast(broadcast.getId());
             } catch (Exception e) {
                 log.error("Error processing scheduled broadcast with ID: {}", broadcast.getId(), e);
             }

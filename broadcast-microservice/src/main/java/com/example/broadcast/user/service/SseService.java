@@ -1,17 +1,14 @@
 package com.example.broadcast.user.service;
 
-import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.user.dto.UserBroadcastResponse;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
-import com.example.broadcast.shared.repository.UserSessionRepository;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
 import com.example.broadcast.shared.util.Constants.EventType;
 import com.example.broadcast.shared.util.Constants.SseEventType;
-import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.service.MessageStatusService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,30 +29,20 @@ import java.util.Optional;
 public class SseService {
 
     private final UserBroadcastRepository userBroadcastRepository;
-    private final UserSessionRepository userSessionRepository;
     private final ObjectMapper objectMapper;
     private final BroadcastRepository broadcastRepository;
     private final MessageStatusService messageStatusService;
-    private final CacheService cacheService;
-    private final AppProperties appProperties;
     private final BroadcastMapper broadcastMapper;
-    
-    // DEPENDENCY INJECTION for the connection manager
     private final SseConnectionManager sseConnectionManager;
-
-    // REMOVED: All in-memory maps (userSinks, etc.) are gone from this class.
-    // REMOVED: The duplicated cleanupStaleSessions, init, cleanup, and startServerHeartbeat methods are gone.
 
     @Transactional
     public void registerConnection(String userId, String sessionId) {
-        // DELEGATE responsibility to the connection manager
         sseConnectionManager.registerConnection(userId, sessionId);
     }
     
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String sessionId) {
         log.info("Orchestrating event stream creation for user: {}, session: {}", userId, sessionId);
         
-        // DELEGATE stream creation to the connection manager
         Flux<ServerSentEvent<String>> eventStream = sseConnectionManager.createEventStream(userId, sessionId);
 
         // This service's responsibility is now higher-level logic, like sending pending messages on connect.
@@ -63,7 +50,6 @@ public class SseService {
         
         try {
             String connectedPayload = objectMapper.writeValueAsString(Map.of("message", "SSE connection established with session " + sessionId));
-            // DELEGATE sending the event
             sseConnectionManager.sendEvent(userId, ServerSentEvent.<String>builder()
                 .event(SseEventType.CONNECTED.name())
                 .data(connectedPayload)
@@ -77,7 +63,6 @@ public class SseService {
 
     @Transactional
     public void removeEventStream(String userId, String sessionId) {
-        // DELEGATE responsibility to the connection manager
         sseConnectionManager.removeEventStream(userId, sessionId);
     }
 
@@ -92,7 +77,6 @@ public class SseService {
                 case READ:
                 case EXPIRED:
                 case CANCELLED:
-                    // DELEGATE sending the event
                     sseConnectionManager.sendEvent(event.getUserId(), ServerSentEvent.<String>builder().event(SseEventType.MESSAGE_REMOVED.name()).data(payload).build());
                     break;
             }
@@ -132,7 +116,6 @@ public class SseService {
                         .id(String.valueOf(response.getId()))
                         .build();
                   
-                    // DELEGATE sending the event
                     sseConnectionManager.sendEvent(userId, sse);
                     
                     if (isUserConnected(userId)) {
@@ -154,12 +137,10 @@ public class SseService {
     }
 
     public int getConnectedUserCount() {
-        // DELEGATE responsibility to the connection manager
         return sseConnectionManager.getConnectedUserCount();
     }
 
     public boolean isUserConnected(String userId) {
-        // DELEGATE responsibility to the connection manager
         return sseConnectionManager.isUserConnected(userId);
     }
 }
