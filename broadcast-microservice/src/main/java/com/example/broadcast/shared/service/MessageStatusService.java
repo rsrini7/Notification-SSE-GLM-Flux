@@ -1,15 +1,16 @@
 package com.example.broadcast.shared.service;
 
-import com.example.broadcast.admin.service.BroadcastLifecycleService;
-import com.example.broadcast.shared.service.cache.CacheService;
-import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
+import com.example.broadcast.shared.event.FireAndForgetTriggerEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
+import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,11 +28,11 @@ public class MessageStatusService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final OutboxEventPublisher outboxEventPublisher;
-    private final BroadcastLifecycleService broadcastLifecycleService;
     private final BroadcastRepository broadcastRepository;
     private final CacheService cacheService;
+    private final ApplicationEventPublisher eventPublisher;
 
- /**
+    /**
      * Resets a message's status to PENDING in a new, independent transaction.
      * This is critical for the DLT redrive process to ensure the state is committed
      * before the message is re-queued in Kafka.
@@ -50,11 +51,10 @@ public class MessageStatusService {
             broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
             log.info("Updated message {} to DELIVERED and incremented stats for broadcast {}.", userBroadcastMessageId, broadcastId);
             
-            // Check if this message should be expired immediately after delivery
             isFireAndForget(broadcastId).ifPresent(isFire -> {
                 if (isFire) {
-                    log.info("Broadcast {} is Fire-and-Forget. Triggering immediate expiration.", broadcastId);
-                    broadcastLifecycleService.expireBroadcast(broadcastId);
+                    log.info("Broadcast {} is Fire-and-Forget. Publishing expiration trigger event.", broadcastId);
+                    eventPublisher.publishEvent(new FireAndForgetTriggerEvent(this, broadcastId));
                 }
             });
         }
@@ -71,7 +71,6 @@ public class MessageStatusService {
             .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
             .message("User marked message as read")
             .build();
-        
         outboxEventPublisher.publish(
             eventPayload,
             userId,
@@ -81,10 +80,8 @@ public class MessageStatusService {
     }
 
     private Optional<Boolean> isFireAndForget(Long broadcastId) {
-        // First, check the cache for the broadcast content
         Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(broadcastId);
         if (broadcastOpt.isEmpty()) {
-            // If not in cache, fall back to the database
             broadcastOpt = broadcastRepository.findById(broadcastId);
         }
         return broadcastOpt.map(BroadcastMessage::isFireAndForget);

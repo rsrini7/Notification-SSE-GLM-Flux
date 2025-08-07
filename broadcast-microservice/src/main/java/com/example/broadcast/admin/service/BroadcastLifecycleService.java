@@ -4,6 +4,7 @@ import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.admin.dto.BroadcastRequest;
 import com.example.broadcast.admin.dto.BroadcastResponse;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
+import com.example.broadcast.shared.event.FireAndForgetTriggerEvent;
 import com.example.broadcast.shared.exception.ResourceNotFoundException;
 import com.example.broadcast.shared.exception.UserServiceUnavailableException;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
@@ -21,8 +22,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation; // Import Propagation
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -115,7 +117,6 @@ public class BroadcastLifecycleService {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
         
-        // This check is now safe from race conditions because of the new transaction boundary
         if (Constants.BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) {
             broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
             broadcastRepository.update(broadcast);
@@ -125,6 +126,16 @@ public class BroadcastLifecycleService {
             log.info("Broadcast expired: {}. Published expiration events to outbox.", broadcastId);
         } else {
             log.info("Broadcast {} was already in a non-active state ({}). No expiration action needed.", broadcastId, broadcast.getStatus());
+        }
+    }
+
+    @TransactionalEventListener(phase = org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT)
+    public void handleFireAndForgetExpiration(FireAndForgetTriggerEvent event) {
+        log.info("Received committed event to expire Fire-and-Forget broadcast: {}", event.getBroadcastId());
+        try {
+            expireBroadcast(event.getBroadcastId());
+        } catch (Exception e) {
+            log.error("Failed to process Fire-and-Forget expiration for broadcast ID: {}", event.getBroadcastId(), e);
         }
     }
 
