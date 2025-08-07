@@ -1,14 +1,14 @@
 package com.example.broadcast.user.service;
 
 import com.example.broadcast.user.dto.UserBroadcastResponse;
-import com.example.broadcast.shared.dto.cache.UserMessageInfo; // Import UserMessageInfo
+import com.example.broadcast.shared.dto.cache.UserMessageInfo;
 import com.example.broadcast.shared.exception.ResourceNotFoundException;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
-import com.example.broadcast.shared.service.cache.CacheService; // Import CacheService
+import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +22,8 @@ import com.example.broadcast.shared.config.AppProperties;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
-import java.util.stream.Collectors; // Import Collectors
+import java.util.Optional; // Import Optional
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -33,7 +34,7 @@ public class UserMessageService {
     private final BroadcastRepository broadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final MessageStatusService messageStatusService;
-    private final CacheService cacheService; // Inject CacheService
+    private final CacheService cacheService;
     private final AppProperties appProperties;
 
     // Implemented cache-aside pattern
@@ -48,6 +49,8 @@ public class UserMessageService {
             // We need to enrich the cached info with broadcast content
             return cachedMessages.stream()
                 .map(this::enrichUserMessageInfo)
+                .filter(Optional::isPresent) // Filter out any messages that couldn't be enriched
+                .map(Optional::get)
                 .collect(Collectors.toList());
         }
 
@@ -83,7 +86,6 @@ public class UserMessageService {
         int updatedRows = userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
         if (updatedRows > 0) {
             broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
-            // Invalidate or update the cache for this user
             cacheService.updateMessageReadStatus(userId, userMessage.getBroadcastId());
             
             BroadcastMessage parentBroadcast = broadcastRepository.findById(userMessage.getBroadcastId())
@@ -114,18 +116,33 @@ public class UserMessageService {
     }
 
     /**
-     * Enriches a cached UserMessageInfo object with full content from the broadcastContentCache.
+     * Enriches a cached UserMessageInfo object with full content.
+     * If the broadcast content is not in the cache, it fetches from the database and repopulates the cache.
      */
-    private UserBroadcastResponse enrichUserMessageInfo(UserMessageInfo info) {
-        // Fetch the broadcast content from the cache (implemented previously)
-        BroadcastMessage broadcast = cacheService.getBroadcastContent(info.getBroadcastId())
-            .orElse(new BroadcastMessage()); // Or handle as an error if preferred
+    private Optional<UserBroadcastResponse> enrichUserMessageInfo(UserMessageInfo info) {
+        // 1. First, try to get the broadcast from the cache
+        Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
 
+        if (broadcastOpt.isEmpty()) {
+            // 2. If not in cache (e.g., expired), fetch from the database
+            log.warn("Broadcast content for ID {} was not in cache. Fetching from DB.", info.getBroadcastId());
+            broadcastOpt = broadcastRepository.findById(info.getBroadcastId());
+            // 3. If found in DB, put it back into the cache for the next request
+            broadcastOpt.ifPresent(cacheService::cacheBroadcastContent);
+        }
+
+        if (broadcastOpt.isEmpty()) {
+            log.error("Data integrity issue: Could not find broadcast content for ID {} in cache or DB.", info.getBroadcastId());
+            return Optional.empty(); // Return empty if content is truly gone
+        }
+
+        BroadcastMessage broadcast = broadcastOpt.get();
+        
         // Build the full response DTO for the UI
-        return UserBroadcastResponse.builder()
+        return Optional.of(UserBroadcastResponse.builder()
             .id(info.getMessageId())
             .broadcastId(info.getBroadcastId())
-            .userId(broadcast.getSenderId()) // Assuming senderId can represent the user for this context
+            .userId(broadcast.getSenderId())
             .deliveryStatus(info.getDeliveryStatus())
             .readStatus(info.getReadStatus())
             .createdAt(info.getCreatedAt())
@@ -135,7 +152,6 @@ public class UserMessageService {
             .category(broadcast.getCategory())
             .broadcastCreatedAt(broadcast.getCreatedAt())
             .expiresAt(broadcast.getExpiresAt())
-            .build();
+            .build());
     }
-
 }
