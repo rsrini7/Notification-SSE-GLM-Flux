@@ -218,18 +218,26 @@ public class SseConnectionManager {
         serverHeartbeatSubscription = Flux.interval(Duration.ofMillis(appProperties.getSse().getHeartbeatInterval()), Schedulers.parallel())
                 .doOnNext(tick -> {
                     try {
+                        List<String> sessionIds = new ArrayList<>(userSinks.keySet());
+                        if (sessionIds.isEmpty()) {
+                            return;
+                        }
+                        
+                        // Update heartbeat timestamp in the database for all active sessions on this pod
+                        userSessionRepository.updateLastHeartbeatForActiveSessions(sessionIds, appProperties.getPod().getId());
+
                         String payload = objectMapper.writeValueAsString(Map.of("timestamp", ZonedDateTime.now()));
                         ServerSentEvent<String> heartbeatEvent = ServerSentEvent.<String>builder()
                                 .event("HEARTBEAT")
                                 .data(payload)
                                 .build();
-                        
-                        new ArrayList<>(userSinks.keySet()).forEach(sessionId -> {
+
+                        for (String sessionId : sessionIds) {
                             String userId = sessionIdToUserIdMap.get(sessionId);
                             if (userId != null) {
                                 sendEvent(userId, heartbeatEvent);
                             }
-                        });
+                        }
                     } catch (Exception e) {
                         log.error("Error in server heartbeat task: {}", e.getMessage());
                     }

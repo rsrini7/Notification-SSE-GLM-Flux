@@ -71,15 +71,20 @@ public class UserSessionRepository {
         return session;
     }
 
-    public int updateHeartbeatsForActiveSessions(List<String> sessionIds) {
+    public int updateLastHeartbeatForActiveSessions(List<String> sessionIds, String podId) {
         if (sessionIds == null || sessionIds.isEmpty()) {
             return 0;
         }
         String sql = String.format(
-            "UPDATE user_sessions SET last_heartbeat = CURRENT_TIMESTAMP WHERE session_id IN (%s)",
+            "UPDATE user_sessions SET last_heartbeat = CURRENT_TIMESTAMP WHERE pod_id = ? AND session_id IN (%s)",
             String.join(",", java.util.Collections.nCopies(sessionIds.size(), "?"))
         );
-        return jdbcTemplate.update(sql, sessionIds.toArray());
+
+        Object[] params = new Object[sessionIds.size() + 1];
+        params[0] = podId;
+        System.arraycopy(sessionIds.toArray(), 0, params, 1, sessionIds.size());
+
+        return jdbcTemplate.update(sql, params);
     }
 
     public List<UserSession> findStaleSessions(ZonedDateTime threshold) {
