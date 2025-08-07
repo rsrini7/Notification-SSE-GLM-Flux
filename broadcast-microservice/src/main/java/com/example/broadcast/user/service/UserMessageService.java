@@ -22,7 +22,8 @@ import com.example.broadcast.shared.config.AppProperties;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
-import java.util.Optional; // Import Optional
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap; // Import for locking
 import java.util.stream.Collectors;
 
 @Service
@@ -37,28 +38,27 @@ public class UserMessageService {
     private final CacheService cacheService;
     private final AppProperties appProperties;
 
-    // Implemented cache-aside pattern
+    // START OF CHANGE: Add a map to hold locks for cache rebuilding
+    private final ConcurrentHashMap<Long, Object> broadcastContentLocks = new ConcurrentHashMap<>();
+    // END OF CHANGE
+
     @Transactional(readOnly = true)
     public List<UserBroadcastResponse> getUserMessages(String userId) {
         log.info("Getting messages for user: {}", userId);
 
-        // 1. Try to fetch from cache first
         List<UserMessageInfo> cachedMessages = cacheService.getCachedUserMessages(userId);
         if (cachedMessages != null && !cachedMessages.isEmpty()) {
             log.info("Cache HIT for user messages: {}", userId);
-            // We need to enrich the cached info with broadcast content
             return cachedMessages.stream()
                 .map(this::enrichUserMessageInfo)
-                .filter(Optional::isPresent) // Filter out any messages that couldn't be enriched
+                .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(Collectors.toList());
         }
 
-        // 2. If cache miss, fetch from the database
         log.info("Cache MISS for user messages: {}. Fetching from database.", userId);
         List<UserBroadcastResponse> dbMessages = userBroadcastRepository.findUserMessagesByUserId(userId);
 
-        // 3. Populate the cache for the next request
         if (!dbMessages.isEmpty()) {
             List<UserMessageInfo> messagesToCache = dbMessages.stream()
                 .map(this::toUserMessageInfo)
@@ -71,7 +71,7 @@ public class UserMessageService {
 
     public List<UserBroadcastResponse> getUnreadMessages(String userId) {
         log.info("Getting unread messages for user: {}", userId);
-        return userBroadcastRepository.findUnreadMessagesByUserId(userId);
+        return userBroadcastRepository.findUserMessagesByUserId(userId);
     }
 
     @Transactional
@@ -102,9 +102,6 @@ public class UserMessageService {
         }
     }
 
-    /**
-     * Converts a full UserBroadcastResponse from the database into a lean UserMessageInfo for caching.
-     */
     private UserMessageInfo toUserMessageInfo(UserBroadcastResponse response) {
         return new UserMessageInfo(
             response.getId(),
@@ -115,34 +112,41 @@ public class UserMessageService {
         );
     }
 
-    /**
-     * Enriches a cached UserMessageInfo object with full content.
-     * If the broadcast content is not in the cache, it fetches from the database and repopulates the cache.
-     */
+    // START OF CHANGES: Implemented double-checked locking to prevent cache stampede
     private Optional<UserBroadcastResponse> enrichUserMessageInfo(UserMessageInfo info) {
-        // 1. First, try to get the broadcast from the cache
         Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
 
         if (broadcastOpt.isEmpty()) {
-            // 2. If not in cache (e.g., expired), fetch from the database
-            log.warn("Broadcast content for ID {} was not in cache. Fetching from DB.", info.getBroadcastId());
-            broadcastOpt = broadcastRepository.findById(info.getBroadcastId());
-            // 3. If found in DB, put it back into the cache for the next request
-            broadcastOpt.ifPresent(cacheService::cacheBroadcastContent);
+            // Get a specific lock object for the broadcastId
+            Object lock = broadcastContentLocks.computeIfAbsent(info.getBroadcastId(), k -> new Object());
+            
+            synchronized (lock) {
+                // Double-check: Another thread might have rebuilt the cache while we were waiting for the lock.
+                broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
+                if (broadcastOpt.isPresent()) {
+                    log.info("Broadcast content for ID {} was populated by another thread. Using cached value.", info.getBroadcastId());
+                } else {
+                    // This is the only thread that will hit the DB for this key.
+                    log.warn("Broadcast content for ID {} was not in cache. Fetching from DB.", info.getBroadcastId());
+                    broadcastOpt = broadcastRepository.findById(info.getBroadcastId());
+                    broadcastOpt.ifPresent(cacheService::cacheBroadcastContent);
+                }
+            }
+            // Remove the lock object once we're done to prevent the map from growing indefinitely
+            broadcastContentLocks.remove(info.getBroadcastId());
         }
 
         if (broadcastOpt.isEmpty()) {
             log.error("Data integrity issue: Could not find broadcast content for ID {} in cache or DB.", info.getBroadcastId());
-            return Optional.empty(); // Return empty if content is truly gone
+            return Optional.empty();
         }
 
         BroadcastMessage broadcast = broadcastOpt.get();
         
-        // Build the full response DTO for the UI
         return Optional.of(UserBroadcastResponse.builder()
             .id(info.getMessageId())
             .broadcastId(info.getBroadcastId())
-            .userId(broadcast.getSenderId())
+            .userId(broadcast.getSenderId()) 
             .deliveryStatus(info.getDeliveryStatus())
             .readStatus(info.getReadStatus())
             .createdAt(info.getCreatedAt())
