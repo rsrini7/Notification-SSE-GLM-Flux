@@ -27,14 +27,13 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
         expiresAt: ''
     });
 
-    // START OF CHANGE: Add effect to handle "Fire and Forget" selection
     useEffect(() => {
         if (formData.scheduleType === 'fireAndForget') {
             setFormData(prev => ({
                 ...prev,
                 category: 'Force Logoff',
                 priority: 'URGENT',
-                expiresAt: '',
+                expiresAt: new Date(Date.now() + 30000).toLocaleString('sv').replace(' ', 'T'),
                 scheduledAt: ''
             }));
         } else if (formData.category === 'Force Logoff') {
@@ -42,7 +41,6 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
             setFormData(prev => ({ ...prev, category: 'GENERAL' }));
         }
     }, [formData.scheduleType]);
-    // END OF CHANGE
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
