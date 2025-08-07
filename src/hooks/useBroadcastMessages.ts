@@ -42,6 +42,17 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     switch (event.type) {
       case 'MESSAGE':
         if (payload) {
+          // Check for Force Logoff category
+          if (payload.category === 'Force Logoff') {
+            toast({
+              title: 'Logged Off',
+              description: 'Your session has been terminated by an administrator.',
+              variant: 'destructive',
+            });
+            // Call disconnect with the new force flag
+            sseConnection.disconnect(true); 
+          }
+
           setMessages(prev => {
             const exists = prev.some(msg => msg.id === payload.id);
             if (!exists) {

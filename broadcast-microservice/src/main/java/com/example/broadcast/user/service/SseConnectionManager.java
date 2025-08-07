@@ -207,4 +207,18 @@ public class SseConnectionManager {
         Set<String> sessions = userSessionMap.get(userId);
         return sessions != null && !sessions.isEmpty();
     }
+
+    /**
+     * Retrieves the first available session ID for a given user.
+     * This is used for server-initiated actions like force logoff.
+     * @param userId The user's ID.
+     * @return An active session ID for the user, or null if none is found.
+     */
+    public String getSessionIdForUser(String userId) {
+        Set<String> sessions = userSessionMap.get(userId);
+        if (sessions != null && !sessions.isEmpty()) {
+            return sessions.iterator().next(); // Return the first available session
+        }
+        return null;
+    }
 }

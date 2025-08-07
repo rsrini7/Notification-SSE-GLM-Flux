@@ -32,7 +32,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     onDisconnect,
     onError
   } = options;
-
   const [state, setState] = useState<SseConnectionState>({
     connected: false,
     connecting: false,
@@ -40,7 +39,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     error: null,
     reconnectAttempt: 0
   });
-
   const MAX_RECONNECT_ATTEMPTS = 10;
   const BASE_RECONNECT_DELAY = 3000;
   const MAX_RECONNECT_DELAY = 300000;
@@ -49,11 +47,11 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const sessionIdRef = useRef<string | null>(null);
-
   const onConnectRef = useRef(onConnect);
   const onDisconnectRef = useRef(onDisconnect);
   const onErrorRef = useRef(onError);
   const onMessageRef = useRef(onMessage);
+  const isForceDisconnectRef = useRef(false);
 
   useEffect(() => {
     onConnectRef.current = onConnect;
@@ -70,7 +68,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     try {
       const eventType = event.type.toUpperCase();
       const data = event.data ? JSON.parse(event.data) : {};
-      // ADDED LOGGING: Log every message received from the server.
       console.log(`[SSE - ${userId}] Received event:`, { type: eventType, data });
       onMessageRef.current?.({ type: eventType, data: data });
     } catch (error) {
@@ -83,7 +80,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     if (eventSourceRef.current || state.connecting) return;
 
     reconnectAttemptsRef.current++;
-    // ADDED LOGGING: Announce the connection attempt.
     console.log(`[SSE - ${userId}] Attempting to connect... (Attempt ${reconnectAttemptsRef.current})`);
     setState(prev => ({ ...prev, connecting: true, error: prev.reconnectAttempt > 0 ? `Reconnecting...` : null, reconnectAttempt: reconnectAttemptsRef.current }));
 
@@ -94,7 +90,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     eventSourceRef.current = new EventSource(sseUrl);
 
     eventSourceRef.current.onopen = () => {
-      // ADDED LOGGING: Confirm successful connection.
       console.log(`[SSE - ${userId}] Connection successful. Session ID: ${newSessionId}`);
       reconnectAttemptsRef.current = 0;
       setState(prev => ({ ...prev, connected: true, connecting: false, sessionId: newSessionId, error: null, reconnectAttempt: 0 }));
@@ -104,20 +99,24 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     SSE_EVENT_TYPES.forEach(type => {
       eventSourceRef.current?.addEventListener(type, handleSseMessage as EventListener);
     });
-    
+
     eventSourceRef.current.onerror = () => {
-      // ADDED LOGGING: This is the key log for your issue. It will fire when the server closes the connection.
-      console.warn(`[SSE - ${userId}] Connection lost. This is expected if the server-side cleanup job is running without a client heartbeat.`);
+      console.warn(`[SSE - ${userId}] Connection lost.`);
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       setState(prev => ({...prev, connected: false, connecting: false}));
       onErrorRef.current?.(new Error('SSE connection error'));
-      
+
+      if (isForceDisconnectRef.current) {
+        console.log(`[SSE - ${userId}] Force disconnect detected. Auto-reconnect disabled.`);
+        setState(prev => ({ ...prev, error: 'Session terminated by server.' }));
+        return;
+      }
+
       if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
         const backoff = Math.min(MAX_RECONNECT_DELAY, BASE_RECONNECT_DELAY * 2 ** reconnectAttemptsRef.current);
         const jitter = Math.random() * 1000;
         const delay = backoff + jitter;
-        // ADDED LOGGING: Announce the scheduled reconnection.
         console.log(`[SSE - ${userId}] Scheduling reconnect in ${delay.toFixed(0)}ms.`);
         reconnectTimeoutRef.current = setTimeout(connect, delay);
       } else {
@@ -127,15 +126,15 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     };
   }, [userId, baseUrl, state.connecting, generateSessionId, handleSseMessage]);
 
-  const disconnect = useCallback(() => {
-    // ADDED LOGGING: Differentiate between an intentional disconnect and a network error.
-    console.log(`[SSE - ${userId}] Intentional disconnect called.`);
+  const disconnect = useCallback((isForceDisconnect = false) => {
+    console.log(`[SSE - ${userId}] Disconnect called. Is force disconnect: ${isForceDisconnect}`);
+    isForceDisconnectRef.current = isForceDisconnect; // Set the flag
     if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
-    if (sessionIdRef.current) {
+    if (sessionIdRef.current && !isForceDisconnect) { // Don't send beacon on force disconnect
       navigator.sendBeacon(`${baseUrl}/api/sse/disconnect?userId=${userId}&sessionId=${sessionIdRef.current}`);
     }
     if (state.connected) {

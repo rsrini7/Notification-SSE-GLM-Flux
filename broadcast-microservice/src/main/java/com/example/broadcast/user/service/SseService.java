@@ -2,7 +2,7 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.user.dto.UserBroadcastResponse;
-import com.example.broadcast.shared.dto.cache.UserMessageInfo; // Import UserMessageInfo
+import com.example.broadcast.shared.dto.cache.UserMessageInfo;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
@@ -87,7 +87,6 @@ public class SseService {
     }
 
     private void sendPendingMessages(String userId) {
-        // Step 1: Prioritize fetching from the cache
         List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
 
         if (!pendingEvents.isEmpty()) {
@@ -95,20 +94,16 @@ public class SseService {
             for (MessageDeliveryEvent event : pendingEvents) {
                 deliverMessageToUser(event.getUserId(), event.getBroadcastId());
             }
-            // Step 2: Clear the cache after processing to prevent re-delivery
             cacheService.clearPendingEvents(userId);
             return;
         }
 
-        // Step 3: Fallback to database only if cache is empty
         List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
         if (!pendingMessages.isEmpty()) {
             log.warn("Cache was empty, but found {} pending messages in DB for user: {}", pendingMessages.size(), userId);
             for (UserBroadcastMessage message : pendingMessages) {
                 deliverMessageToUser(userId, message.getBroadcastId());
             }
-        }else{
-            log.info("No pending messages found in cache or DB for user: {}", userId);
         }
     }
 
@@ -141,7 +136,7 @@ public class SseService {
                         UserMessageInfo messageToCache = new UserMessageInfo(
                             message.getId(),
                             message.getBroadcastId(),
-                            DeliveryStatus.DELIVERED.name(), // Status is now DELIVERED
+                            DeliveryStatus.DELIVERED.name(),
                             message.getReadStatus(),
                             message.getCreatedAt()
                         );
@@ -149,6 +144,15 @@ public class SseService {
                         log.info("Added newly delivered message to cache for user: {}", userId);
             
                         log.info("Message delivered to online user: {}, broadcast: {}", userId, broadcastId);
+
+                        // START OF CHANGE: Handle Force Logoff
+                        if ("Force Logoff".equalsIgnoreCase(response.getCategory())) {
+                            log.warn("Force Logoff message delivered to user {}. Terminating their session.", userId);
+                            // Assuming there's a single session per user for simplicity
+                            sseConnectionManager.removeEventStream(userId, sseConnectionManager.getSessionIdForUser(userId));
+                        }
+                        // END OF CHANGE
+
                     } else {
                         log.warn("Delivery attempt for user {} and broadcast {} aborted, user disconnected during process.", userId, broadcastId);
                     }

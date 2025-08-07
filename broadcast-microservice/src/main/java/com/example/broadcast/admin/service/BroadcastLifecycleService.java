@@ -9,7 +9,7 @@ import com.example.broadcast.shared.exception.UserServiceUnavailableException;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.BroadcastStatistics;
-import com.example.broadcast.shared.model.OutboxEvent; // Import OutboxEvent
+import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation; // Import Propagation
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
@@ -109,10 +110,12 @@ public class BroadcastLifecycleService {
     /**
      * Expires a broadcast, updating its status and notifying users.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void expireBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
+        
+        // This check is now safe from race conditions because of the new transaction boundary
         if (Constants.BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) {
             broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
             broadcastRepository.update(broadcast);
@@ -120,6 +123,8 @@ public class BroadcastLifecycleService {
             log.info("Updated {} pending user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
             publishLifecycleEvent(broadcast, Constants.EventType.EXPIRED, "Broadcast EXPIRED");
             log.info("Broadcast expired: {}. Published expiration events to outbox.", broadcastId);
+        } else {
+            log.info("Broadcast {} was already in a non-active state ({}). No expiration action needed.", broadcastId, broadcast.getStatus());
         }
     }
 
@@ -154,7 +159,6 @@ public class BroadcastLifecycleService {
                         .build());
                 } catch (JsonProcessingException e) {
                     log.error("Critical: Failed to serialize event payload for outbox. Event for user {} will not be published.", userMessage.getUserId(), e);
-                    // Continue to process other users
                 }
             }
             outboxEventPublisher.publishBatch(eventsToPublish);
