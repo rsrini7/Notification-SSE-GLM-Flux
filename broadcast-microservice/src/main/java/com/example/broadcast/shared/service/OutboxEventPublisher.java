@@ -1,4 +1,3 @@
-// Location: src/main/java/com/example/broadcast/shared/service/OutboxEventPublisher.java
 package com.example.broadcast.shared.service;
 
 import com.example.broadcast.shared.model.OutboxEvent;
@@ -11,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List; // Import List
 import java.util.UUID;
 
 /**
@@ -41,7 +41,7 @@ public class OutboxEventPublisher {
             String payloadJson = objectMapper.writeValueAsString(payload);
             OutboxEvent outboxEvent = OutboxEvent.builder()
                     .id(UUID.randomUUID())
-                    .aggregateType(payload.getClass().getSimpleName()) // Use class name for aggregate type
+                    .aggregateType(payload.getClass().getSimpleName())
                     .aggregateId(aggregateId)
                     .eventType(eventType)
                     .topic(topicName)
@@ -51,6 +51,18 @@ public class OutboxEventPublisher {
         } catch (JsonProcessingException e) {
             log.error("Critical: Failed to serialize event payload for outbox. Event type {} for aggregate {} will not be published.", eventType, aggregateId, e);
             throw new RuntimeException("Failed to serialize event payload for outbox.", e);
+        }
+    }
+
+    /**
+     * Persists a list of OutboxEvent objects in a single batch operation.
+     * This method must be called from within an existing transaction.
+     * @param events The list of fully constructed OutboxEvent objects to save.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void publishBatch(List<OutboxEvent> events) {
+        if (events != null && !events.isEmpty()) {
+            outboxRepository.batchSave(events);
         }
     }
 }

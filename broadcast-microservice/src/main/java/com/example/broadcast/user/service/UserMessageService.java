@@ -39,9 +39,7 @@ public class UserMessageService {
     private final CacheService cacheService;
     private final AppProperties appProperties;
 
-    // START OF CHANGE: Use ReentrantLock instead of Object for locking
     private final ConcurrentHashMap<Long, ReentrantLock> broadcastContentLocks = new ConcurrentHashMap<>();
-    // END OF CHANGE
 
     @Transactional(readOnly = true)
     public List<UserBroadcastResponse> getUserMessages(String userId) {

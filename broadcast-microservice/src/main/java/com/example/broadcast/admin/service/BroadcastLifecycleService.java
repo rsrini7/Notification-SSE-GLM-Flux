@@ -9,12 +9,15 @@ import com.example.broadcast.shared.exception.UserServiceUnavailableException;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.BroadcastStatistics;
+import com.example.broadcast.shared.model.OutboxEvent; // Import OutboxEvent
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -43,6 +47,7 @@ public class BroadcastLifecycleService {
     private final OutboxEventPublisher outboxEventPublisher;
     private final BroadcastMapper broadcastMapper;
     private final AppProperties appProperties;
+    private final ObjectMapper objectMapper;
 
     /**
      * Creates a new broadcast.
@@ -97,7 +102,6 @@ public class BroadcastLifecycleService {
 
         int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
         log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
-
         publishLifecycleEvent(broadcast, Constants.EventType.CANCELLED, "Broadcast CANCELLED");
         log.info("Broadcast cancelled: {}. Published cancellation events to outbox.", id);
     }
@@ -112,10 +116,8 @@ public class BroadcastLifecycleService {
         if (Constants.BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) {
             broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
             broadcastRepository.update(broadcast);
-
             int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(broadcastId, Constants.DeliveryStatus.SUPERSEDED.name());
             log.info("Updated {} pending user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
-
             publishLifecycleEvent(broadcast, Constants.EventType.EXPIRED, "Broadcast EXPIRED");
             log.info("Broadcast expired: {}. Published expiration events to outbox.", broadcastId);
         }
@@ -130,17 +132,32 @@ public class BroadcastLifecycleService {
 
         List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
         int totalTargeted = userBroadcasts.size();
-
         if (totalTargeted > 0) {
             log.info("Broadcast {} targeting {} users.", broadcast.getId(), totalTargeted);
             initializeStatistics(broadcast.getId(), totalTargeted);
             userBroadcastRepository.batchInsert(userBroadcasts);
 
             String topicName = getTopicName(broadcast.getTargetType());
+            List<OutboxEvent> eventsToPublish = new ArrayList<>();
             for (UserBroadcastMessage userMessage : userBroadcasts) {
-                MessageDeliveryEvent event = createDeliveryEvent(broadcast, userMessage.getUserId(), shouldFail);
-                outboxEventPublisher.publish(event, event.getUserId(), event.getEventType(), topicName);
+                MessageDeliveryEvent eventPayload = createDeliveryEvent(broadcast, userMessage.getUserId(), shouldFail);
+                try {
+                    String payloadJson = objectMapper.writeValueAsString(eventPayload);
+                    eventsToPublish.add(OutboxEvent.builder()
+                        .id(UUID.fromString(eventPayload.getEventId()))
+                        .aggregateType(eventPayload.getClass().getSimpleName())
+                        .aggregateId(eventPayload.getUserId())
+                        .eventType(eventPayload.getEventType())
+                        .topic(topicName)
+                        .payload(payloadJson)
+                        .createdAt(eventPayload.getTimestamp())
+                        .build());
+                } catch (JsonProcessingException e) {
+                    log.error("Critical: Failed to serialize event payload for outbox. Event for user {} will not be published.", userMessage.getUserId(), e);
+                    // Continue to process other users
+                }
             }
+            outboxEventPublisher.publishBatch(eventsToPublish);
         } else {
             log.warn("Broadcast {} created, but no users were targeted after filtering.", broadcast.getId());
         }
@@ -151,10 +168,26 @@ public class BroadcastLifecycleService {
     private void publishLifecycleEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
         String topicName = getTopicName(broadcast.getTargetType());
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcast.getId());
+        
+        List<OutboxEvent> eventsToPublish = new ArrayList<>();
         for (UserBroadcastMessage userMessage : userBroadcasts) {
             MessageDeliveryEvent eventPayload = createLifecycleEvent(broadcast, userMessage.getUserId(), eventType, message);
-            outboxEventPublisher.publish(eventPayload, userMessage.getUserId(), eventPayload.getEventType(), topicName);
+            try {
+                String payloadJson = objectMapper.writeValueAsString(eventPayload);
+                eventsToPublish.add(OutboxEvent.builder()
+                    .id(UUID.fromString(eventPayload.getEventId()))
+                    .aggregateType(eventPayload.getClass().getSimpleName())
+                    .aggregateId(userMessage.getUserId())
+                    .eventType(eventPayload.getEventType())
+                    .topic(topicName)
+                    .payload(payloadJson)
+                    .createdAt(eventPayload.getTimestamp())
+                    .build());
+            } catch (JsonProcessingException e) {
+                log.error("Critical: Failed to serialize lifecycle event payload for outbox. Event for user {} will not be published.", userMessage.getUserId(), e);
+            }
         }
+        outboxEventPublisher.publishBatch(eventsToPublish);
     }
 
     private MessageDeliveryEvent createDeliveryEvent(BroadcastMessage broadcast, String userId, boolean transientFailure) {
