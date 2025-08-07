@@ -126,9 +126,8 @@ public class UserBroadcastRepository {
             WHERE
                 ubm.user_id = ?
                 AND ubm.delivery_status != 'FAILED'
+                AND bm.status = 'ACTIVE'
                 AND ubm.read_status = 'UNREAD'
-                AND bm.status IN ('ACTIVE', 'SCHEDULED')
-                AND (bm.expires_at IS NULL OR bm.expires_at > CURRENT_TIMESTAMP)
             ORDER BY
                 ubm.created_at DESC
             """;
@@ -151,7 +150,6 @@ public class UserBroadcastRepository {
                 AND ubm.read_status = 'UNREAD'
                 AND ubm.delivery_status = 'DELIVERED'
                 AND bm.status = 'ACTIVE'
-                AND (bm.expires_at IS NULL OR bm.expires_at > CURRENT_TIMESTAMP)
             ORDER BY
                 ubm.created_at DESC
             """;
