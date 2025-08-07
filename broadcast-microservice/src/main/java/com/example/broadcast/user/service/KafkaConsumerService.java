@@ -12,7 +12,6 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,7 +22,6 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CacheService cacheService;
-            
     private static final Map<String, Integer> TRANSIENT_FAILURE_ATTEMPTS = new ConcurrentHashMap<>();
     private static final int MAX_AUTOMATIC_ATTEMPTS = 3;
 
@@ -33,7 +31,7 @@ public class KafkaConsumerService {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void processAllUsersBroadcastEvent(
-            @Payload MessageDeliveryEvent event, // MODIFIED: Directly consume the deserialized object
+            @Payload MessageDeliveryEvent event,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
@@ -48,7 +46,7 @@ public class KafkaConsumerService {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void processSelectedUsersBroadcastEvent(
-            @Payload MessageDeliveryEvent event, // MODIFIED: Directly consume the deserialized object
+            @Payload MessageDeliveryEvent event,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
@@ -67,7 +65,7 @@ public class KafkaConsumerService {
         try {
             log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                     event.getEventId(), topic, partition, offset);
-
+            
             if (event.isTransientFailure()) {
                 int attempts = TRANSIENT_FAILURE_ATTEMPTS.getOrDefault(event.getEventId(), 0);
                 if (attempts < MAX_AUTOMATIC_ATTEMPTS) {
@@ -138,12 +136,23 @@ public class KafkaConsumerService {
 
     private void handleBroadcastCancelled(MessageDeliveryEvent event) {
         log.info("Handling broadcast cancelled event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
+        // START OF CHANGES
+        // Invalidate both pending and active message caches
         cacheService.removePendingEvent(event.getUserId(), event.getBroadcastId());
+        cacheService.removeMessageFromUserCache(event.getUserId(), event.getBroadcastId());
+        log.debug("Removed cancelled message from pending and active caches for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
+        // END OF CHANGES
         sseService.handleMessageEvent(event);
     }
 
     private void handleBroadcastExpired(MessageDeliveryEvent event) {
         log.info("Handling broadcast expired event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
+        // START OF CHANGES
+        // Invalidate both pending and active message caches
+        cacheService.removePendingEvent(event.getUserId(), event.getBroadcastId());
+        cacheService.removeMessageFromUserCache(event.getUserId(), event.getBroadcastId());
+        log.debug("Removed expired message from pending and active caches for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
+        // END OF CHANGES
         sseService.handleMessageEvent(event);
     }
 }
