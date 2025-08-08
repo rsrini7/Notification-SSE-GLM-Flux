@@ -73,7 +73,7 @@ This flow empowers an administrator to inspect and act on failures, creating a r
 
 Congratulations, you've reached the end of the tutorial!
 
-You now understand the entire Broadcast Messaging System, from the [high-level architecture](01_system_architecture.md) to the [React frontend](02_react_frontend.md), the [Java backend](03_java_microservice.md), the [real-time SSE communication](04_server_sent_events.md), the [resilient Kafka backbone](05_kafka_integration.md), and the essential DLT safety net.
+You now understand the entire Broadcast Messaging System, from the [high-level architecture](01_system_architecture.md) to the [React frontend](02_react_frontend.md), the [Java backend](03_java_microservice.md), the [real-time SSE communication](04_server_sent_events.md), the [resilient Kafka backbone](05_kafka_integration.md), the essential DLT safety net, the [caching strategies](07_caching_integration.md), the [database integration](08_database_integration.md), and the [deployment strategies](09_deployment.md).
 
 We hope this gives you a solid foundation for working with and building upon this project.
 --- END OF FILE ---

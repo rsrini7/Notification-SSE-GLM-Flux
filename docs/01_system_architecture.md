@@ -10,11 +10,13 @@ This project is structured just like that to separate concerns. Each part has on
 
 ### Core Explanation: The Main Components
 
-Our system has three main layers:
+Our system is built with a clear separation of concerns, organized into several key components that work together seamlessly:
 
-1.  **React Frontend**: This is what users see and interact with. It's the web application that runs in the browser, providing an "Admin Panel" to send broadcasts and a "User Panel" to receive them.
-2.  **Java Microservice**: This is the brain of the operation. It handles requests from the frontend, manages the business logic (like storing messages), and pushes updates to users.
-3.  **Kafka & Database**: This is the infrastructure backbone. Kafka acts as the high-speed mail-sorting system that queues up messages, while the PostgreSQL database is the long-term archive for all sent messages.
+1.  **React Frontend**: This is the user-facing part of our system. It's a modern web application that runs in your browser, providing two main interfaces: an "Admin Panel" for creating and managing broadcasts, and a "User Panel" for receiving real-time messages. It's like the dashboard and display screen of our notification system.
+2.  **Java Microservice**: This is the powerful engine behind the scenes. Built with Spring Boot and WebFlux, it handles all the core business logic. It receives requests from the frontend, processes messages, interacts with the database, and pushes real-time updates to users. Think of it as the central control unit.
+3.  **Kafka**: This is our high-speed, super-reliable messaging highway. Kafka acts as a distributed event streaming platform, ensuring that messages are queued, processed asynchronously, and delivered without loss. It's crucial for handling the flow of broadcast messages efficiently.
+4.  **PostgreSQL Database**: This is the long-term memory of our system. All broadcast messages, user data, and system configurations are persistently stored here. It ensures that even if parts of our system go down, your data is safe and sound.
+5.  **Redis Cache**: To make things lightning fast, we use Redis. It's an in-memory data store that acts as a super-speedy temporary storage for frequently accessed information, like active user connections or recently sent messages. This reduces the load on our main database and speeds up message delivery.
 
 ### Internal Walkthrough: How a Message Travels
 
@@ -26,23 +28,26 @@ sequenceDiagram
     participant Frontend as React Frontend
     participant Backend as Java Microservice
     participant Kafka
-    participant Database as PostgreSQL DB
+    participant DB as PostgreSQL DB
+    participant Redis as Redis Cache
     participant User as User's Browser
 
     Admin->>Frontend: 1. Clicks "Send Broadcast"
     Frontend->>Backend: 2. POST /api/broadcasts (REST API)
-    Backend->>Database: 3. Stores the message
-    Backend->>Kafka: 4. Publishes message to a topic
-    Kafka-->>Backend: 5. Consumer receives the message
-    Backend-->>User: 6. Pushes message via SSE
+    Backend->>DB: 3. Stores the message
+    Backend->>Redis: 4. Caches message (optional)
+    Backend->>Kafka: 5. Publishes message to a topic
+    Kafka-->>Backend: 6. Consumer receives the message
+    Backend-->>User: 7. Pushes message via SSE
 ```
 
 1.  An **Admin** writes a message in the [React Frontend](02_react_frontend.md) and hits send.
 2.  The frontend packages this into a standard `POST` request to the [Java Microservice](03_java_microservice.md).
-3.  The microservice immediately saves the message to the **PostgreSQL Database** for long-term storage.
-4.  It then publishes the message to a **Kafka** topic. This decouples the sending from the delivery.
-5.  A Kafka consumer within the same microservice listens for this message.
-6.  Upon receiving it, the microservice finds all connected users and pushes the message to them in real-time using [Server-Sent Events (SSE)](04_server_sent_events.md).
+3.  The microservice immediately saves the message to the **PostgreSQL Database** for long-term storage. For more details, see the [Database Integration](08_database_integration.md) chapter.
+4.  It then optionally caches the message in **Redis** for quick retrieval.
+5.  It then publishes the message to a **Kafka** topic. This decouples the sending from the delivery.
+6.  A Kafka consumer within the same microservice listens for this message.
+7.  Upon receiving it, the microservice finds all connected users and pushes the message to them in real-time using [Server-Sent Events (SSE)](04_server_sent_events.md).
 
 ### Conclusion
 

@@ -1,54 +1,53 @@
-# Welcome to the Broadcast Messaging System Tutorial
+# Broadcast Microservice Documentation
 
-This tutorial provides a beginner-friendly guide to understanding the architecture and core concepts of the Broadcast Messaging System. We'll explore how the frontend, backend, and messaging queue work together to deliver real-time notifications.
+## Overview
+This documentation provides a comprehensive overview of the Broadcast Microservice, a high-throughput, real-time notification system designed to deliver messages to a large number of users efficiently. The system leverages modern technologies like Spring Boot WebFlux, Kafka, Server-Sent Events (SSE), and Redis for caching and distributed messaging.
 
-## Project Architecture
+## Architecture
+The Broadcast Microservice follows a reactive and event-driven architecture. Key components include:
 
-The system is composed of a React frontend that communicates with a Java backend. The backend uses Kafka to manage message queues and ensures reliable, real-time delivery to users via Server-Sent Events (SSE).
-
-Here is a high-level overview of the architecture:
+- **React Frontend (A)**: User interface for managing and receiving broadcasts.
+- **Spring Boot WebFlux Microservice (C)**: Backend service handling business logic, API endpoints, and integration with other components.
+- **Kafka (D)**: Distributed streaming platform for reliable, high-throughput message ingestion and processing.
+- **Redis Cache (G)**: In-memory data store used for caching user connections, pending messages, and broadcast content to improve performance and reduce database load.
+- **PostgreSQL (E)**: Relational database for persistent storage of broadcast information and user data.
+- **Caffeine Cache (F)**: In-memory cache for frequently accessed data within the microservice.
 
 ```mermaid
 graph TD
-    A[Admin/User via Browser] -->|HTTPS| B(React Frontend);
-    B -->|REST API & SSE| C(Java Microservice);
-    C -->|Publishes/Consumes| D(Kafka Message Broker);
-    C -->|Reads/Writes| E(PostgreSQL Database);
-    D -->|Failed Messages| F(Dead Letter Topic);
+    A[React Frontend] -->|1. Send Broadcast Request| B(Load Balancer)
+    B -->|2. Route Request| C{Java Microservice}
+    C -->|3. Publish Event| D[Kafka]
+    D -->|4. Consume Event| C
+    C -->|5. Store Data| E[PostgreSQL]
+    C -->|6. Cache Data| F[Caffeine Cache]
+    C -->|7. Cache Data| G[Redis Cache]
+    C -->|8. Deliver via SSE| A
 
-    subgraph "User Interface"
-        A
-    end
-
-    subgraph "Application Layer"
-        B
-        C
-    end
-
-    subgraph "Infrastructure"
+    subgraph Infrastructure
         D
         E
-        F
+        G
     end
 
-    classDef user fill:#cde4ff,stroke:#333;
-    classDef app fill:#d5f5e3,stroke:#333;
-    classDef infra fill:#fff0c1,stroke:#333;
-
-    class A user;
-    class B,C app;
-    class D,E,F infra;
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#bbf,stroke:#333,stroke-width:2px
+    style C fill:#bfb,stroke:#333,stroke-width:2px
+    style D fill:#ffb,stroke:#333,stroke-width:2px
+    style E fill:#ccf,stroke:#333,stroke-width:2px
+    style F fill:#fbc,stroke:#333,stroke-width:2px
+    style G fill:#fbc,stroke:#333,stroke-width:2px
 ```
 
-## Chapters
-
-Here is the path we'll take through the system. We recommend going in order, but feel free to jump to any topic that interests you.
-
-1.  [High-Level System Architecture](01_system_architecture.md)
-2.  [The React Frontend](02_react_frontend.md)
-3.  [The Java Microservice](03_java_microservice.md)
-4.  [Real-time Magic: Server-Sent Events (SSE)](04_server_sent_events.md)
-5.  [The Backbone: Kafka Integration](05_kafka_integration.md)
-6.  [Handling Failure: DLT Management](06_dlt_management.md)
-7.  [Caching Integration](07_caching_integration.md)
---- END OF FILE ---
+## Table of Contents
+1. [System Architecture](01_system_architecture.md)
+2. [React Frontend](02_react_frontend.md)
+3. [Java Microservice](03_java_microservice.md)
+4. [Server-Sent Events (SSE)](04_server_sent_events.md)
+5. [Kafka Integration](05_kafka_integration.md)
+6. [DLT Management](06_dlt_management.md)
+7. [Caching System Integration](07_caching_integration.md)
+8. [Database Integration](08_database_integration.md)
+9. [Deployment](09_deployment.md)
+10. [Troubleshooting](10_troubleshooting.md)
+11. [Future Enhancements](11_future_enhancements.md)
