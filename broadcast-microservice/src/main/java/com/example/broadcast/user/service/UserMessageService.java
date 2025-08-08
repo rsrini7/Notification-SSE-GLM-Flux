@@ -131,58 +131,50 @@ public class UserMessageService {
     public void markMessageAsRead(String userId, Long broadcastId) {
         log.info("Attempting to mark broadcast {} as read for user {}", broadcastId, userId);
 
-        // Find the parent broadcast to ensure it exists.
-        BroadcastMessage parentBroadcast = broadcastRepository.findById(broadcastId)
-                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
+        Optional<UserBroadcastMessage> userMessageOpt = userBroadcastRepository
+                .findByUserIdAndBroadcastId(userId, broadcastId);
 
-        // Atomically find an existing record or prepare to create a new one.
-        UserBroadcastMessage userMessage = userBroadcastRepository
-                .findByUserIdAndBroadcastId(userId, broadcastId)
-                .orElseGet(() -> {
-                    log.info("No existing message record for user {}, broadcast {}. Creating a new one (for ALL/ROLE broadcast).", userId, broadcastId);
-                    // This is the "CREATE" path.
-                    return UserBroadcastMessage.builder()
-                            .userId(userId)
-                            .broadcastId(broadcastId)
-                            .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
-                            .build();
-                });
+        if (userMessageOpt.isPresent()) {
+            // --- START: FIX FOR SELECTED USERS ---
+            // UPDATE PATH: A record already exists, so this is a 'SELECTED' user broadcast.
+            // Use the specific, atomic `markAsRead` repository method.
+            UserBroadcastMessage existingMessage = userMessageOpt.get();
+            if (Constants.ReadStatus.READ.name().equals(existingMessage.getReadStatus())) {
+                log.warn("Message for broadcast {} was already read for user {}. No action taken.", broadcastId, userId);
+                return;
+            }
+            
+            // This returns the number of rows updated.
+            int updatedRows = userBroadcastRepository.markAsRead(existingMessage.getId(), ZonedDateTime.now(ZoneOffset.UTC));
+            if (updatedRows == 0) {
+                log.warn("Message for broadcast {} was already read for user {} (concurrent update). No action taken.", broadcastId, userId);
+                return;
+            }
+            // --- END: FIX FOR SELECTED USERS ---
 
-        // If the message is already read, do nothing.
-        if (Constants.ReadStatus.READ.name().equals(userMessage.getReadStatus())) {
-            log.warn("Message for broadcast {} was already marked as read for user {}. No action taken.", broadcastId, userId);
-            return;
-        }
-
-        // Update the state to READ.
-        userMessage.setReadStatus(Constants.ReadStatus.READ.name());
-        userMessage.setReadAt(ZonedDateTime.now(ZoneOffset.UTC));
-
-        // If the record is new (ID is null), save it. Otherwise, update it.
-        if (userMessage.getId() == null) {
-            userBroadcastRepository.save(userMessage);
         } else {
-            userBroadcastRepository.update(userMessage);
+            // CREATE PATH: No record exists, so this is an 'ALL' or 'ROLE' broadcast.
+            // Create a new record and save it.
+            log.info("No existing message record for user {}, broadcast {}. Creating a new one.", userId, broadcastId);
+            UserBroadcastMessage newMessage = UserBroadcastMessage.builder()
+                    .userId(userId)
+                    .broadcastId(broadcastId)
+                    .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
+                    .readStatus(Constants.ReadStatus.READ.name())
+                    .readAt(ZonedDateTime.now(ZoneOffset.UTC))
+                    .build();
+            userBroadcastRepository.save(newMessage);
         }
         
-        // Update statistics and publish the READ event to Kafka for real-time UI updates.
+        // This part is now common to both paths
         broadcastStatisticsRepository.incrementReadCount(broadcastId);
         cacheService.updateMessageReadStatus(userId, broadcastId);
-        String topicName = getTopicNameForBroadcast(parentBroadcast);
+        String topicName = appProperties.getKafka().getTopic().getNameSelected();
         messageStatusService.publishReadEvent(broadcastId, userId, topicName);
         
-        log.info("Successfully marked broadcast {} as read for user {} and published READ event.", broadcastId, userId);
+        log.info("Successfully processed 'mark as read' for broadcast {} for user {} and published READ event.", broadcastId, userId);
     }
     
-    private String getTopicNameForBroadcast(BroadcastMessage broadcast) {
-        String targetType = broadcast.getTargetType();
-        if (Constants.TargetType.SELECTED.name().equals(targetType)) {
-            return appProperties.getKafka().getTopic().getNameSelected();
-        }
-        return appProperties.getKafka().getTopic().getNameGroup();
-    }
-
-
     private UserMessageInfo toUserMessageInfo(UserBroadcastResponse response) {
         return new UserMessageInfo(
             response.getId(),

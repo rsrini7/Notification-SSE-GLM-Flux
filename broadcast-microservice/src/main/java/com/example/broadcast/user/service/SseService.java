@@ -166,28 +166,43 @@ public class SseService {
     }
 
     private void sendPendingMessages(String userId) {
+        // --- START: THIS IS THE CORRECTED LOGIC ---
+
+        // 1. First, check the cache for any recently missed messages.
         List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
-        if (!pendingEvents.isEmpty()) {
+        
+        // 2. If events are found in the cache, deliver them and STOP.
+        if (pendingEvents != null && !pendingEvents.isEmpty()) {
             log.info("Found {} pending messages in cache for user: {}", pendingEvents.size(), userId);
             for (MessageDeliveryEvent event : pendingEvents) {
-                // We must use the original, database-driven delivery method for pending messages.
+                // Re-fetch the broadcast to ensure it's still active before delivering
                 broadcastRepository.findById(event.getBroadcastId()).ifPresent(broadcast -> {
-                    deliverSelectedUserMessage(event.getUserId(), broadcast);
+                    
+                    // Route to the correct delivery method based on the original broadcast's target type
+                    if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
+                        deliverSelectedUserMessage(event.getUserId(), broadcast);
+                    } else {
+                        deliverGroupUserMessage(event.getUserId(), broadcast);
+                    }
+
                 });
             }
+            // After sending, clear the pending events cache for this user.
             cacheService.clearPendingEvents(userId);
-            return;
+            return; // This 'return' is critical.
         }
 
-        List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
-        if (!pendingMessages.isEmpty()) {
-            log.warn("Cache was empty, but found {} pending messages in DB for user: {}", pendingMessages.size(), userId);
-            for (UserBroadcastMessage message : pendingMessages) {
+        // 3. Only if the cache is empty, check the database for older, targeted messages.
+        List<UserBroadcastMessage> pendingDbMessages = userBroadcastRepository.findPendingMessages(userId);
+        if (!pendingDbMessages.isEmpty()) {
+            log.warn("Cache was empty, but found {} pending messages in DB for user: {}", pendingDbMessages.size(), userId);
+            for (UserBroadcastMessage message : pendingDbMessages) {
                 broadcastRepository.findById(message.getBroadcastId()).ifPresent(broadcast -> {
                     deliverSelectedUserMessage(userId, broadcast);
                 });
             }
         }
+        // --- END: THIS IS THE CORRECTED LOGIC ---
     }
 
     // --- ADD THIS NEW METHOD ---
