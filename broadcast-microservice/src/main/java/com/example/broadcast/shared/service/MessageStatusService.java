@@ -1,17 +1,19 @@
 package com.example.broadcast.shared.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
+import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -44,23 +46,54 @@ public class MessageStatusService {
         }
     }
 
+     /**
+     * Updates the status of a specific UserBroadcastMessage to DELIVERED.
+     * This method is now primarily for the "fan-out-on-write" (SELECTED user) path.
+     *
+     * @return true if the status was successfully updated from PENDING to DELIVERED.
+     */
+    @Transactional
+    public boolean updateMessageStatusToDelivered(String userId, Long broadcastId) {
+        Optional<UserBroadcastMessage> userMessageOpt = userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcastId);
+
+        if (userMessageOpt.isPresent()) {
+            UserBroadcastMessage userMessage = userMessageOpt.get();
+            if (Constants.DeliveryStatus.PENDING.name().equals(userMessage.getDeliveryStatus())) {
+                userMessage.setDeliveryStatus(Constants.DeliveryStatus.DELIVERED.name());
+                userMessage.setDeliveredAt(ZonedDateTime.now(ZoneOffset.UTC));
+                userBroadcastRepository.update(userMessage);
+                broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Publishes a READ event to the outbox.
+     * It now checks if a UserBroadcastMessage record exists before publishing.
+     */
     @Transactional
     public void publishReadEvent(Long broadcastId, String userId, String topicName) {
-        MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
-            .eventId(UUID.randomUUID().toString())
-            .broadcastId(broadcastId)
-            .userId(userId)
-            .eventType(Constants.EventType.READ.name())
-            .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
-            .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-            .message("User marked message as read")
-            .build();
-        outboxEventPublisher.publish(
-            eventPayload,
-            userId,
-            eventPayload.getEventType(),
-            topicName
-        );
+        // **CORRECTED LOGIC**: Only publish a READ event if a user-specific record exists.
+        // This prevents errors for group/global broadcasts which are delivered without a DB record.
+        Optional<UserBroadcastMessage> userMessageOpt = userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcastId);
+        
+        if (userMessageOpt.isEmpty()) {
+            log.info("Skipping READ event publication for user {} and broadcast {}. No user-specific record found (likely a group broadcast).", userId, broadcastId);
+            return;
+        }
+
+        MessageDeliveryEvent event = MessageDeliveryEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .broadcastId(broadcastId)
+                .userId(userId)
+                .eventType(Constants.EventType.READ.name())
+                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                .build();
+                
+        outboxEventPublisher.publish(event, userId, Constants.EventType.READ.name(), topicName);
+        log.info("Published READ event for user: {}, broadcast: {}", userId, broadcastId);
     }
 
 }

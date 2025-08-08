@@ -156,6 +156,34 @@ public class UserBroadcastRepository {
         return jdbcTemplate.query(sql, userBroadcastResponseRowMapper, userId);
     }
 
+    /**
+    * This is the updated method using a PreparedStatement callback for consistency and clarity.
+    */
+    public void update(UserBroadcastMessage message) {
+        String sql = "UPDATE user_broadcast_messages SET delivery_status = ?, read_status = ?, delivered_at = ?, read_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setString(1, message.getDeliveryStatus());
+            ps.setString(2, message.getReadStatus());
+
+            if (message.getDeliveredAt() != null) {
+                ps.setObject(3, message.getDeliveredAt().toOffsetDateTime());
+            } else {
+                ps.setNull(3, Types.TIMESTAMP_WITH_TIMEZONE);
+            }
+
+            if (message.getReadAt() != null) {
+                ps.setObject(4, message.getReadAt().toOffsetDateTime());
+            } else {
+                ps.setNull(4, Types.TIMESTAMP_WITH_TIMEZONE);
+            }
+
+            ps.setLong(5, message.getId());
+            return ps;
+        });
+    }
+
     public List<UserBroadcastMessage> findPendingMessages(String userId) {
         String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND delivery_status = 'PENDING' ORDER BY created_at ASC";
         return jdbcTemplate.query(sql, userBroadcastRowMapper, userId);
