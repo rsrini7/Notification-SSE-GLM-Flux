@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useSseConnection } from './useSseConnection';
 import { userService, type UserBroadcastMessage } from '../services/api';

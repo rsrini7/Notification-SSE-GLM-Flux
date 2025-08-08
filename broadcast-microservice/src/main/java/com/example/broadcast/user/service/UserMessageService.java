@@ -176,6 +176,7 @@ public class UserMessageService {
         // This part is now common to both paths
         broadcastStatisticsRepository.incrementReadCount(broadcastId);
         cacheService.updateMessageReadStatus(userId, broadcastId);
+        cacheService.removePendingEvent(userId, broadcastId);
         String topicName = appProperties.getKafka().getTopic().getNameSelected();
         messageStatusService.publishReadEvent(broadcastId, userId, topicName);
         

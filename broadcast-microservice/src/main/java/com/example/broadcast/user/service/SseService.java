@@ -154,12 +154,6 @@ public class SseService {
                 sendSseEvent(userId, response);
                 if (isUserConnected(userId)) {
                     messageStatusService.updateMessageToDelivered(message.getId(), broadcast.getId());
-                    cacheService.addMessageToUserCache(userId, 
-                        new UserMessageInfo(
-                            message.getId(), message.getBroadcastId(), DeliveryStatus.DELIVERED.name(), 
-                            message.getReadStatus(), message.getCreatedAt()
-                        )
-                    );
                     log.info("Message delivered and status updated for SELECTED user: {}, broadcast: {}", userId, broadcast.getId());
                 }
             });
