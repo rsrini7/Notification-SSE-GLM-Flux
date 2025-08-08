@@ -66,6 +66,20 @@ public class KafkaConsumerService {
         log.info("Received group broadcast event for broadcast ID: {}", event.getBroadcastId());
         
         try {
+
+             // --- START MODIFIED LOGIC ---
+            // If the event is a lifecycle event, just forward it to all online users.
+            if (event.getEventType().equals(EventType.CANCELLED.name()) || event.getEventType().equals(EventType.EXPIRED.name())) {
+                List<String> onlineUsers = cacheService.getOnlineUsers();
+                log.info("Fanning out group lifecycle event {} for broadcast {} to {} online users.", event.getEventType(), event.getBroadcastId(), onlineUsers.size());
+                for (String userId : onlineUsers) {
+                    MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
+                    handleEvent(userEvent); // handleEvent will route this to SseService
+                }
+                acknowledgment.acknowledge();
+                return;
+            }
+            // --- END MODIFIED LOGIC ---
             // First, fetch the parent broadcast message from the database
             BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId())
                 .orElseThrow(() -> new IllegalStateException("FATAL: Broadcast not found for group event: " + event.getBroadcastId()));

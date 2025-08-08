@@ -180,18 +180,44 @@ public class BroadcastLifecycleService {
     private void publishLifecycleEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
         String topicName = getTopicName(broadcast.getTargetType());
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcast.getId());
-        
-        List<OutboxEvent> eventsToPublish = new ArrayList<>();
-        for (UserBroadcastMessage userMessage : userBroadcasts) {
-            MessageDeliveryEvent eventPayload = createLifecycleEvent(broadcast, userMessage.getUserId(), eventType, message);
+
+        // --- START MODIFIED LOGIC ---
+        if (!userBroadcasts.isEmpty()) {
+            // This is the existing logic for SELECTED users, which is correct.
+            List<OutboxEvent> eventsToPublish = new ArrayList<>();
+            for (UserBroadcastMessage userMessage : userBroadcasts) {
+                MessageDeliveryEvent eventPayload = createLifecycleEvent(broadcast, userMessage.getUserId(), eventType, message);
+                try {
+                    String payloadJson = objectMapper.writeValueAsString(eventPayload);
+                    eventsToPublish.add(createOutboxEvent(eventPayload, topicName, payloadJson));
+                } catch (JsonProcessingException e) {
+                    log.error("Critical: Failed to serialize lifecycle event payload for outbox. Event for user {} will not be published.", userMessage.getUserId(), e);
+                }
+            }
+            outboxEventPublisher.publishBatch(eventsToPublish);
+        } else if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) || Constants.TargetType.ROLE.name().equals(broadcast.getTargetType())) {
+            // NEW LOGIC: If no user records exist, it's a group broadcast. Publish a single group event.
+            log.info("Publishing group lifecycle event ({}) for broadcast {}", eventType.name(), broadcast.getId());
+            MessageDeliveryEvent eventPayload = createGroupLifecycleEvent(broadcast, eventType, message);
             try {
                 String payloadJson = objectMapper.writeValueAsString(eventPayload);
-                eventsToPublish.add(createOutboxEvent(eventPayload, topicName, payloadJson));
+                outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, payloadJson));
             } catch (JsonProcessingException e) {
-                log.error("Critical: Failed to serialize lifecycle event payload for outbox. Event for user {} will not be published.", userMessage.getUserId(), e);
+                log.error("Critical: Failed to serialize group lifecycle event payload for outbox for broadcast {}.", broadcast.getId(), e);
             }
         }
-        outboxEventPublisher.publishBatch(eventsToPublish);
+    // --- END MODIFIED LOGIC ---
+    }
+
+    private MessageDeliveryEvent createGroupLifecycleEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
+        return MessageDeliveryEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .broadcastId(broadcast.getId())
+                .eventType(eventType.name())
+                .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                .message(message)
+                .build();
     }
     
     private OutboxEvent createOutboxEvent(MessageDeliveryEvent eventPayload, String topicName, String payloadJson) {
