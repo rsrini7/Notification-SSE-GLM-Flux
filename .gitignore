@@ -1,10 +1,11 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
+
+/broadcast-frontend/node_modules
+/broadcast-frontend/.pnp
+/broadcast-frontend/.pnp.js
+/broadcast-frontend/.yarn
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases

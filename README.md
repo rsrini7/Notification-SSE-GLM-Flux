@@ -136,18 +136,26 @@ Backend: Java with Spring Boot and Netty
 -   `password` - Password
 
 
-## Project Structure
+## Frontend Project Structure
 
 ```
-src/
-├── components/
-│   ├── ui/           # shadcn/ui components
-│   └── broadcast/    # Broadcast-specific components
-├── hooks/            # Custom React hooks
-├── services/         # API service layer
-├── App.tsx           # Main application component
-├── main.tsx          # Application entry point
-└── index.css         # Global styles
+broadcast-frontend/
+├── src/
+│   ├── components/
+│   │   ├── ui/           # shadcn/ui components
+│   │   └── broadcast/    # Broadcast-specific components
+│   ├── hooks/            # Custom React hooks
+│   ├── lib/              # Utility functions and helpers
+│   ├── services/         # API service layer
+│   ├── utils/            # General utility functions
+│   ├── App.tsx           # Main application component
+│   ├── main.tsx          # Application entry point
+│   └── index.css         # Global styles
+│   ├── nginx.conf        # Nginx configuration file
+│   ├── localhost.pem     # SSL certificate
+│   ├── localhost-key.pem # SSL private key
+
+
 ```
 
 ## API Configuration
@@ -205,6 +213,23 @@ VITE_API_BASE_URL=http://localhost:8081
    ```
 
 3. **Deploy the `dist` folder** to your web server
+
+## Backend Project Structure
+
+```
+broadcast-microservice/
+├── KUBERNETES_GUIDE.md
+├── k8s/              # Kubernetes deployment configurations
+│   ├── base/         # Base Kubernetes manifests
+│   └── overlays/     # Environment-specific Kubernetes overlays
+├── pom.xml           # Maven project file
+└── src/
+    ├── main/
+    │   ├── java/     # Main Java source code
+    │   └── resources/ # Application resources (e.g., application.yml, static files)
+    └── test/
+        └── scala/    # Test source code (if any Scala tests are present)
+```
 
 ## Development
 

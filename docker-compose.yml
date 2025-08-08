@@ -4,9 +4,9 @@ services:
     ports:
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./localhost.pem:/etc/nginx/certs/localhost.pem
-      - ./localhost-key.pem:/etc/nginx/certs/localhost-key.pem
+      - ./broadcast-frontend/nginx.conf:/etc/nginx/nginx.conf
+      - ./broadcast-frontend/localhost.pem:/etc/nginx/certs/localhost.pem
+      - ./broadcast-frontend/localhost-key.pem:/etc/nginx/certs/localhost-key.pem
     depends_on:
       - kafka
       - postgres
