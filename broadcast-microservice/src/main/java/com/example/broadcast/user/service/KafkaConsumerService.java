@@ -6,6 +6,7 @@ import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.service.cache.CacheService;
+import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.EventType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,26 +66,45 @@ public class KafkaConsumerService {
         log.info("Received group broadcast event for broadcast ID: {}", event.getBroadcastId());
         
         try {
+            // First, fetch the parent broadcast message from the database
             BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId())
-                .orElseThrow(() -> new IllegalStateException("Broadcast not found for group event: " + event.getBroadcastId()));
+                .orElseThrow(() -> new IllegalStateException("FATAL: Broadcast not found for group event: " + event.getBroadcastId()));
 
             List<String> targetUserIds;
-            if ("ALL".equals(broadcast.getTargetType())) {
+            if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
+                log.info("Broadcast {} is for SELECTED users. Using targetIds directly.", broadcast.getId());
+                targetUserIds = broadcast.getTargetIds();
+            }else if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
+                log.info("Broadcast {} is for ALL users. Fetching all user IDs.", broadcast.getId());
                 targetUserIds = userService.getAllUserIds();
-            } else { // ROLE
+            } else if (Constants.TargetType.ROLE.name().equals(broadcast.getTargetType())) {
+                log.info("Broadcast {} is for ROLES: {}. Fetching user IDs for roles.", broadcast.getId(), broadcast.getTargetIds());
                 targetUserIds = broadcast.getTargetIds().stream()
                     .flatMap(role -> userService.getUserIdsByRole(role).stream())
                     .distinct()
                     .collect(Collectors.toList());
+            } else {
+                log.warn("Group event received for broadcast {} with unexpected target type: {}", broadcast.getId(), broadcast.getTargetType());
+                targetUserIds = Collections.emptyList();
             }
 
+            if (targetUserIds.isEmpty()) {
+                log.warn("No target users found for group broadcast {}. Acknowledging message without delivery.", broadcast.getId());
+                acknowledgment.acknowledge();
+                return;
+            }
+
+            // Get the list of users who are currently connected
             List<String> onlineUsers = cacheService.getOnlineUsers();
+            
+            // Find the intersection: users who are both targeted and online
             List<String> usersToNotify = targetUserIds.stream()
                 .filter(onlineUsers::contains)
                 .collect(Collectors.toList());
 
             log.info("Delivering group broadcast {} to {} online users out of {} total targets.", event.getBroadcastId(), usersToNotify.size(), targetUserIds.size());
             
+            // Create a specific user event for each online user and process it
             for (String userId : usersToNotify) {
                 MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
                 handleEvent(userEvent);
@@ -92,7 +113,7 @@ public class KafkaConsumerService {
             acknowledgment.acknowledge();
 
         } catch (Exception e) {
-            log.error("Failed to process group message from topic {}. Root cause: {}", topic, e.getMessage());
+            log.error("Failed to process group message from topic {}. Root cause: {}", topic, e.getMessage(), e);
             throw new MessageProcessingException("Failed to process group message", e, event);
         }
     }

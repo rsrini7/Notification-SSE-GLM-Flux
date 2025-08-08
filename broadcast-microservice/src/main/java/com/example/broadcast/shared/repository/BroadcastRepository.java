@@ -16,9 +16,11 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Repository
 public class BroadcastRepository {
@@ -207,23 +209,26 @@ public class BroadcastRepository {
         return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime());
     }
     
-    // **NEW METHOD**
     public List<BroadcastMessage> findActiveBroadcastsByTargetType(String targetType) {
         String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, targetType);
     }
 
-    // **NEW METHOD**
     public List<BroadcastMessage> findActiveBroadcastsByTargetTypeAndIds(String targetType, List<String> targetIds) {
         if (targetIds == null || targetIds.isEmpty()) {
             return List.of();
         }
-        // This query checks if any of the provided targetIds exist in the JSON array stored in the database.
-        // This is a simplified approach; for very large scale, a normalized table would be better.
-        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = ? AND " +
-                     "EXISTS (SELECT 1 FROM json_array_elements_text(target_ids) as elem WHERE elem.value IN (" +
-                     String.join(",", java.util.Collections.nCopies(targetIds.size(), "?")) + "))";
-        return jdbcTemplate.query(sql, broadcastRowMapper, targetIds.toArray());
+
+        // **DATABASE-AGNOSTIC STRATEGY**
+        // 1. Fetch all active broadcasts for the given target type. This is a simple, compatible query.
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = ?";
+        List<BroadcastMessage> allActiveBroadcasts = jdbcTemplate.query(sql, broadcastRowMapper, targetType);
+
+        // 2. Filter the results in the Java application code. This is guaranteed to work across any database.
+        return allActiveBroadcasts.stream()
+                .filter(broadcast -> broadcast.getTargetIds() != null && 
+                                     !Collections.disjoint(broadcast.getTargetIds(), targetIds))
+                .collect(Collectors.toList());
     }
 
 
