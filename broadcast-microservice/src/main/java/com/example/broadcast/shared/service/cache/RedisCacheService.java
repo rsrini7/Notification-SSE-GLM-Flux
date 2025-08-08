@@ -121,11 +121,11 @@ public class RedisCacheService implements CacheService {
     }
 
     @Override
-    public void removeMessageFromUserCache(String userId, Long messageId) {
+    public void removeMessageFromUserCache(String userId, Long broadcastId) {
         String key = USER_MESSAGES_KEY_PREFIX + userId;
         List<UserMessageInfo> messages = userMessagesRedisTemplate.opsForValue().get(key);
         if (messages != null) {
-            messages.removeIf(msg -> msg.getMessageId().equals(messageId));
+            messages.removeIf(msg -> msg.getBroadcastId().equals(broadcastId));
             userMessagesRedisTemplate.opsForValue().set(key, messages, 24, TimeUnit.HOURS);
         }
     }

@@ -94,10 +94,10 @@ public class DefaultCacheService implements CacheService {
     }
 
     @Override
-    public void removeMessageFromUserCache(String userId, Long messageId) {
+    public void removeMessageFromUserCache(String userId, Long broadcastId) {
         List<UserMessageInfo> messages = userMessagesCache.getIfPresent(userId);
         if (messages != null) {
-            messages.removeIf(msg -> msg.getMessageId().equals(messageId));
+            messages.removeIf(msg -> msg.getBroadcastId().equals(broadcastId));
             userMessagesCache.put(userId, messages);
         }
     }

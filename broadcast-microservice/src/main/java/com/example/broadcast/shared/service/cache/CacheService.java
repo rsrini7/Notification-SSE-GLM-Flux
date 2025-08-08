@@ -26,7 +26,7 @@ public interface CacheService {
 
     void addMessageToUserCache(String userId, UserMessageInfo message);
 
-    void removeMessageFromUserCache(String userId, Long messageId);
+    void removeMessageFromUserCache(String userId, Long broadcastId);
     void cachePendingEvent(MessageDeliveryEvent event);
 
     List<MessageDeliveryEvent> getPendingEvents(String userId);
