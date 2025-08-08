@@ -134,28 +134,6 @@ public class UserBroadcastRepository {
         return jdbcTemplate.query(sql, userBroadcastResponseRowMapper, userId);
     }
     
-    public List<UserBroadcastResponse> findUnreadMessagesByUserId(String userId) {
-        String sql = """
-            SELECT
-                ubm.id, ubm.broadcast_id, ubm.user_id, ubm.delivery_status, ubm.read_status,
-                ubm.delivered_at, ubm.read_at, ubm.created_at,
-                bm.sender_name, bm.content, bm.priority, bm.category,
-                bm.created_at as broadcast_created_at, bm.scheduled_at, bm.expires_at
-            FROM
-                user_broadcast_messages ubm
-            JOIN
-                broadcast_messages bm ON ubm.broadcast_id = bm.id
-            WHERE
-                ubm.user_id = ?
-                AND ubm.read_status = 'UNREAD'
-                AND ubm.delivery_status = 'DELIVERED'
-                AND bm.status = 'ACTIVE'
-            ORDER BY
-                ubm.created_at DESC
-            """;
-        return jdbcTemplate.query(sql, userBroadcastResponseRowMapper, userId);
-    }
-
     /**
     * This is the updated method using a PreparedStatement callback for consistency and clarity.
     */

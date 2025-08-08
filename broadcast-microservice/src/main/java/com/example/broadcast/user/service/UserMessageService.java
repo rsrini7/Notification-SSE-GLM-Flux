@@ -3,7 +3,6 @@ package com.example.broadcast.user.service;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.user.dto.UserBroadcastResponse;
 import com.example.broadcast.shared.dto.cache.UserMessageInfo;
-import com.example.broadcast.shared.exception.ResourceNotFoundException;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
@@ -28,6 +27,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.Set;
+import java.util.HashSet;
+
 
 @Service
 @RequiredArgsConstructor
@@ -74,20 +76,25 @@ public class UserMessageService {
 
     @Transactional(readOnly = true)
     public List<UserBroadcastResponse> getGroupMessagesForUser(String userId) {
+        // 1. (NEW) First, get a list of broadcast IDs the user already has a specific record for.
+        List<Long> processedBroadcastIds = userBroadcastRepository.findActiveBroadcastIdsByUserId(userId);
+        Set<Long> processedBroadcastIdSet = new HashSet<>(processedBroadcastIds);
+
         List<String> userRoles = userService.getRolesForUser(userId);
 
-        // Fetch broadcasts targeted to the user's specific roles
+        // 2. Fetch broadcasts targeted to the user's specific roles
         List<BroadcastMessage> roleBroadcasts = userRoles.stream()
                 .flatMap(role -> getActiveBroadcastsForRole(role).stream())
                 .distinct()
                 .collect(Collectors.toList());
 
-        // Fetch broadcasts targeted to "ALL" users
+        // 3. Fetch broadcasts targeted to "ALL" users
         List<BroadcastMessage> allUserBroadcasts = getActiveBroadcastsForAll();
 
-        // Combine, deduplicate, and map to the response DTO
+        // 4. (MODIFIED) Combine, deduplicate, filter out already processed messages, and map to DTO
         return Stream.concat(roleBroadcasts.stream(), allUserBroadcasts.stream())
                 .distinct()
+                .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId())) // This is the new exclusion logic
                 .map(broadcast -> broadcastMapper.toUserBroadcastResponse(null, broadcast))
                 .collect(Collectors.toList());
     }
