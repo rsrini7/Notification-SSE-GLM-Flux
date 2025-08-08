@@ -27,23 +27,39 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
         expiresAt: ''
     });
 
+    // This effect now handles the logic for both selecting and de-selecting "Fire and Forget"
     useEffect(() => {
         if (formData.scheduleType === 'fireAndForget') {
             setFormData(prev => ({
                 ...prev,
                 category: 'Force Logoff',
                 priority: 'URGENT',
-                expiresAt: new Date(Date.now() + 30000).toLocaleString('sv').replace(' ', 'T'),
-                scheduledAt: ''
+                scheduledAt: '',
+                expiresAt: '' // Clear expiresAt initially; it will be set on submit
             }));
-        } else if (formData.category === 'Force Logoff') {
-            // Reset category if switching away from Fire and Forget
-            setFormData(prev => ({ ...prev, category: 'GENERAL' }));
+        } else {
+            // If the user switches away from Fire and Forget, reset the category and clear the expiry.
+            if (formData.category === 'Force Logoff') {
+                setFormData(prev => ({
+                    ...prev,
+                    category: 'GENERAL',
+                    expiresAt: ''
+                }));
+            }
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formData.scheduleType]);
+
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Calculate expiresAt for Fire and Forget at the moment of submission
+        let finalExpiresAt = formData.expiresAt ? new Date(formData.expiresAt).toISOString() : undefined;
+        if (formData.scheduleType === 'fireAndForget') {
+            finalExpiresAt = new Date(Date.now() + 30000).toISOString();
+        }
+
         const payload: BroadcastRequest = {
             senderId: formData.senderId,
             senderName: formData.senderName,
@@ -52,12 +68,10 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
             targetIds: formData.targetType === 'ALL' ? [] : formData.targetIds.split(',').map(id => id.trim()),
             priority: formData.priority,
             category: formData.category,
-            // START OF CHANGE: Update payload creation logic
             scheduledAt: formData.scheduleType === 'scheduled' ? new Date(formData.scheduledAt).toISOString() : undefined,
-            expiresAt: formData.expiresAt ? new Date(formData.expiresAt).toISOString() : undefined,
+            expiresAt: finalExpiresAt,
             isImmediate: formData.scheduleType !== 'scheduled',
             isFireAndForget: formData.scheduleType === 'fireAndForget',
-            // END OF CHANGE
         };
         onCreateBroadcast(payload);
         setFormData({
@@ -74,9 +88,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
         });
     };
     
-    // START OF CHANGE: Helper for conditional disabling
     const isFireAndForget = formData.scheduleType === 'fireAndForget';
-    // END OF CHANGE
     
     return (
         <Card className="border z-50 overflow-visible">
