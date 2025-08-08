@@ -1,4 +1,4 @@
-# Chapter 2: The React Frontend
+# 02. The React Frontend
 
 Let's move to the part of the system that users interact with directly: the frontend. This is a modern web application responsible for rendering the user interface (UI).
 
@@ -40,7 +40,7 @@ This snippet shows how the form calls a dedicated `api.createBroadcast` function
 
 ### Internal Walkthrough: The `useSseConnection` Hook
 
-The real-time functionality is powered by a custom hook, `useSseConnection`. It's responsible for establishing and maintaining the [Server-Sent Events (SSE)](04_server_sent_events.md) connection.
+The real-time functionality is powered by a custom hook, `useSseConnection`. It's responsible for establishing and maintaining the [Server-Sent Events (SSE)](05_server_sent_events.md) connection.
 
 ```mermaid
 sequenceDiagram

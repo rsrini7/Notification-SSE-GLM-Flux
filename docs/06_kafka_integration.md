@@ -1,4 +1,4 @@
-# 05. Kafka Integration
+# 06. Kafka Integration
 
 ## Motivation
 Kafka serves as the event streaming backbone of our broadcast system, enabling reliable message delivery and fault tolerance through its distributed architecture. It handles both broadcast creation events and status updates (read/cancelled/expired) with built-in retry mechanisms via Dead Letter Topics (DLT).

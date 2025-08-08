@@ -1,4 +1,4 @@
-# Chapter 6: Handling Failure: DLT Management
+# 07. Handling Failure: DLT Management
 
 In a perfect world, every message we send would be processed successfully. But in the real world, things can go wrong. A downstream service might be temporarily unavailable, a message might be malformed, or a bug could cause an unexpected error. What do we do then? We use a Dead Letter Topic (DLT).
 

@@ -1,4 +1,4 @@
-# 09. Troubleshooting
+# 12. Troubleshooting
 
 ## Motivation
 This section provides guidance on diagnosing and resolving common issues encountered when operating the Broadcast Microservice. It covers potential problems related to Kafka, caching, and general system performance.

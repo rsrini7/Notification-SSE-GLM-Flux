@@ -1,4 +1,4 @@
-# Chapter 1: High-Level System Architecture
+# 01. High-Level System Architecture
 
 Welcome to the first chapter! Before we dive into the code, let's look at the project from a bird's-eye view. Understanding the main parts and how they talk to each other is the key to mastering any new system.
 
@@ -43,11 +43,11 @@ sequenceDiagram
 
 1.  An **Admin** writes a message in the [React Frontend](02_react_frontend.md) and hits send.
 2.  The frontend packages this into a standard `POST` request to the [Java Microservice](03_java_microservice.md).
-3.  The microservice immediately saves the message to the **PostgreSQL Database** for long-term storage. For more details, see the [Database Integration](08_database_integration.md) chapter.
+3.  The microservice immediately saves the message to the **PostgreSQL Database** for long-term storage. For more details, see the [Database Integration](09_database_integration.md) chapter.
 4.  It then optionally caches the message in **Redis** for quick retrieval.
 5.  It then publishes the message to a **Kafka** topic. This decouples the sending from the delivery.
 6.  A Kafka consumer within the same microservice listens for this message.
-7.  Upon receiving it, the microservice finds all connected users and pushes the message to them in real-time using [Server-Sent Events (SSE)](04_server_sent_events.md).
+7.  Upon receiving it, the microservice finds all connected users and pushes the message to them in real-time using [Server-Sent Events (SSE)](05_server_sent_events.md).
 
 ### Conclusion
 

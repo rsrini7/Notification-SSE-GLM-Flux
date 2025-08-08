@@ -1,4 +1,4 @@
-# Chapter 4: Server-Sent Events (SSE) - Real-time Communication
+# 05. Server-Sent Events (SSE) - Real-time Communication
 
 ## Motivation
 

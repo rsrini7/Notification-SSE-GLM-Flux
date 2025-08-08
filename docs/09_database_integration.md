@@ -1,4 +1,4 @@
-# 06. Database Integration
+# 09. Database Integration
 
 ## Motivation
 The Broadcast Microservice uses a relational database (PostgreSQL in production, H2 for development/testing) for persistent storage of broadcast messages, user sessions, and related metadata. This ensures data durability and consistency.

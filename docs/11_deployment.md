@@ -1,4 +1,4 @@
-# 08. Deployment
+# 11. Deployment
 
 ## Motivation
 Effective deployment strategies are crucial for ensuring the Broadcast Microservice is scalable, resilient, and easy to manage across different environments. We support both local development deployments using Docker Compose and production-grade deployments on Kubernetes.

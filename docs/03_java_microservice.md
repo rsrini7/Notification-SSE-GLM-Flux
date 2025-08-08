@@ -1,11 +1,11 @@
-# Chapter 3: Java Microservice - The Backend Powerhouse
+# 03. Java Microservice - The Backend Powerhouse
 
 ## Motivation
 
 The Java Microservice serves as the robust backend for the Broadcast Messaging System. Built with Spring Boot and leveraging reactive programming with WebFlux, it's designed for high throughput, low latency, and scalability. Its primary responsibilities include:
 
 - **Broadcast Management**: Handling the creation, scheduling, and delivery of broadcast messages.
-- **Real-time Communication**: Managing Server-Sent Events (SSE) connections for real-time message delivery to connected users.
+- **Real-time Communication**: Managing [Server-Sent Events (SSE)](05_server_sent_events.md) connections for real-time message delivery to connected users.
 - **Event Streaming**: Integrating with Apache Kafka for reliable and asynchronous message processing.
 - **Data Persistence**: Storing broadcast and user-related data in PostgreSQL.
 - **Caching**: Utilizing Caffeine and Redis for efficient data retrieval and session management.

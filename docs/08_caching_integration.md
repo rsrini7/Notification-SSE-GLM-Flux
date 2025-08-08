@@ -1,4 +1,4 @@
-# Chapter 7: High-Speed Operations: Caching Integration
+# 08. High-Speed Operations: Caching Integration
 
 In any high-performance system, speed is critical. Constantly fetching data from a database can be slow and expensive. To solve this, our application uses a powerful caching layer to store frequently accessed data in memory, making lookups nearly instantaneous.
 
@@ -94,5 +94,5 @@ sequenceDiagram
 
 The dual caching strategy provides both simplicity for local development (Caffeine) and robust scalability for production (Redis). By using Spring Profiles and a common interface (`CacheService`), the application can seamlessly switch between these two powerful caching engines without changing any business logic.
 
-This concludes our tutorial! You now have a deep understanding of the entire system, from its [architecture](01_system_architecture.md) to its advanced features like caching, including the [React frontend](02_react_frontend.md), the [Java backend](03_java_microservice.md), [real-time SSE communication](04_server_sent_events.md), the [resilient Kafka backbone](05_kafka_integration.md), [DLT management](06_dlt_management.md), [database integration](08_database_integration.md), and [deployment strategies](09_deployment.md).
+This concludes our tutorial! You now have a deep understanding of the entire system, from its [architecture](01_system_architecture.md) to its advanced features like caching, including the [React frontend](02_react_frontend.md), the [Java backend](03_java_microservice.md), [real-time SSE communication](05_server_sent_events.md), the [resilient Kafka backbone](06_kafka_integration.md), [DLT management](07_dlt_management.md), [database integration](09_database_integration.md), and [deployment strategies](11_deployment.md).
 --- END OF FILE ---
