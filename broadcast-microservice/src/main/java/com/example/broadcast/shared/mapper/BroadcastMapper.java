@@ -39,28 +39,40 @@ public class BroadcastMapper {
                 .build();
     }
 
-    /**
+     /**
      * Maps a UserBroadcastMessage and its parent BroadcastMessage to a UserBroadcastResponse DTO.
-     * @param message The user-specific message entity.
+     * Can now handle a null UserBroadcastMessage for creating responses for group/global broadcasts.
+     * @param message The user-specific message entity (can be null).
      * @param broadcast The parent broadcast entity.
      * @return The user-specific response DTO.
      */
     public UserBroadcastResponse toUserBroadcastResponse(UserBroadcastMessage message, BroadcastMessage broadcast) {
-        return UserBroadcastResponse.builder()
-                .id(message.getId())
-                .broadcastId(message.getBroadcastId())
-                .userId(message.getUserId())
-                .deliveryStatus(message.getDeliveryStatus())
-                .readStatus(message.getReadStatus())
-                .deliveredAt(message.getDeliveredAt())
-                .readAt(message.getReadAt())
-                .createdAt(message.getCreatedAt())
+        UserBroadcastResponse.UserBroadcastResponseBuilder builder = UserBroadcastResponse.builder()
+                .broadcastId(broadcast.getId())
                 .senderName(broadcast.getSenderName())
                 .content(broadcast.getContent())
                 .priority(broadcast.getPriority())
                 .category(broadcast.getCategory())
                 .broadcastCreatedAt(broadcast.getCreatedAt())
-                .expiresAt(broadcast.getExpiresAt())
-                .build();
+                .expiresAt(broadcast.getExpiresAt());
+
+        // If a specific user message exists, populate its details
+        if (message != null) {
+            builder.id(message.getId())
+                   .userId(message.getUserId())
+                   .deliveryStatus(message.getDeliveryStatus())
+                   .readStatus(message.getReadStatus())
+                   .deliveredAt(message.getDeliveredAt())
+                   .readAt(message.getReadAt())
+                   .createdAt(message.getCreatedAt());
+        } else {
+            // For group messages where no UserBroadcastMessage exists, set sensible defaults
+            builder.id(broadcast.getId()) // Use broadcast ID as a fallback identifier
+                   .deliveryStatus("DELIVERED") // Assumed delivered as it's being fetched
+                   .readStatus("UNREAD") // Default to unread
+                   .createdAt(broadcast.getCreatedAt());
+        }
+
+        return builder.build();
     }
 }

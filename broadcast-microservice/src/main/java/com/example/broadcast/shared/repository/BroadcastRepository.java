@@ -45,7 +45,7 @@ public class BroadcastRepository {
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
             .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
             .status(rs.getString("status"))
-            .isFireAndForget(rs.getBoolean("is_fire_and_forget")) // Read new column
+            .isFireAndForget(rs.getBoolean("is_fire_and_forget"))
             .build();
 
     private final RowMapper<BroadcastResponse> broadcastResponseRowMapper = (rs, rowNum) -> BroadcastResponse.builder()
@@ -54,7 +54,7 @@ public class BroadcastRepository {
             .senderName(rs.getString("sender_name"))
             .content(rs.getString("content"))
             .targetType(rs.getString("target_type"))
-            .targetIds(JsonUtils.parseJsonArray(rs.getString("target_ids"))) // REFACTORED
+            .targetIds(JsonUtils.parseJsonArray(rs.getString("target_ids")))
             .priority(rs.getString("priority"))
             .category(rs.getString("category"))
             .scheduledAt(rs.getTimestamp("scheduled_at") != null ?
@@ -100,16 +100,16 @@ public class BroadcastRepository {
             ps.setString(10, broadcast.getStatus() != null ?
                     broadcast.getStatus() : BroadcastStatus.ACTIVE.name());
             
-            ps.setBoolean(11, broadcast.isFireAndForget()); // Set new parameter
+            ps.setBoolean(11, broadcast.isFireAndForget());
 
             return ps;
         }, keyHolder);
         
         if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
             Map<String, Object> keys = keyHolder.getKeyList().get(0);
-            Number id = (Number) keys.get("id"); // Check for Postgres's lowercase 'id' first
+            Number id = (Number) keys.get("id");
             if (id == null) {
-                id = (Number) keys.get("ID"); // Fallback to H2's uppercase 'ID'
+                id = (Number) keys.get("ID");
             }
             if (id != null) {
                 broadcast.setId(id.longValue());
@@ -135,7 +135,7 @@ public class BroadcastRepository {
         """;
         jdbcTemplate.update(sql,
             broadcast.getSenderId(), broadcast.getSenderName(), broadcast.getContent(),
-            broadcast.getTargetType(), JsonUtils.toJsonArray(broadcast.getTargetIds()), // REFACTORED
+            broadcast.getTargetType(), JsonUtils.toJsonArray(broadcast.getTargetIds()),
             broadcast.getPriority(), broadcast.getCategory(),
             broadcast.getScheduledAt() != null ? broadcast.getScheduledAt().toOffsetDateTime() : null,
             broadcast.getExpiresAt() != null ? broadcast.getExpiresAt().toOffsetDateTime() : null,
@@ -206,6 +206,26 @@ public class BroadcastRepository {
         String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at <= ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime());
     }
+    
+    // **NEW METHOD**
+    public List<BroadcastMessage> findActiveBroadcastsByTargetType(String targetType) {
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = ?";
+        return jdbcTemplate.query(sql, broadcastRowMapper, targetType);
+    }
+
+    // **NEW METHOD**
+    public List<BroadcastMessage> findActiveBroadcastsByTargetTypeAndIds(String targetType, List<String> targetIds) {
+        if (targetIds == null || targetIds.isEmpty()) {
+            return List.of();
+        }
+        // This query checks if any of the provided targetIds exist in the JSON array stored in the database.
+        // This is a simplified approach; for very large scale, a normalized table would be better.
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = ? AND " +
+                     "EXISTS (SELECT 1 FROM json_array_elements_text(target_ids) as elem WHERE elem.value IN (" +
+                     String.join(",", java.util.Collections.nCopies(targetIds.size(), "?")) + "))";
+        return jdbcTemplate.query(sql, broadcastRowMapper, targetIds.toArray());
+    }
+
 
     public int updateStatus(Long broadcastId, String status) {
         String sql = "UPDATE broadcast_messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";

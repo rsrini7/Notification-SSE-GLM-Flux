@@ -11,7 +11,6 @@ import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.DltRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
-import com.example.broadcast.shared.util.JsonUtils;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,7 +25,6 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Collection;
@@ -50,7 +48,8 @@ public class DltService {
     @KafkaListener(
             topics = {
                 "${broadcast.kafka.topic.name.all:broadcast-events-all}" + Constants.DLT_SUFFIX,
-                "${broadcast.kafka.topic.name.selected:broadcast-events-selected}" + Constants.DLT_SUFFIX
+                "${broadcast.kafka.topic.name.selected:broadcast-events-selected}" + Constants.DLT_SUFFIX,
+                "${broadcast.kafka.topic.name.group:broadcast-events-group}" + Constants.DLT_SUFFIX
             },
             groupId = "${broadcast.kafka.consumer.dlt-group-id:broadcast-dlt-group}",
             containerFactory = "kafkaListenerContainerFactory"

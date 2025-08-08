@@ -141,6 +141,15 @@ public class KafkaConfig {
     }
 
     @Bean
+    public NewTopic groupBroadcastTopic() {
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameGroup())
+                .partitions(appProperties.getKafka().getTopic().getPartitions())
+                .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
+                .config("retention.ms", "604800000")
+                .build();
+    }
+
+    @Bean
     public NewTopic allUsersDeadLetterTopic() {
         return TopicBuilder.name(appProperties.getKafka().getTopic().getNameAll() + Constants.DLT_SUFFIX)
                 .partitions(1)
@@ -156,6 +165,15 @@ public class KafkaConfig {
                 .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
                 .config("retention.ms", "1209600000") // 14 days
                 .build();
+    }
+
+    @Bean
+    public NewTopic groupDeadLetterTopic() {
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameGroup() + Constants.DLT_SUFFIX)
+            .partitions(1)
+            .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
+            .config("retention.ms", "1209600000") // 14 days
+            .build();
     }
 
     @Bean

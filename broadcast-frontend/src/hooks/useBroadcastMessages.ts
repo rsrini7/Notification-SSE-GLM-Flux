@@ -23,9 +23,19 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
-      // The API now returns only valid, non-expired messages.
-      const serverMessages = await userService.getUserMessages(userId);
-      setMessages(serverMessages);
+      // **MODIFIED: Fetch both targeted and group messages**
+      const [targetedMessages, groupMessages] = await Promise.all([
+        userService.getUserMessages(userId),
+        userService.getGroupMessages(userId),
+      ]);
+      
+      // Combine and deduplicate messages
+      const allMessages = [...targetedMessages, ...groupMessages];
+      const uniqueMessages = Array.from(new Map(allMessages.map(msg => [msg.id, msg])).values());
+      uniqueMessages.sort((a, b) => new Date(b.broadcastCreatedAt).getTime() - new Date(a.broadcastCreatedAt).getTime());
+
+      setMessages(uniqueMessages);
+
     } catch (error) {
       toast({
         title: 'Error',

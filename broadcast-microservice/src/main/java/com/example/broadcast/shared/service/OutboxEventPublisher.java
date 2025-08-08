@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List; // Import List
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -53,12 +53,16 @@ public class OutboxEventPublisher {
             throw new RuntimeException("Failed to serialize event payload for outbox.", e);
         }
     }
+    
+    // **NEW METHOD**
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void publish(OutboxEvent event) {
+        if (event != null) {
+            outboxRepository.batchSave(List.of(event));
+        }
+    }
 
-    /**
-     * Persists a list of OutboxEvent objects in a single batch operation.
-     * This method must be called from within an existing transaction.
-     * @param events The list of fully constructed OutboxEvent objects to save.
-     */
+
     @Transactional(propagation = Propagation.MANDATORY)
     public void publishBatch(List<OutboxEvent> events) {
         if (events != null && !events.isEmpty()) {

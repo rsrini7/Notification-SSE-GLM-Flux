@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/user/messages") // MODIFIED: Route is more specific
+@RequestMapping("/api/user/messages")
 @RequiredArgsConstructor
 @Slf4j
 public class UserMessageController {
@@ -24,6 +24,14 @@ public class UserMessageController {
         log.info("Retrieving messages for user: {}", userId);
         List<UserBroadcastResponse> messages = userMessageService.getUserMessages(userId);
         log.info("Retrieved {} messages for user: {}", messages.size(), userId);
+        return ResponseEntity.ok(messages);
+    }
+    
+    @GetMapping("/groups")
+    public ResponseEntity<List<UserBroadcastResponse>> getGroupMessages(@RequestParam String userId) {
+        log.info("Retrieving group messages for user: {}", userId);
+        List<UserBroadcastResponse> messages = userMessageService.getGroupMessagesForUser(userId);
+        log.info("Retrieved {} group messages for user: {}", messages.size(), userId);
         return ResponseEntity.ok(messages);
     }
 
@@ -41,6 +49,4 @@ public class UserMessageController {
         userMessageService.markMessageAsRead(request.getUserId(), request.getMessageId());
         return ResponseEntity.ok().build();
     }
-    
-    // REMOVED: The /all endpoint was moved to BroadcastAdminController
 }

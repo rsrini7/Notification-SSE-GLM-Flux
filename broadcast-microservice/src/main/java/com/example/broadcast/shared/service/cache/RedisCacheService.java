@@ -34,6 +34,7 @@ public class RedisCacheService implements CacheService {
     private final RedisTemplate<String, UserSessionInfo> userSessionRedisTemplate;
     private final RedisTemplate<String, BroadcastStatsInfo> broadcastStatsRedisTemplate;
     private final RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate;
+    private final RedisTemplate<String, List<BroadcastMessage>> activeGroupBroadcastsRedisTemplate;
 
     private static final String USER_CONNECTION_KEY_PREFIX = "user-conn:";
     private static final String ONLINE_USERS_KEY = "online-users";
@@ -42,6 +43,7 @@ public class RedisCacheService implements CacheService {
     private static final String BROADCAST_STATS_KEY_PREFIX = "broadcast-stats:";
     private static final String USER_SESSION_KEY_PREFIX = "user-sess:";
     private static final String BROADCAST_CONTENT_KEY_PREFIX = "broadcast-content:";
+    private static final String ACTIVE_GROUP_BROADCASTS_KEY_PREFIX = "active-group-bcast:";
 
     @Override
     public void registerUserConnection(String userId, String sessionId, String podId) {
@@ -252,6 +254,36 @@ public class RedisCacheService implements CacheService {
         if (broadcast != null && broadcast.getId() != null) {
             String key = BROADCAST_CONTENT_KEY_PREFIX + broadcast.getId();
             broadcastMessageRedisTemplate.opsForValue().set(key, broadcast, 1, TimeUnit.HOURS);
+        }
+    }
+
+    @Override
+    public List<BroadcastMessage> getActiveGroupBroadcasts(String cacheKey) {
+        String redisKey = ACTIVE_GROUP_BROADCASTS_KEY_PREFIX + cacheKey;
+        return activeGroupBroadcastsRedisTemplate.opsForValue().get(redisKey);
+    }
+
+    @Override
+    public void cacheActiveGroupBroadcasts(String cacheKey, List<BroadcastMessage> broadcasts) {
+        String redisKey = ACTIVE_GROUP_BROADCASTS_KEY_PREFIX + cacheKey;
+        activeGroupBroadcastsRedisTemplate.opsForValue().set(redisKey, broadcasts, 60, TimeUnit.SECONDS);
+    }
+
+    @Override
+    public void evictActiveGroupBroadcastsCache() {
+        // Evicting by pattern is a heavy operation in Redis. In a real high-performance
+        // scenario, one would let the TTL expire or use a more sophisticated eviction strategy.
+        // For this project's scope, a simple SCAN + DEL is acceptable.
+        log.warn("Evicting active group broadcasts cache via SCAN operation.");
+        try (RedisConnection connection = redisConnectionFactory.getConnection()) {
+            ScanOptions options = ScanOptions.scanOptions().match(ACTIVE_GROUP_BROADCASTS_KEY_PREFIX + "*").count(100).build();
+            try (Cursor<byte[]> cursor = connection.keyCommands().scan(options)) {
+                while (cursor.hasNext()) {
+                    connection.keyCommands().del(cursor.next());
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error during Redis SCAN+DEL for active group broadcasts cache eviction.", e);
         }
     }
 }

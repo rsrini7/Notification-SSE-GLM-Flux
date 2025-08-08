@@ -9,7 +9,7 @@ spec:
   partitions: 10
   replicas: 3
   config:
-    retention.ms: 604800000  # 7 days
+    retention.ms: 604800000
     cleanup.policy: delete
     compression.type: lz4
 ---
@@ -24,7 +24,22 @@ spec:
   partitions: 10
   replicas: 3
   config:
-    retention.ms: 604800000 # 7 days
+    retention.ms: 604800000
+    cleanup.policy: delete
+---
+# **NEW TOPIC DEFINITION**
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: broadcast-events-group
+  namespace: kafka-system
+  labels:
+    strimzi.io/cluster: my-cluster
+spec:
+  partitions: 10
+  replicas: 3
+  config:
+    retention.ms: 604800000
     cleanup.policy: delete
 ---
 apiVersion: kafka.strimzi.io/v1beta2
@@ -35,10 +50,10 @@ metadata:
   labels:
     strimzi.io/cluster: my-cluster
 spec:
-  partitions: 1 # A single partition is often sufficient for a DLT
+  partitions: 1
   replicas: 3
   config:
-    retention.ms: 1209600000 # 14 days retention for analysis
+    retention.ms: 1209600000
     cleanup.policy: compact
 ---
 apiVersion: kafka.strimzi.io/v1beta2
@@ -49,8 +64,23 @@ metadata:
   labels:
     strimzi.io/cluster: my-cluster
 spec:
-  partitions: 1 # A single partition is often sufficient for a DLT
+  partitions: 1
   replicas: 3
   config:
-    retention.ms: 1209600000 # 14 days retention for analysis
+    retention.ms: 1209600000
+    cleanup.policy: compact
+---
+# **NEW DLT TOPIC DEFINITION**
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: broadcast-events-group.DLT
+  namespace: kafka-system
+  labels:
+    strimzi.io/cluster: my-cluster
+spec:
+  partitions: 1
+  replicas: 3
+  config:
+    retention.ms: 1209600000
     cleanup.policy: compact

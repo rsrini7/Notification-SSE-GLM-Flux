@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import java.time.ZonedDateTime;
 
 @Data
-@Builder
+@Builder(toBuilder = true) // This enables the toBuilder() method
 @NoArgsConstructor
 @AllArgsConstructor
 public class MessageDeliveryEvent {
