@@ -128,29 +128,50 @@ public class UserMessageService {
     }
 
     @Transactional
-    public void markMessageAsRead(String userId, Long messageId) {
-        log.info("Attempting to mark message as read: user={}, message={}", userId, messageId);
-        UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
-                .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
-        if (!userId.equals(userMessage.getUserId())) {
-            throw new ResourceNotFoundException("Message does not belong to user: " + userId);
+    public void markMessageAsRead(String userId, Long broadcastId) {
+        log.info("Attempting to mark broadcast {} as read for user {}", broadcastId, userId);
+
+        // Find the parent broadcast to ensure it exists.
+        BroadcastMessage parentBroadcast = broadcastRepository.findById(broadcastId)
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
+
+        // Atomically find an existing record or prepare to create a new one.
+        UserBroadcastMessage userMessage = userBroadcastRepository
+                .findByUserIdAndBroadcastId(userId, broadcastId)
+                .orElseGet(() -> {
+                    log.info("No existing message record for user {}, broadcast {}. Creating a new one (for ALL/ROLE broadcast).", userId, broadcastId);
+                    // This is the "CREATE" path.
+                    return UserBroadcastMessage.builder()
+                            .userId(userId)
+                            .broadcastId(broadcastId)
+                            .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
+                            .build();
+                });
+
+        // If the message is already read, do nothing.
+        if (Constants.ReadStatus.READ.name().equals(userMessage.getReadStatus())) {
+            log.warn("Message for broadcast {} was already marked as read for user {}. No action taken.", broadcastId, userId);
+            return;
         }
 
-        int updatedRows = userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
-        if (updatedRows > 0) {
-            broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
-            cacheService.updateMessageReadStatus(userId, userMessage.getBroadcastId());
-            
-            BroadcastMessage parentBroadcast = broadcastRepository.findById(userMessage.getBroadcastId())
-                .orElseThrow(() -> new IllegalStateException("Cannot publish READ event. Original broadcast (ID: " + userMessage.getBroadcastId() + ") not found."));
-            
-            String topicName = getTopicNameForBroadcast(parentBroadcast);
-            
-            messageStatusService.publishReadEvent(userMessage.getBroadcastId(), userId, topicName);
-            log.info("Successfully marked message {} as read for user {} and published READ event to topic {}.", messageId, userId, topicName);
+        // Update the state to READ.
+        userMessage.setReadStatus(Constants.ReadStatus.READ.name());
+        userMessage.setReadAt(ZonedDateTime.now(ZoneOffset.UTC));
+
+        // If the record is new (ID is null), save it. Otherwise, update it.
+        if (userMessage.getId() == null) {
+            userBroadcastRepository.save(userMessage);
         } else {
-            log.warn("Message {} was already read for user {}. No action taken.", messageId, userId);
+            userBroadcastRepository.update(userMessage);
         }
+        
+        // Update statistics and publish the READ event to Kafka for real-time UI updates.
+        broadcastStatisticsRepository.incrementReadCount(broadcastId);
+        cacheService.updateMessageReadStatus(userId, broadcastId);
+        String topicName = getTopicNameForBroadcast(parentBroadcast);
+        messageStatusService.publishReadEvent(broadcastId, userId, topicName);
+        
+        log.info("Successfully marked broadcast {} as read for user {} and published READ event.", broadcastId, userId);
     }
     
     private String getTopicNameForBroadcast(BroadcastMessage broadcast) {

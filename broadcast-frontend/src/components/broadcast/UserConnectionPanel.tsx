@@ -100,7 +100,7 @@ const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string)
                     </div>
                     {/* MODIFIED: Only show the button for the top 3 latest messages */}
                     {index < 3 && (
-                        <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => markAsRead(message.id)}>
+                        <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => markAsRead(message.broadcastId)}>
                           Mark Read
                         </Button>
                     )}

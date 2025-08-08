@@ -4,6 +4,7 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.exception.MessageProcessingException;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
+import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
@@ -32,6 +33,7 @@ public class KafkaConsumerService {
     private final CacheService cacheService;
     private final UserService userService;
     private final BroadcastRepository broadcastRepository;
+    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
 
     private static final Map<String, Integer> TRANSIENT_FAILURE_ATTEMPTS = new ConcurrentHashMap<>();
     private static final int MAX_AUTOMATIC_ATTEMPTS = 3;
@@ -122,6 +124,13 @@ public class KafkaConsumerService {
             for (String userId : usersToNotify) {
                 MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
                 handleEvent(userEvent);
+            }
+
+            // After successfully sending to all online users, update the statistics in a single batch.
+            if (!usersToNotify.isEmpty()) {
+                int deliveredCount = usersToNotify.size();
+                broadcastStatisticsRepository.incrementDeliveredCountBy(event.getBroadcastId(), deliveredCount);
+                log.info("Batch updated delivery statistics for broadcast {}: incremented delivered count by {}", event.getBroadcastId(), deliveredCount);
             }
 
             acknowledgment.acknowledge();

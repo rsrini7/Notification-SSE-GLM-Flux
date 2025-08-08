@@ -125,22 +125,18 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     onError,
   });
 
-  const markAsRead = useCallback(async (messageId: number) => {
+  const markAsRead = useCallback(async (broadcastId: number) => { // CHANGED: from messageId to broadcastId
     try {
-      await sseConnection.markAsRead(messageId);
+      // The action now sends the request. The UI update is handled by the SSE event.
+      await sseConnection.markAsRead(broadcastId); // CHANGED: from messageId to broadcastId
+    } catch {
       toast({
-        title: 'Action Sent',
-        description: `Message marked as read for ${userId}. It will be removed shortly.`,
+        title: 'Error',
+        description: 'Failed to send read receipt',
+        variant: 'destructive',
       });
-    } catch (error) 
-    {
-     toast({ 
-        title: 'Error', 
-        description: `Failed to mark message as read for ${userId}.`, 
-        variant: 'destructive' 
-     });
     }
-  }, [sseConnection, toast, userId]);
+  }, [sseConnection, toast]);
 
   const stats = useMemo(() => {
     const total = messages.length;

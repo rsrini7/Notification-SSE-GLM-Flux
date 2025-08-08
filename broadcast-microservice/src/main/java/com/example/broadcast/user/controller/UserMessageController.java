@@ -45,8 +45,9 @@ public class UserMessageController {
 
     @PostMapping("/read")
     public ResponseEntity<Void> markMessageAsRead(@Valid @RequestBody MessageReadRequest request) {
-        log.info("Marking message as read: user={}, message={}", request.getUserId(), request.getMessageId());
-        userMessageService.markMessageAsRead(request.getUserId(), request.getMessageId());
+        // Note: Ensure MessageReadRequest DTO has a 'broadcastId' field instead of 'messageId'
+        log.info("Marking message as read: user={}, broadcast={}", request.getUserId(), request.getBroadcastId());
+        userMessageService.markMessageAsRead(request.getUserId(), request.getBroadcastId());
         return ResponseEntity.ok().build();
     }
 }
