@@ -18,7 +18,7 @@ Key concepts in our Kafka implementation include:
    - `broadcast-events-all`: For system-wide broadcasts to all users
    - `broadcast-events-selected`: For broadcasts to specific users
    - `broadcast-events-group`: For broadcasts to user groups or roles
-   - `broadcast-events-all.DLT`: Dead Letter Topic for failed message processing
+   - `broadcast-events-all-dlt`: Dead Letter Topic for failed message processing
 
 2. **Partitioning**: Each topic is divided into 10 partitions, allowing parallel processing of messages
 

@@ -17,7 +17,7 @@ Without a proper mechanism to handle these failures, such messages might be lost
 Our DLT management strategy involves routing messages that fail processing in our Kafka consumers to a dedicated "dead letter" topic. This ensures that the main processing pipeline remains unblocked and healthy. Key aspects include:
 
 - **Automatic Retries**: Consumers are configured with a retry mechanism for transient errors. Only after a configured number of retries are exhausted, or if the error is non-retriable (e.g., deserialization error), is the message sent to the DLT.
-- **Dedicated DLT**: Each main Kafka topic that requires DLT handling has a corresponding dead letter topic (e.g., `broadcast_messages.dlt`).
+- **Dedicated DLT**: Each main Kafka topic that requires DLT handling has a corresponding dead letter topic (e.g., `broadcast_messages-dlt`).
 - **Error Context**: When a message is sent to the DLT, additional headers are added to the message to provide context about the failure, such as the exception type, error message, and original topic/partition/offset.
 - **Monitoring**: The DLTs are monitored for new messages, triggering alerts for operational teams.
 - **Manual Intervention**: Messages in the DLT can be manually inspected, debugged, fixed, and then replayed to the original topic or discarded.
@@ -52,7 +52,7 @@ public class KafkaConsumerService {
         } catch (Exception e) {
             log.error("Failed to process broadcast message: {}", record.value().getMessageId(), e);
             // Send to DLT after retries or for non-retriable errors
-            sendToDlt(record, "broadcast_messages.dlt", e);
+            sendToDlt(record, "broadcast_messages-dlt", e);
         }
     }
 
@@ -88,7 +88,7 @@ metadata:
   labels:
     strimzi.io/cluster: my-kafka-cluster
 spec:
-  topicName: broadcast_messages.dlt
+  topicName: broadcast_messages-dlt
   partitions: 3
   replicas: 3
   config:

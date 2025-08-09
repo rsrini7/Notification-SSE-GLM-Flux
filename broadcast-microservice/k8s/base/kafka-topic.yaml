@@ -45,7 +45,7 @@ spec:
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
 metadata:
-  name: broadcast-events-all.DLT
+  name: broadcast-events-all-dlt
   namespace: kafka-system
   labels:
     strimzi.io/cluster: my-cluster
@@ -59,7 +59,7 @@ spec:
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
 metadata:
-  name: broadcast-events-selected.DLT
+  name: broadcast-events-selected-dlt
   namespace: kafka-system
   labels:
     strimzi.io/cluster: my-cluster
@@ -74,7 +74,7 @@ spec:
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaTopic
 metadata:
-  name: broadcast-events-group.DLT
+  name: broadcast-events-group-dlt
   namespace: kafka-system
   labels:
     strimzi.io/cluster: my-cluster

@@ -17,13 +17,19 @@ spec:
         - name: broadcast-microservice
           # Set lower resource requests for development to save cluster resources.
           resources:
-            requests:
-              memory: "1Gi"
-              cpu: "500m"
             limits:
               memory: "2Gi"
-              cpu: "1000m"
           env:
             # Set the active Spring profile to use PostgreSQL.
             - name: SPRING_PROFILES_ACTIVE
               value: "dev-pg"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres-service:5432/broadcastdb"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "user"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "cGFzc3dvcmQ="
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: "my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092"
+            - name: JAVA_OPTS
+              value: "-Xms512m -Xmx1g -XX:+UseG1GC"

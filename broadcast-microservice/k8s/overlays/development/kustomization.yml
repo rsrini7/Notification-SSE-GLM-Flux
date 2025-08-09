@@ -13,7 +13,7 @@ commonLabels:
 
 # Apply patches to modify the base resources.
 patches:
-  - path: deployment-patch.yaml
+  - path: deployment-patch.yml
     target:
       kind: Deployment
       name: broadcast-microservice

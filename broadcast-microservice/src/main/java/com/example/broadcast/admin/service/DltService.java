@@ -54,7 +54,7 @@ public class DltService {
                 "${broadcast.kafka.topic.name.selected:broadcast-events-selected}" + Constants.DLT_SUFFIX,
                 "${broadcast.kafka.topic.name.group:broadcast-events-group}" + Constants.DLT_SUFFIX
             },
-            groupId = "${broadcast.kafka.consumer.dlt-group-id:broadcast-dlt-group}",
+            groupId = "${broadcast.kafka.consumer-dlt-group-id:broadcast-dlt-group}",
             containerFactory = "kafkaListenerContainerFactory"
     )
     @Transactional
