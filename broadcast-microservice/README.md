@@ -47,7 +47,6 @@ A high-performance Java microservice for the Broadcast Messaging System, built w
 ### Core Tables
 - **broadcast_messages**: Admin-side broadcast records
 - **user_broadcast_messages**: User-specific delivery tracking
-- **user_sessions**: Connection and session management
 - **user_preferences**: Notification preferences
 - **broadcast_statistics**: Performance metrics
 - **dlt_messages**: Dead Letter Topic for failed messages
