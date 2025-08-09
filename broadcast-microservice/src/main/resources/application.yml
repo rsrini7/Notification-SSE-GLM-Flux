@@ -13,11 +13,6 @@ server:
 spring:
   application:
     name: broadcast-microservice
-  # the 'dev-pg' profile should also be activated automatically.
-  profiles:
-    group:
-      "redis": "dev-pg"
-
   threads:
     virtual:
       enabled: true
@@ -27,7 +22,7 @@ spring:
     url: jdbc:h2:mem:broadcastdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
     driver-class-name: org.h2.Driver
     username: sa
-    password: password
+    password: 
   h2:
     console:
       enabled: false
@@ -147,7 +142,7 @@ broadcast:
     timeout: 300000
     heartbeat-interval: 30000
 
-  # Caffeine Cache Configuration
+  # Redis Cache Configuration
   cache:
     user-connections:
       maximum-size: 50000
@@ -202,13 +197,3 @@ spring:
     init:
       mode: never
 
----
-# Redis-specific profile
-spring:
-  config:
-    activate:
-      on-profile: "redis"
-  data:
-    redis:
-      host: localhost
-      port: 6379

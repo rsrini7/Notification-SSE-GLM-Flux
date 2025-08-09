@@ -8,8 +8,6 @@ The Broadcast Microservice uses a relational database (PostgreSQL in production,
 
 2. **BroadcastRepository** (<mcfile name="BroadcastRepository.java" path="broadcast-microservice/src/main/java/com/example/broadcast/shared/repository/BroadcastRepository.java"></mcfile>): Manages CRUD operations for `BroadcastMessage` entities, including saving, updating, and querying broadcast details and their statistics.
 
-3. **UserSessionRepository** (<mcfile name="UserSessionRepository.java" path="broadcast-microservice/src/main/java/com/example/broadcast/shared/repository/UserSessionRepository.java"></mcfile>): Handles persistence for `UserSession` entities, tracking user connections, their status, and last heartbeat times. It also supports operations for managing active and inactive sessions.
-
 ## Key Features
 - **Relational Data Model**: Stores structured data for broadcasts and user sessions.
 - **JDBC-based Persistence**: Direct and efficient database interaction using `JdbcTemplate`.
@@ -79,29 +77,6 @@ The Broadcast Microservice uses a relational database (PostgreSQL in production,
         }
         
         return broadcast;
-    }
-
-// ... existing code ...
-```
-
-## Example: Updating User Session Heartbeat
-```java:broadcast-microservice/src/main/java/com/example/broadcast/shared/repository/UserSessionRepository.java
-// ... existing code ...
-
-    public int updateLastHeartbeatForActiveSessions(List<String> sessionIds, String podId) {
-        if (sessionIds == null || sessionIds.isEmpty()) {
-            return 0;
-        }
-        String sql = String.format(
-            "UPDATE user_sessions SET last_heartbeat = CURRENT_TIMESTAMP WHERE pod_id = ? AND session_id IN (%s)",
-            String.join(",", java.util.Collections.nCopies(sessionIds.size(), "?"))
-        );
-
-        Object[] params = new Object[sessionIds.size() + 1];
-        params[0] = podId;
-        System.arraycopy(sessionIds.toArray(), 0, params, 1, sessionIds.size());
-
-        return jdbcTemplate.update(sql, params);
     }
 
 // ... existing code ...

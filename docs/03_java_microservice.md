@@ -8,7 +8,7 @@ The Java Microservice serves as the robust backend for the Broadcast Messaging S
 - **Real-time Communication**: Managing [Server-Sent Events (SSE)](05_server_sent_events.md) connections for real-time message delivery to connected users.
 - **Event Streaming**: Integrating with Apache Kafka for reliable and asynchronous message processing.
 - **Data Persistence**: Storing broadcast and user-related data in PostgreSQL.
-- **Caching**: Utilizing Caffeine and Redis for efficient data retrieval and session management.
+- **Caching**: Utilizing Redis and Redis for efficient data retrieval and session management.
 
 ## Core Components and Technologies
 
@@ -18,7 +18,7 @@ The microservice is a Spring Boot application that heavily relies on the followi
 - **Apache Kafka**: As a distributed streaming platform for publishing and subscribing to streams of records, ensuring reliable message delivery and processing.
 - **Spring Data JPA / R2DBC**: For interacting with the PostgreSQL database.
 - **Redis**: For distributed caching and managing user sessions across multiple instances.
-- **Caffeine**: For in-memory caching.
+- **Redis**: For distributed caching and session management.
 - **Project Reactor**: The foundation for reactive programming in Spring WebFlux.
 - **Lombok**: To reduce boilerplate code.
 - **Resilience4j**: For fault tolerance, including rate limiting and circuit breaking.

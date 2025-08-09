@@ -2,7 +2,6 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.cache.UserSessionInfo;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +14,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
-@Profile("redis")
 @RequiredArgsConstructor
 public class RedisSessionManager implements DistributedSessionManager {
 

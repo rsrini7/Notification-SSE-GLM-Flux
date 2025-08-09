@@ -6,14 +6,12 @@ import com.example.broadcast.shared.service.cache.RedisCacheService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.actuate.endpoint.annotation.Endpoint;
 import org.springframework.boot.actuate.endpoint.annotation.ReadOperation;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
 @Component
 @Endpoint(id = "redis-cache-stats") // This sets the URL to /actuator/redis-cache-stats
-@Profile("redis") // Only activate this endpoint when the Redis profile is active
 @RequiredArgsConstructor
 public class RedisCacheStatsEndpoint {
 

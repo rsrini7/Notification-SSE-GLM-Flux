@@ -80,7 +80,6 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant USCS as UserSessionCleanupService
-    participant USR as UserSessionRepository
     participant DB as Database
 
     USCS->>USCS: Calculate retention threshold (e.g., 3 days ago)

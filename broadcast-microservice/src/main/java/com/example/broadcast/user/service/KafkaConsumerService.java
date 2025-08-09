@@ -75,65 +75,59 @@ public class KafkaConsumerService {
 
             log.info("Received group broadcast event for broadcast ID: {}", event.getBroadcastId());
 
-            // If the event is a lifecycle event, just forward it to all online users.
             if (event.getEventType().equals(EventType.CANCELLED.name()) || event.getEventType().equals(EventType.EXPIRED.name())) {
                 List<String> onlineUsers = cacheService.getOnlineUsers();
                 log.info("Fanning out group lifecycle event {} for broadcast {} to {} online users.", event.getEventType(), event.getBroadcastId(), onlineUsers.size());
                 for (String userId : onlineUsers) {
                     MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
-                    handleEvent(userEvent); // handleEvent will route this to SseService
+                    handleEvent(userEvent); // This will route to SseService to push a 'MESSAGE_REMOVED' event
                 }
+                acknowledgment.acknowledge();
+                return; // Exit early
+            }
+
+            // 2. Synchronously update the cache to prevent race conditions for new connections.
+            List<BroadcastMessage> allActiveGroupBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType("ALL");
+            cacheService.cacheActiveGroupBroadcasts("ALL", allActiveGroupBroadcasts);
+            log.info("Synchronously updated the active 'ALL' user broadcast cache with {} items.", allActiveGroupBroadcasts.size());
+            
+            // Find the specific broadcast from the fresh list to deliver to currently online users.
+            BroadcastMessage broadcast = allActiveGroupBroadcasts.stream()
+                .filter(b -> b.getId().equals(event.getBroadcastId()))
+                .findFirst()
+                .orElse(null);
+            
+            if (broadcast == null) {
+                log.warn("Broadcast {} was not found in the active list after cache update. It may have been cancelled or expired. Acknowledging message.", event.getBroadcastId());
                 acknowledgment.acknowledge();
                 return;
             }
 
-            // First, fetch the parent broadcast message from the database
-            BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId())
-                .orElseThrow(() -> new IllegalStateException("FATAL: Broadcast not found for group event: " + event.getBroadcastId()));
-
-            cacheService.evictActiveGroupBroadcastsCache();
-
+            // Determine target users (this part is unchanged)
             List<String> targetUserIds;
-            if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
-                log.info("Broadcast {} is for SELECTED users. Using targetIds directly.", broadcast.getId());
-                targetUserIds = broadcast.getTargetIds();
-            }else if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
-                log.info("Broadcast {} is for ALL users. Fetching all user IDs.", broadcast.getId());
+            if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
                 targetUserIds = userService.getAllUserIds();
             } else if (Constants.TargetType.ROLE.name().equals(broadcast.getTargetType())) {
-                log.info("Broadcast {} is for ROLES: {}. Fetching user IDs for roles.", broadcast.getId(), broadcast.getTargetIds());
                 targetUserIds = broadcast.getTargetIds().stream()
                     .flatMap(role -> userService.getUserIdsByRole(role).stream())
                     .distinct()
                     .collect(Collectors.toList());
             } else {
-                log.warn("Group event received for broadcast {} with unexpected target type: {}", broadcast.getId(), broadcast.getTargetType());
                 targetUserIds = Collections.emptyList();
             }
-
-            if (targetUserIds.isEmpty()) {
-                log.warn("No target users found for group broadcast {}. Acknowledging message without delivery.", broadcast.getId());
-                acknowledgment.acknowledge();
-                return;
-            }
-
-            // Get the list of users who are currently connected
-            List<String> onlineUsers = cacheService.getOnlineUsers();
             
-            // Find the intersection: users who are both targeted and online
+            // Deliver to online users and update stats (this part is unchanged)
+            List<String> onlineUsers = cacheService.getOnlineUsers();
             List<String> usersToNotify = targetUserIds.stream()
                 .filter(onlineUsers::contains)
                 .collect(Collectors.toList());
-
-            log.info("Delivering group broadcast {} to {} online users out of {} total targets.", event.getBroadcastId(), usersToNotify.size(), targetUserIds.size());
             
-            // Create a specific user event for each online user and process it
+            log.info("Delivering group broadcast {} to {} online users out of {} total targets.", event.getBroadcastId(), usersToNotify.size(), targetUserIds.size());
             for (String userId : usersToNotify) {
                 MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
-                 sseService.deliverGroupBroadcastFromEvent(userEvent);
+                sseService.deliverGroupBroadcastFromEvent(userEvent);
             }
 
-            // After successfully sending to all online users, update the statistics in a single batch.
             if (!usersToNotify.isEmpty()) {
                 int deliveredCount = usersToNotify.size();
                 broadcastStatisticsRepository.incrementDeliveredCountBy(event.getBroadcastId(), deliveredCount);
@@ -141,7 +135,6 @@ public class KafkaConsumerService {
             }
 
             acknowledgment.acknowledge();
-
         } catch (Exception e) {
             log.error("Failed to process group message from topic {}. Root cause: {}", topic, e.getMessage(), e);
             throw new MessageProcessingException("Failed to process group message", e, event);
