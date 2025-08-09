@@ -103,10 +103,6 @@ public class DltService {
                     .build();
             dltRepository.save(dltMessage);
 
-            testingConfigurationService.clearFailureMark(failedEvent.getBroadcastId());
-            log.info("Cleared DLT failure mark for broadcast ID: {}", failedEvent.getBroadcastId());
-
-
             // Step 4: Acknowledge the DLT message
             acknowledgment.acknowledge();
     }
@@ -131,7 +127,7 @@ public class DltService {
         return dltRepository.findAll();
     }
 
-   @Transactional
+    @Transactional
     public void redriveMessage(String id) throws JsonProcessingException {
         DltMessage dltMessage = dltRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
@@ -145,6 +141,9 @@ public class DltService {
             MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
             kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload).get();
             
+            testingConfigurationService.clearFailureMark(originalPayload.getBroadcastId());
+            log.info("Cleared DLT failure mark for broadcast ID: {}", originalPayload.getBroadcastId());
+
             String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
             kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null).get();
             
