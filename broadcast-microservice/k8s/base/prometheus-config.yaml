@@ -12,7 +12,7 @@ data:
     scrape_configs:
     - job_name: 'broadcast-microservice'
       static_configs:
-      - targets: ['broadcast-service.broadcast-system.svc.cluster.local:8080']
+      - targets: ['broadcast-service.broadcast-system.svc.cluster.local:8081']
       metrics_path: '/api/actuator/prometheus'
       scrape_interval: 10s
       scrape_timeout: 5s

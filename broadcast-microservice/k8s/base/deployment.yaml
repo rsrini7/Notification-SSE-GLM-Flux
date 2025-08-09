@@ -23,7 +23,7 @@ spec:
         version: v1
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "8081"
         prometheus.io/path: "/api/actuator/prometheus"
     spec:
       serviceAccountName: broadcast-service-account
@@ -32,7 +32,7 @@ spec:
         image: broadcast-microservice:1.0.0
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 8080
+        - containerPort: 8081
           name: http
           protocol: TCP
         - containerPort: 8081
@@ -71,7 +71,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /api/actuator/health/liveness
-            port: 8080
+            port: 8081
           initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 5
@@ -79,7 +79,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /api/actuator/health/readiness
-            port: 8080
+            port: 8081
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
