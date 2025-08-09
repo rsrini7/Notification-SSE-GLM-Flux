@@ -101,6 +101,9 @@ logging:
     org.springframework.web: INFO
     org.springframework.jdbc: INFO
     io.github.resilience4j: INFO
+    '[org.apache.kafka.clients.admin.AdminClientConfig]': WARN
+    '[org.apache.kafka.clients.consumer.ConsumerConfig]': WARN
+    '[org.apache.kafka.clients.producer.ProducerConfig]': WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

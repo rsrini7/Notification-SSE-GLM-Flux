@@ -27,8 +27,8 @@ public class LoggingConfig {
             String method = exchange.getRequest().getMethod().name();
 
             // Log the incoming request
-            if (log.isDebugEnabled()) {
-                log.debug("Incoming request: {} {} from {} with headers: {}", 
+            if (log.isTraceEnabled()) {
+                log.trace("Incoming request: {} {} from {} with headers: {}", 
                     method,
                     path,
                     String.valueOf(exchange.getRequest().getRemoteAddress()),
