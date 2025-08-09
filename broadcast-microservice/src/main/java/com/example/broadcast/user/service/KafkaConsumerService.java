@@ -2,8 +2,14 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.exception.MessageProcessingException;
+import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.repository.BroadcastRepository;
+import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
+import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.service.cache.CacheService;
+import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.EventType;
+import com.example.broadcast.admin.service.TestingConfigurationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -12,8 +18,10 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -22,24 +30,11 @@ public class KafkaConsumerService {
 
     private final SseService sseService;
     private final CacheService cacheService;
-    private static final Map<String, Integer> TRANSIENT_FAILURE_ATTEMPTS = new ConcurrentHashMap<>();
-    private static final int MAX_AUTOMATIC_ATTEMPTS = 3;
+    private final UserService userService;
+    private final BroadcastRepository broadcastRepository;
+    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
+    private final TestingConfigurationService testingConfigurationService;
 
-    @KafkaListener(
-            topics = "${broadcast.kafka.topic.name.all:broadcast-events-all}",
-            groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}-all",
-            containerFactory = "kafkaListenerContainerFactory"
-    )
-    public void processAllUsersBroadcastEvent(
-            @Payload MessageDeliveryEvent event,
-            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
-            @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
-            @Header(KafkaHeaders.OFFSET) long offset,
-            Acknowledgment acknowledgment) {
-        
-        processBroadcastEvent(event, topic, partition, offset, acknowledgment);
-    }
-    
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name.selected:broadcast-events-selected}",
             groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}-selected",
@@ -51,8 +46,106 @@ public class KafkaConsumerService {
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
+        
+        if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
+            log.warn("DLT TEST MODE [SELECTED]: Simulating failure for broadcast ID: {}", event.getBroadcastId());
+            throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
+        }
 
         processBroadcastEvent(event, topic, partition, offset, acknowledgment);
+    }
+    
+    @KafkaListener(
+        topics = "${broadcast.kafka.topic.name.group:broadcast-events-group}",
+        groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}-group",
+        containerFactory = "kafkaListenerContainerFactory"
+    )
+    public void processGroupBroadcastEvent(
+            @Payload MessageDeliveryEvent event,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
+            @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
+            @Header(KafkaHeaders.OFFSET) long offset,
+            Acknowledgment acknowledgment) {
+
+        try {
+            if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
+                log.warn("DLT TEST MODE [GROUP]: Simulating failure for broadcast ID: {}", event.getBroadcastId());
+                throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
+            }
+
+            log.info("Received group broadcast event for broadcast ID: {}", event.getBroadcastId());
+
+            // If the event is a lifecycle event, just forward it to all online users.
+            if (event.getEventType().equals(EventType.CANCELLED.name()) || event.getEventType().equals(EventType.EXPIRED.name())) {
+                List<String> onlineUsers = cacheService.getOnlineUsers();
+                log.info("Fanning out group lifecycle event {} for broadcast {} to {} online users.", event.getEventType(), event.getBroadcastId(), onlineUsers.size());
+                for (String userId : onlineUsers) {
+                    MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
+                    handleEvent(userEvent); // handleEvent will route this to SseService
+                }
+                acknowledgment.acknowledge();
+                return;
+            }
+
+            // First, fetch the parent broadcast message from the database
+            BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId())
+                .orElseThrow(() -> new IllegalStateException("FATAL: Broadcast not found for group event: " + event.getBroadcastId()));
+
+            cacheService.evictActiveGroupBroadcastsCache();
+
+            List<String> targetUserIds;
+            if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
+                log.info("Broadcast {} is for SELECTED users. Using targetIds directly.", broadcast.getId());
+                targetUserIds = broadcast.getTargetIds();
+            }else if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
+                log.info("Broadcast {} is for ALL users. Fetching all user IDs.", broadcast.getId());
+                targetUserIds = userService.getAllUserIds();
+            } else if (Constants.TargetType.ROLE.name().equals(broadcast.getTargetType())) {
+                log.info("Broadcast {} is for ROLES: {}. Fetching user IDs for roles.", broadcast.getId(), broadcast.getTargetIds());
+                targetUserIds = broadcast.getTargetIds().stream()
+                    .flatMap(role -> userService.getUserIdsByRole(role).stream())
+                    .distinct()
+                    .collect(Collectors.toList());
+            } else {
+                log.warn("Group event received for broadcast {} with unexpected target type: {}", broadcast.getId(), broadcast.getTargetType());
+                targetUserIds = Collections.emptyList();
+            }
+
+            if (targetUserIds.isEmpty()) {
+                log.warn("No target users found for group broadcast {}. Acknowledging message without delivery.", broadcast.getId());
+                acknowledgment.acknowledge();
+                return;
+            }
+
+            // Get the list of users who are currently connected
+            List<String> onlineUsers = cacheService.getOnlineUsers();
+            
+            // Find the intersection: users who are both targeted and online
+            List<String> usersToNotify = targetUserIds.stream()
+                .filter(onlineUsers::contains)
+                .collect(Collectors.toList());
+
+            log.info("Delivering group broadcast {} to {} online users out of {} total targets.", event.getBroadcastId(), usersToNotify.size(), targetUserIds.size());
+            
+            // Create a specific user event for each online user and process it
+            for (String userId : usersToNotify) {
+                MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
+                 sseService.deliverGroupBroadcastFromEvent(userEvent);
+            }
+
+            // After successfully sending to all online users, update the statistics in a single batch.
+            if (!usersToNotify.isEmpty()) {
+                int deliveredCount = usersToNotify.size();
+                broadcastStatisticsRepository.incrementDeliveredCountBy(event.getBroadcastId(), deliveredCount);
+                log.info("Batch updated delivery statistics for broadcast {}: incremented delivered count by {}", event.getBroadcastId(), deliveredCount);
+            }
+
+            acknowledgment.acknowledge();
+
+        } catch (Exception e) {
+            log.error("Failed to process group message from topic {}. Root cause: {}", topic, e.getMessage(), e);
+            throw new MessageProcessingException("Failed to process group message", e, event);
+        }
     }
 
     private void processBroadcastEvent(
@@ -65,20 +158,6 @@ public class KafkaConsumerService {
         try {
             log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                     event.getEventId(), topic, partition, offset);
-            
-            if (event.isTransientFailure()) {
-                int attempts = TRANSIENT_FAILURE_ATTEMPTS.getOrDefault(event.getEventId(), 0);
-                if (attempts < MAX_AUTOMATIC_ATTEMPTS) {
-                    TRANSIENT_FAILURE_ATTEMPTS.put(event.getEventId(), attempts + 1);
-                    log.warn("Transient failure flag detected for eventId: {}. Simulating failure BEFORE processing, attempt {}/{}", 
-                             event.getEventId(), attempts + 1, MAX_AUTOMATIC_ATTEMPTS);
-                    throw new RuntimeException("Simulating a transient, recoverable error for DLT redrive testing.");
-                } else {
-                    log.info("Successfully redriving eventId with transient failure flag: {}. Attempts ({}) exceeded max.", 
-                             event.getEventId(), attempts);
-                    TRANSIENT_FAILURE_ATTEMPTS.remove(event.getEventId());
-                }
-            }
 
             handleEvent(event);
             acknowledgment.acknowledge();

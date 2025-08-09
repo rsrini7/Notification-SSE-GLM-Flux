@@ -145,14 +145,24 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     setState({ connected: false, connecting: false, sessionId: null, error: null, reconnectAttempt: 0 });
   }, [userId, baseUrl, state.connected]);
 
-  const markAsRead = useCallback(async (messageId: number) => {
+  const markAsRead = useCallback(async (broadcastId: number) => { // CHANGED: from messageId to broadcastId
     if (!sessionIdRef.current) {
       const error = new Error("Cannot mark as read: not connected.");
       onErrorRef.current?.(error);
       throw error;
     }
     try {
-      const response = await fetch(`${baseUrl}/api/sse/read?userId=${userId}&messageId=${messageId}`, { method: 'POST' });
+      // MODIFIED: The URL is now changed to the correct controller.
+      const response = await fetch(`${baseUrl}/api/user/messages/read`, {
+        method: 'POST',
+        // MODIFIED: Headers are added to specify the content type.
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // MODIFIED: Data is now sent in the body with the correct key 'broadcastId'.
+        body: JSON.stringify({ userId, broadcastId }),
+      });
+
       if (!response.ok) {
         throw new Error(`Failed to mark message as read. Status: ${response.status}`);
       }

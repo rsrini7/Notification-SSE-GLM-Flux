@@ -118,6 +118,13 @@ export const userService = {
     const response = await api.get(`/api/user/messages?userId=${userId}`);
     return response.data;
   },
+  
+  // **NEW FUNCTION**
+  getGroupMessages: async (userId: string): Promise<UserBroadcastMessage[]> => {
+    const response = await api.get(`/api/user/messages/groups?userId=${userId}`);
+    return response.data;
+  },
+
   markMessageAsRead: async (userId: string, messageId: string): Promise<void> => {
     await api.post(`/api/sse/read?userId=${userId}&messageId=${messageId}`);
   },

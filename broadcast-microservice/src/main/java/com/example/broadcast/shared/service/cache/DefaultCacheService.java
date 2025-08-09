@@ -30,7 +30,8 @@ public class DefaultCacheService implements CacheService {
     private final Cache<String, BroadcastStatsInfo> broadcastStatsCache;
     private final Cache<Long, BroadcastMessage> broadcastContentCache;
     private final Cache<String, Boolean> onlineUsersCache;
-
+    private final Cache<String, List<BroadcastMessage>> activeGroupBroadcastsCache;
+        
     @Override
     public void registerUserConnection(String userId, String sessionId, String podId) {
         UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, sessionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
@@ -117,7 +118,7 @@ public class DefaultCacheService implements CacheService {
         if (pendingEvents == null) return List.of();
         
         return pendingEvents.stream()
-            .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null,false,false))
+            .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null, false))
             .collect(Collectors.toList());
     }
     
@@ -175,7 +176,8 @@ public class DefaultCacheService implements CacheService {
             "userSessionCache", userSessionCache.stats(),
             "broadcastStatsCache", broadcastStatsCache.stats(),
             "broadcastContentCache", broadcastContentCache.stats(),
-            "onlineUsersCache", onlineUsersCache.stats()
+            "onlineUsersCache", onlineUsersCache.stats(),
+            "activeGroupBroadcastsCache", activeGroupBroadcastsCache.stats()
         );
     }
 
@@ -189,5 +191,28 @@ public class DefaultCacheService implements CacheService {
         if (broadcast != null && broadcast.getId() != null) {
             broadcastContentCache.put(broadcast.getId(), broadcast);
         }
+    }
+
+    // CHANGED: Implement the new method.
+    @Override
+    public void evictBroadcastContent(Long broadcastId) {
+        if (broadcastId != null) {
+            broadcastContentCache.invalidate(broadcastId);
+        }
+    }
+
+    @Override
+    public List<BroadcastMessage> getActiveGroupBroadcasts(String cacheKey) {
+        return activeGroupBroadcastsCache.getIfPresent(cacheKey);
+    }
+
+    @Override
+    public void cacheActiveGroupBroadcasts(String cacheKey, List<BroadcastMessage> broadcasts) {
+        activeGroupBroadcastsCache.put(cacheKey, broadcasts);
+    }
+
+    @Override
+    public void evictActiveGroupBroadcastsCache() {
+        activeGroupBroadcastsCache.invalidateAll();
     }
 }

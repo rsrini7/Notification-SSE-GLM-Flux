@@ -16,9 +16,11 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Repository
 public class BroadcastRepository {
@@ -45,7 +47,7 @@ public class BroadcastRepository {
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
             .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
             .status(rs.getString("status"))
-            .isFireAndForget(rs.getBoolean("is_fire_and_forget")) // Read new column
+            .isFireAndForget(rs.getBoolean("is_fire_and_forget"))
             .build();
 
     private final RowMapper<BroadcastResponse> broadcastResponseRowMapper = (rs, rowNum) -> BroadcastResponse.builder()
@@ -54,7 +56,7 @@ public class BroadcastRepository {
             .senderName(rs.getString("sender_name"))
             .content(rs.getString("content"))
             .targetType(rs.getString("target_type"))
-            .targetIds(JsonUtils.parseJsonArray(rs.getString("target_ids"))) // REFACTORED
+            .targetIds(JsonUtils.parseJsonArray(rs.getString("target_ids")))
             .priority(rs.getString("priority"))
             .category(rs.getString("category"))
             .scheduledAt(rs.getTimestamp("scheduled_at") != null ?
@@ -100,16 +102,16 @@ public class BroadcastRepository {
             ps.setString(10, broadcast.getStatus() != null ?
                     broadcast.getStatus() : BroadcastStatus.ACTIVE.name());
             
-            ps.setBoolean(11, broadcast.isFireAndForget()); // Set new parameter
+            ps.setBoolean(11, broadcast.isFireAndForget());
 
             return ps;
         }, keyHolder);
         
         if (keyHolder.getKeyList() != null && !keyHolder.getKeyList().isEmpty()) {
             Map<String, Object> keys = keyHolder.getKeyList().get(0);
-            Number id = (Number) keys.get("id"); // Check for Postgres's lowercase 'id' first
+            Number id = (Number) keys.get("id");
             if (id == null) {
-                id = (Number) keys.get("ID"); // Fallback to H2's uppercase 'ID'
+                id = (Number) keys.get("ID");
             }
             if (id != null) {
                 broadcast.setId(id.longValue());
@@ -135,7 +137,7 @@ public class BroadcastRepository {
         """;
         jdbcTemplate.update(sql,
             broadcast.getSenderId(), broadcast.getSenderName(), broadcast.getContent(),
-            broadcast.getTargetType(), JsonUtils.toJsonArray(broadcast.getTargetIds()), // REFACTORED
+            broadcast.getTargetType(), JsonUtils.toJsonArray(broadcast.getTargetIds()),
             broadcast.getPriority(), broadcast.getCategory(),
             broadcast.getScheduledAt() != null ? broadcast.getScheduledAt().toOffsetDateTime() : null,
             broadcast.getExpiresAt() != null ? broadcast.getExpiresAt().toOffsetDateTime() : null,
@@ -206,6 +208,29 @@ public class BroadcastRepository {
         String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at <= ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime());
     }
+    
+    public List<BroadcastMessage> findActiveBroadcastsByTargetType(String targetType) {
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = ?";
+        return jdbcTemplate.query(sql, broadcastRowMapper, targetType);
+    }
+
+    public List<BroadcastMessage> findActiveBroadcastsByTargetTypeAndIds(String targetType, List<String> targetIds) {
+        if (targetIds == null || targetIds.isEmpty()) {
+            return List.of();
+        }
+
+        // **DATABASE-AGNOSTIC STRATEGY**
+        // 1. Fetch all active broadcasts for the given target type. This is a simple, compatible query.
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = ?";
+        List<BroadcastMessage> allActiveBroadcasts = jdbcTemplate.query(sql, broadcastRowMapper, targetType);
+
+        // 2. Filter the results in the Java application code. This is guaranteed to work across any database.
+        return allActiveBroadcasts.stream()
+                .filter(broadcast -> broadcast.getTargetIds() != null && 
+                                     !Collections.disjoint(broadcast.getTargetIds(), targetIds))
+                .collect(Collectors.toList());
+    }
+
 
     public int updateStatus(Long broadcastId, String status) {
         String sql = "UPDATE broadcast_messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";

@@ -1,8 +1,8 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.user.dto.UserBroadcastResponse;
 import com.example.broadcast.shared.dto.cache.UserMessageInfo;
-import com.example.broadcast.shared.exception.ResourceNotFoundException;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
@@ -13,19 +13,23 @@ import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import com.example.broadcast.shared.service.MessageStatusService;
+import com.example.broadcast.shared.service.UserService;
+import com.example.broadcast.shared.mapper.BroadcastMapper;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import com.example.broadcast.shared.config.AppProperties;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock; // Import ReentrantLock
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.Set;
+import java.util.HashSet;
+
 
 @Service
 @RequiredArgsConstructor
@@ -38,6 +42,8 @@ public class UserMessageService {
     private final MessageStatusService messageStatusService;
     private final CacheService cacheService;
     private final AppProperties appProperties;
+    private final UserService userService;
+    private final BroadcastMapper broadcastMapper;
 
     private final ConcurrentHashMap<Long, ReentrantLock> broadcastContentLocks = new ConcurrentHashMap<>();
 
@@ -68,39 +74,115 @@ public class UserMessageService {
         return dbMessages;
     }
 
+    @Transactional(readOnly = true)
+    public List<UserBroadcastResponse> getGroupMessagesForUser(String userId) {
+        // 1. (NEW) First, get a list of broadcast IDs the user already has a specific record for.
+        List<Long> processedBroadcastIds = userBroadcastRepository.findActiveBroadcastIdsByUserId(userId);
+        Set<Long> processedBroadcastIdSet = new HashSet<>(processedBroadcastIds);
+
+        List<String> userRoles = userService.getRolesForUser(userId);
+
+        // 2. Fetch broadcasts targeted to the user's specific roles
+        List<BroadcastMessage> roleBroadcasts = userRoles.stream()
+                .flatMap(role -> getActiveBroadcastsForRole(role).stream())
+                .distinct()
+                .collect(Collectors.toList());
+
+        // 3. Fetch broadcasts targeted to "ALL" users
+        List<BroadcastMessage> allUserBroadcasts = getActiveBroadcastsForAll();
+
+        // 4. (MODIFIED) Combine, deduplicate, filter out already processed messages, and map to DTO
+        return Stream.concat(roleBroadcasts.stream(), allUserBroadcasts.stream())
+                .distinct()
+                .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId())) // This is the new exclusion logic
+                .map(broadcast -> broadcastMapper.toUserBroadcastResponse(null, broadcast))
+                .collect(Collectors.toList());
+    }
+
+    private List<BroadcastMessage> getActiveBroadcastsForRole(String role) {
+        final String cacheKey = "ROLE:" + role;
+        List<BroadcastMessage> cachedBroadcasts = cacheService.getActiveGroupBroadcasts(cacheKey);
+        
+        if (cachedBroadcasts != null) {
+            log.debug("Cache HIT for active broadcasts for role: {}", role);
+            return cachedBroadcasts;
+        }
+
+        log.warn("Cache MISS for active broadcasts for role: {}. Fetching from DB.", role);
+        List<BroadcastMessage> dbBroadcasts = broadcastRepository.findActiveBroadcastsByTargetTypeAndIds("ROLE", List.of(role));
+        cacheService.cacheActiveGroupBroadcasts(cacheKey, dbBroadcasts);
+        return dbBroadcasts;
+    }
+
+    private List<BroadcastMessage> getActiveBroadcastsForAll() {
+        final String cacheKey = "ALL";
+        List<BroadcastMessage> cachedBroadcasts = cacheService.getActiveGroupBroadcasts(cacheKey);
+
+        if (cachedBroadcasts != null) {
+            log.debug("Cache HIT for active broadcasts for ALL users");
+            return cachedBroadcasts;
+        }
+
+        log.warn("Cache MISS for active broadcasts for ALL users. Fetching from DB.");
+        List<BroadcastMessage> dbBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType("ALL");
+        cacheService.cacheActiveGroupBroadcasts(cacheKey, dbBroadcasts);
+        return dbBroadcasts;
+    }
+    
     public List<UserBroadcastResponse> getUnreadMessages(String userId) {
         log.info("Getting unread messages for user: {}", userId);
         return userBroadcastRepository.findUserMessagesByUserId(userId);
     }
 
     @Transactional
-    public void markMessageAsRead(String userId, Long messageId) {
-        log.info("Attempting to mark message as read: user={}, message={}", userId, messageId);
-        UserBroadcastMessage userMessage = userBroadcastRepository.findById(messageId)
-                .orElseThrow(() -> new ResourceNotFoundException("User message not found with ID: " + messageId));
-        if (!userId.equals(userMessage.getUserId())) {
-            throw new ResourceNotFoundException("Message does not belong to user: " + userId);
-        }
+    public void markMessageAsRead(String userId, Long broadcastId) {
+        log.info("Attempting to mark broadcast {} as read for user {}", broadcastId, userId);
 
-        int updatedRows = userBroadcastRepository.markAsRead(messageId, ZonedDateTime.now(ZoneOffset.UTC));
-        if (updatedRows > 0) {
-            broadcastStatisticsRepository.incrementReadCount(userMessage.getBroadcastId());
-            cacheService.updateMessageReadStatus(userId, userMessage.getBroadcastId());
+        Optional<UserBroadcastMessage> userMessageOpt = userBroadcastRepository
+                .findByUserIdAndBroadcastId(userId, broadcastId);
+
+        if (userMessageOpt.isPresent()) {
+            // --- START: FIX FOR SELECTED USERS ---
+            // UPDATE PATH: A record already exists, so this is a 'SELECTED' user broadcast.
+            // Use the specific, atomic `markAsRead` repository method.
+            UserBroadcastMessage existingMessage = userMessageOpt.get();
+            if (Constants.ReadStatus.READ.name().equals(existingMessage.getReadStatus())) {
+                log.warn("Message for broadcast {} was already read for user {}. No action taken.", broadcastId, userId);
+                return;
+            }
             
-            BroadcastMessage parentBroadcast = broadcastRepository.findById(userMessage.getBroadcastId())
-                .orElseThrow(() -> new IllegalStateException("Cannot publish READ event. Original broadcast (ID: " + userMessage.getBroadcastId() + ") not found."));
-            
-            String topicName = Constants.TargetType.ALL.name().equals(parentBroadcast.getTargetType()) 
-                ? appProperties.getKafka().getTopic().getNameAll() 
-                : appProperties.getKafka().getTopic().getNameSelected();
-            
-            messageStatusService.publishReadEvent(userMessage.getBroadcastId(), userId, topicName);
-            log.info("Successfully marked message {} as read for user {} and published READ event to topic {}.", messageId, userId, topicName);
+            // This returns the number of rows updated.
+            int updatedRows = userBroadcastRepository.markAsRead(existingMessage.getId(), ZonedDateTime.now(ZoneOffset.UTC));
+            if (updatedRows == 0) {
+                log.warn("Message for broadcast {} was already read for user {} (concurrent update). No action taken.", broadcastId, userId);
+                return;
+            }
+            // --- END: FIX FOR SELECTED USERS ---
+
         } else {
-            log.warn("Message {} was already read for user {}. No action taken.", messageId, userId);
+            // CREATE PATH: No record exists, so this is an 'ALL' or 'ROLE' broadcast.
+            // Create a new record and save it.
+            log.info("No existing message record for user {}, broadcast {}. Creating a new one.", userId, broadcastId);
+            UserBroadcastMessage newMessage = UserBroadcastMessage.builder()
+                    .userId(userId)
+                    .broadcastId(broadcastId)
+                    .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
+                    .readStatus(Constants.ReadStatus.READ.name())
+                    .readAt(ZonedDateTime.now(ZoneOffset.UTC))
+                    .build();
+            userBroadcastRepository.save(newMessage);
         }
+        
+        // This part is now common to both paths
+        broadcastStatisticsRepository.incrementReadCount(broadcastId);
+        cacheService.updateMessageReadStatus(userId, broadcastId);
+        cacheService.removePendingEvent(userId, broadcastId);
+        String topicName = appProperties.getKafka().getTopic().getNameSelected();
+        messageStatusService.publishReadEvent(broadcastId, userId, topicName);
+        
+        log.info("Successfully processed 'mark as read' for broadcast {} for user {} and published READ event.", broadcastId, userId);
     }
-
+    
     private UserMessageInfo toUserMessageInfo(UserBroadcastResponse response) {
         return new UserMessageInfo(
             response.getId(),
@@ -115,21 +197,17 @@ public class UserMessageService {
         Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
 
         if (broadcastOpt.isEmpty()) {
-            // Replace synchronized block with ReentrantLock
             ReentrantLock lock = broadcastContentLocks.computeIfAbsent(info.getBroadcastId(), k -> new ReentrantLock());
             lock.lock();
             try {
-                // Double-check: Another thread might have rebuilt the cache while we were waiting for the lock.
                 broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
                 if (broadcastOpt.isEmpty()) {
-                    // This is the only thread that will hit the DB for this key.
                     log.warn("Broadcast content for ID {} was not in cache. Fetching from DB.", info.getBroadcastId());
                     broadcastOpt = broadcastRepository.findById(info.getBroadcastId());
                     broadcastOpt.ifPresent(cacheService::cacheBroadcastContent);
                 }
             } finally {
                 lock.unlock();
-                // Remove the lock object once we're done to prevent the map from growing indefinitely
                 broadcastContentLocks.remove(info.getBroadcastId(), lock);
             }
         }
@@ -141,19 +219,14 @@ public class UserMessageService {
 
         BroadcastMessage broadcast = broadcastOpt.get();
         
-        return Optional.of(UserBroadcastResponse.builder()
-            .id(info.getMessageId())
-            .broadcastId(info.getBroadcastId())
-            .userId(broadcast.getSenderId()) 
-            .deliveryStatus(info.getDeliveryStatus())
-            .readStatus(info.getReadStatus())
-            .createdAt(info.getCreatedAt())
-            .senderName(broadcast.getSenderName())
-            .content(broadcast.getContent())
-            .priority(broadcast.getPriority())
-            .category(broadcast.getCategory())
-            .broadcastCreatedAt(broadcast.getCreatedAt())
-            .expiresAt(broadcast.getExpiresAt())
-            .build());
+        UserBroadcastMessage messageStub = new UserBroadcastMessage();
+        messageStub.setId(info.getMessageId());
+        messageStub.setBroadcastId(info.getBroadcastId());
+        messageStub.setUserId(broadcast.getSenderId());
+        messageStub.setDeliveryStatus(info.getDeliveryStatus());
+        messageStub.setReadStatus(info.getReadStatus());
+        messageStub.setCreatedAt(info.getCreatedAt());
+
+        return Optional.of(broadcastMapper.toUserBroadcastResponse(messageStub, broadcast));
     }
 }

@@ -43,7 +43,7 @@ public class OutboxPollingService {
                 
                 // Make the Kafka send synchronous by calling .get()
                 // This will block until Kafka acknowledges the message or throws an exception.
-                kafkaTemplate.send(event.getTopic(), payload.getUserId(), payload).get();
+                kafkaTemplate.send(event.getTopic(), event.getAggregateId(), payload).get();
 
             } catch (JsonProcessingException e) {
                 log.error("Failed to deserialize outbox event payload for event ID {}", event.getId(), e);

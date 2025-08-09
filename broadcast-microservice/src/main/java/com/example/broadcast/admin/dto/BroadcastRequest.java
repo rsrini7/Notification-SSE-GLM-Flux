@@ -47,4 +47,7 @@ public class BroadcastRequest {
     @Builder.Default
     private boolean isFireAndForget = false;
 
+    @Builder.Default
+    private boolean isFailureTest = false;
+
 }

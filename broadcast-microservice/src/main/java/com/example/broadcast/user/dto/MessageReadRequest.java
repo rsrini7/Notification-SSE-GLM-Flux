@@ -18,6 +18,6 @@ public class MessageReadRequest {
     @NotNull(message = "User ID is required")
     private String userId;
     
-    @NotNull(message = "Message ID is required")
-    private Long messageId;
+    @NotNull(message = "Broadcast ID is required")
+    private Long broadcastId; // CHANGED from messageId to broadcastId
 }

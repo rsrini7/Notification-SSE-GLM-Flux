@@ -1,6 +1,6 @@
 package com.example.broadcast.shared.config;
 import com.example.broadcast.shared.dto.cache.*;
-import com.example.broadcast.shared.model.BroadcastMessage; // Import BroadcastMessage
+import com.example.broadcast.shared.model.BroadcastMessage;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
@@ -80,6 +80,20 @@ public class RedisConfig {
         RedisTemplate<String, BroadcastMessage> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
         Jackson2JsonRedisSerializer<BroadcastMessage> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, BroadcastMessage.class);
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(serializer);
+        return template;
+    }
+
+    // **NEW REDIS TEMPLATE BEAN FOR ROLE/ALL BROADCASTS**
+    @Bean
+    public RedisTemplate<String, List<BroadcastMessage>> activeGroupBroadcastsRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
+        RedisTemplate<String, List<BroadcastMessage>> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+
+        JavaType type = objectMapper.getTypeFactory().constructCollectionType(List.class, BroadcastMessage.class);
+        Jackson2JsonRedisSerializer<List<BroadcastMessage>> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, type);
+
         template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(serializer);
         return template;

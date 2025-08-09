@@ -102,9 +102,17 @@ public class KafkaConfig {
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
             @Qualifier("dltKafkaTemplate") KafkaTemplate<String, Object> dltKafkaTemplate) {
         
+        // THIS IS THE NEW, SMARTER RESOLVER
+        // It creates a TopicPartition for the correct DLT topic, but ALWAYS uses partition 0.
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
-                new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, cr.partition());
-        return new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
+                new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
+
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
+        
+        // This setting ensures that if the DLT publish itself fails, the error is not swallowed.
+        recoverer.setFailIfSendResultIsError(true);
+        
+        return recoverer;
     }
     
     @Bean
@@ -141,6 +149,15 @@ public class KafkaConfig {
     }
 
     @Bean
+    public NewTopic groupBroadcastTopic() {
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameGroup())
+                .partitions(appProperties.getKafka().getTopic().getPartitions())
+                .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
+                .config("retention.ms", "604800000")
+                .build();
+    }
+
+    @Bean
     public NewTopic allUsersDeadLetterTopic() {
         return TopicBuilder.name(appProperties.getKafka().getTopic().getNameAll() + Constants.DLT_SUFFIX)
                 .partitions(1)
@@ -156,6 +173,15 @@ public class KafkaConfig {
                 .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
                 .config("retention.ms", "1209600000") // 14 days
                 .build();
+    }
+
+    @Bean
+    public NewTopic groupDeadLetterTopic() {
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameGroup() + Constants.DLT_SUFFIX)
+            .partitions(1)
+            .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
+            .config("retention.ms", "1209600000") // 14 days
+            .build();
     }
 
     @Bean

@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/user/messages") // MODIFIED: Route is more specific
+@RequestMapping("/api/user/messages")
 @RequiredArgsConstructor
 @Slf4j
 public class UserMessageController {
@@ -26,6 +26,14 @@ public class UserMessageController {
         log.info("Retrieved {} messages for user: {}", messages.size(), userId);
         return ResponseEntity.ok(messages);
     }
+    
+    @GetMapping("/groups")
+    public ResponseEntity<List<UserBroadcastResponse>> getGroupMessages(@RequestParam String userId) {
+        log.info("Retrieving group messages for user: {}", userId);
+        List<UserBroadcastResponse> messages = userMessageService.getGroupMessagesForUser(userId);
+        log.info("Retrieved {} group messages for user: {}", messages.size(), userId);
+        return ResponseEntity.ok(messages);
+    }
 
     @GetMapping("/unread")
     public ResponseEntity<List<UserBroadcastResponse>> getUnreadMessages(@RequestParam String userId) {
@@ -37,10 +45,9 @@ public class UserMessageController {
 
     @PostMapping("/read")
     public ResponseEntity<Void> markMessageAsRead(@Valid @RequestBody MessageReadRequest request) {
-        log.info("Marking message as read: user={}, message={}", request.getUserId(), request.getMessageId());
-        userMessageService.markMessageAsRead(request.getUserId(), request.getMessageId());
+        // Note: Ensure MessageReadRequest DTO has a 'broadcastId' field instead of 'messageId'
+        log.info("Marking message as read: user={}, broadcast={}", request.getUserId(), request.getBroadcastId());
+        userMessageService.markMessageAsRead(request.getUserId(), request.getBroadcastId());
         return ResponseEntity.ok().build();
     }
-    
-    // REMOVED: The /all endpoint was moved to BroadcastAdminController
 }

@@ -2,13 +2,14 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.user.dto.UserBroadcastResponse;
-import com.example.broadcast.shared.dto.cache.UserMessageInfo;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
+import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.service.cache.CacheService;
+import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
 import com.example.broadcast.shared.util.Constants.EventType;
 import com.example.broadcast.shared.util.Constants.SseEventType;
@@ -34,10 +35,12 @@ public class SseService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final ObjectMapper objectMapper;
     private final BroadcastRepository broadcastRepository;
+    private final BroadcastStatisticsRepository broadcastStatisticsRepository;    
     private final MessageStatusService messageStatusService;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
     private final CacheService cacheService;
+    private final UserMessageService userMessageService;
 
     @Transactional
     public void registerConnection(String userId, String sessionId) {
@@ -48,7 +51,14 @@ public class SseService {
         log.info("Orchestrating event stream creation for user: {}, session: {}", userId, sessionId);
         Flux<ServerSentEvent<String>> eventStream = sseConnectionManager.createEventStream(userId, sessionId);
 
+        // --- START MODIFIED LOGIC ---
+        // 1. Send pending messages specifically targeted to this user (existing logic)
         sendPendingMessages(userId);
+        
+        // 2. NEW: Send active global and role-based messages
+        sendActiveGroupMessages(userId); 
+        // --- END MODIFIED LOGIC ---
+
         try {
             String connectedPayload = objectMapper.writeValueAsString(Map.of("message", "SSE connection established with session " + sessionId));
             sseConnectionManager.sendEvent(userId, ServerSentEvent.<String>builder()
@@ -67,105 +77,168 @@ public class SseService {
         sseConnectionManager.removeEventStream(userId, sessionId);
     }
 
+    /**
+     * MODIFIED LOGIC: This is the main entry point for processing an incoming message event.
+     * It now differentiates between delivery strategies.
+     */
     public void handleMessageEvent(MessageDeliveryEvent event) {
         log.debug("Orchestrating message event: {} for user: {}", event.getEventType(), event.getUserId());
-        try {
-            String payload = objectMapper.writeValueAsString(Map.of("broadcastId", event.getBroadcastId()));
-            switch (EventType.valueOf(event.getEventType())) {
-                case CREATED:
-                    deliverMessageToUser(event.getUserId(), event.getBroadcastId());
-                    break;
-                case READ:
-                case EXPIRED:
-                case CANCELLED:
-                    sseConnectionManager.sendEvent(event.getUserId(), ServerSentEvent.<String>builder().event(SseEventType.MESSAGE_REMOVED.name()).data(payload).build());
-                    break;
-            }
-        } catch (JsonProcessingException e) {
-            log.error("Error processing message event for SSE", e);
-        }
-    }
-
-    private void sendPendingMessages(String userId) {
-        List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
-
-        if (!pendingEvents.isEmpty()) {
-            log.info("Found {} pending messages in cache for user: {}", pendingEvents.size(), userId);
-            for (MessageDeliveryEvent event : pendingEvents) {
-                deliverMessageToUser(event.getUserId(), event.getBroadcastId());
-            }
-            cacheService.clearPendingEvents(userId);
+        
+        // For non-creation events, we can use a simpler path.
+        if (!event.getEventType().equals(EventType.CREATED.name())) {
+            handleLifecycleEvent(event);
             return;
         }
 
-        List<UserBroadcastMessage> pendingMessages = userBroadcastRepository.findPendingMessages(userId);
-        if (!pendingMessages.isEmpty()) {
-            log.warn("Cache was empty, but found {} pending messages in DB for user: {}", pendingMessages.size(), userId);
-            for (UserBroadcastMessage message : pendingMessages) {
-                deliverMessageToUser(userId, message.getBroadcastId());
-            }
+        // For CREATED events, we need the full BroadcastMessage to determine the delivery strategy.
+        Optional<BroadcastMessage> broadcastOpt = broadcastRepository.findById(event.getBroadcastId());
+        if (broadcastOpt.isEmpty()) {
+            log.error("Cannot process event. BroadcastMessage with ID {} not found.", event.getBroadcastId());
+            return;
+        }
+        BroadcastMessage broadcast = broadcastOpt.get();
+        String targetType = broadcast.getTargetType();
+        
+        // Route to the correct delivery method based on target type.
+        if (Constants.TargetType.SELECTED.name().equals(targetType)) {
+            // Use the original, database-dependent delivery method for targeted messages.
+            deliverSelectedUserMessage(event.getUserId(), broadcast);
+        } else {
+            // Use the new, direct-to-SSE delivery method for group messages.
+            deliverGroupUserMessage(event.getUserId(), broadcast);
         }
     }
 
+    /**
+     * NEW METHOD: Handles lifecycle events like READ, EXPIRED, CANCELLED that simply remove a message from the UI.
+     */
+    private void handleLifecycleEvent(MessageDeliveryEvent event) {
+        try {
+            String payload = objectMapper.writeValueAsString(Map.of("broadcastId", event.getBroadcastId()));
+            sseConnectionManager.sendEvent(event.getUserId(), ServerSentEvent.<String>builder()
+                .event(SseEventType.MESSAGE_REMOVED.name())
+                .data(payload).build());
+        } catch (JsonProcessingException e) {
+            log.error("Error processing lifecycle event for SSE", e);
+        }
+    }
+    
+    /**
+     * NEW METHOD: For delivering ROLE and ALL broadcasts.
+     * It bypasses the database check and sends the message directly.
+     */
+    private void deliverGroupUserMessage(String userId, BroadcastMessage broadcast) {
+        log.info("Delivering group (ROLE/ALL) broadcast {} to online user {}", broadcast.getId(), userId);
+        // We create the response directly from the parent BroadcastMessage, passing null for the UserBroadcastMessage.
+        UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
+        sendSseEvent(userId, response);
+    }
+
+    /**
+     * MODIFIED METHOD: The original delivery logic, now specifically for SELECTED users.
+     * This still requires a PENDING database record.
+     */
     @Transactional
-    public void deliverMessageToUser(String userId, Long broadcastId) {
+    public void deliverSelectedUserMessage(String userId, BroadcastMessage broadcast) {
         UserBroadcastMessage message = userBroadcastRepository
-                .findByUserIdAndBroadcastId(userId, broadcastId)
+                .findByUserIdAndBroadcastId(userId, broadcast.getId())
                 .filter(msg -> msg.getDeliveryStatus().equals(DeliveryStatus.PENDING.name()))
                 .orElse(null);
+
         if (message == null) {
-            log.warn("Skipping delivery. No PENDING UserBroadcastMessage found for user {} and broadcast {}", userId, broadcastId);
+            log.warn("Skipping delivery. No PENDING UserBroadcastMessage found for user {} and broadcast {}", userId, broadcast.getId());
             return;
         }
 
         buildUserBroadcastResponse(message)
             .ifPresent(response -> {
-                try {
-                    String payload = objectMapper.writeValueAsString(response);
-                    ServerSentEvent<String> sse = ServerSentEvent.<String>builder()
-                        .event(SseEventType.MESSAGE.name())
-                        .data(payload)
-                        .id(String.valueOf(response.getId()))
-                        .build();
-                  
-                    sseConnectionManager.sendEvent(userId, sse);
-                    
-                    if (isUserConnected(userId)) {
-                        messageStatusService.updateMessageToDelivered(message.getId(), broadcastId);
-                        
-                        UserMessageInfo messageToCache = new UserMessageInfo(
-                            message.getId(),
-                            message.getBroadcastId(),
-                            DeliveryStatus.DELIVERED.name(),
-                            message.getReadStatus(),
-                            message.getCreatedAt()
-                        );
-                        cacheService.addMessageToUserCache(userId, messageToCache);
-                        log.info("Added newly delivered message to cache for user: {}", userId);
-            
-                        log.info("Message delivered to online user: {}, broadcast: {}", userId, broadcastId);
-
-                        // START OF CHANGE: Handle Force Logoff
-                        if ("Force Logoff".equalsIgnoreCase(response.getCategory())) {
-                            log.warn("Force Logoff message delivered to user {}. Terminating their session.", userId);
-                            // Assuming there's a single session per user for simplicity
-                            sseConnectionManager.removeEventStream(userId, sseConnectionManager.getSessionIdForUser(userId));
-                        }
-                        // END OF CHANGE
-
-                    } else {
-                        log.warn("Delivery attempt for user {} and broadcast {} aborted, user disconnected during process.", userId, broadcastId);
-                    }
-
-                } catch (JsonProcessingException e) {
-                    log.error("Error delivering message to user as SSE", e);
+                sendSseEvent(userId, response);
+                if (isUserConnected(userId)) {
+                    messageStatusService.updateMessageToDelivered(message.getId(), broadcast.getId());
+                    log.info("Message delivered and status updated for SELECTED user: {}, broadcast: {}", userId, broadcast.getId());
                 }
             });
     }
 
+    private void sendPendingMessages(String userId) {
+        // --- START: THIS IS THE CORRECTED LOGIC ---
+
+        // 1. First, check the cache for any recently missed messages.
+        List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
+        
+        // 2. If events are found in the cache, deliver them and STOP.
+        if (pendingEvents != null && !pendingEvents.isEmpty()) {
+            log.info("Found {} pending messages in cache for user: {}", pendingEvents.size(), userId);
+            for (MessageDeliveryEvent event : pendingEvents) {
+                // Re-fetch the broadcast to ensure it's still active before delivering
+                broadcastRepository.findById(event.getBroadcastId()).ifPresent(broadcast -> {
+                    
+                    // Route to the correct delivery method based on the original broadcast's target type
+                    if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
+                        deliverSelectedUserMessage(event.getUserId(), broadcast);
+                    } else {
+                        deliverGroupUserMessage(event.getUserId(), broadcast);
+                    }
+
+                });
+            }
+            // After sending, clear the pending events cache for this user.
+            cacheService.clearPendingEvents(userId);
+            return; // This 'return' is critical.
+        }
+
+        // 3. Only if the cache is empty, check the database for older, targeted messages.
+        List<UserBroadcastMessage> pendingDbMessages = userBroadcastRepository.findPendingMessages(userId);
+        if (!pendingDbMessages.isEmpty()) {
+            log.warn("Cache was empty, but found {} pending messages in DB for user: {}", pendingDbMessages.size(), userId);
+            for (UserBroadcastMessage message : pendingDbMessages) {
+                broadcastRepository.findById(message.getBroadcastId()).ifPresent(broadcast -> {
+                    deliverSelectedUserMessage(userId, broadcast);
+                });
+            }
+        }
+    }
+
+    private void sendActiveGroupMessages(String userId) {
+        log.info("Checking for active group (ALL/ROLE) messages for newly connected user: {}", userId);
+        // Reuse the logic from UserMessageService to get all relevant group messages for this user.
+        List<UserBroadcastResponse> groupMessages = userMessageService.getGroupMessagesForUser(userId);
+
+        if (!groupMessages.isEmpty()) {
+            log.info("Delivering {} active group messages to user: {}", groupMessages.size(), userId);
+            for (UserBroadcastResponse response : groupMessages) {
+                sendSseEvent(userId, response);
+
+                broadcastStatisticsRepository.incrementDeliveredCount(response.getBroadcastId());
+            }
+        }
+    }
+    
+    /**
+     * NEW HELPER METHOD: To centralize the sending of the SSE event itself.
+     */
+    private void sendSseEvent(String userId, UserBroadcastResponse response) {
+        try {
+            String payload = objectMapper.writeValueAsString(response);
+            ServerSentEvent<String> sse = ServerSentEvent.<String>builder()
+                .event(SseEventType.MESSAGE.name())
+                .data(payload)
+                .id(String.valueOf(response.getId()))
+                .build();
+            
+            sseConnectionManager.sendEvent(userId, sse);
+
+            if ("Force Logoff".equalsIgnoreCase(response.getCategory())) {
+                log.warn("Force Logoff message delivered to user {}. Terminating their session.", userId);
+                sseConnectionManager.removeEventStream(userId, sseConnectionManager.getSessionIdForUser(userId));
+            }
+        } catch (JsonProcessingException e) {
+            log.error("Error delivering message to user as SSE", e);
+        }
+    }
+
     private Optional<UserBroadcastResponse> buildUserBroadcastResponse(UserBroadcastMessage message) {
         Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(message.getBroadcastId());
-
         if (broadcastOpt.isEmpty()) {
             broadcastOpt = broadcastRepository.findById(message.getBroadcastId());
             broadcastOpt.ifPresent(cacheService::cacheBroadcastContent);
@@ -180,5 +253,22 @@ public class SseService {
 
     public boolean isUserConnected(String userId) {
         return sseConnectionManager.isUserConnected(userId);
+    }
+
+    public void deliverGroupBroadcastFromEvent(MessageDeliveryEvent event) {
+        // Build a temporary BroadcastMessage stub from the event data
+        BroadcastMessage broadcastStub = BroadcastMessage.builder()
+                .id(event.getBroadcastId())
+                .content(event.getMessage())
+                // You can add more fields from the event if needed by the frontend
+                .senderName("System") // Provide a default or get from event
+                .priority("NORMAL")
+                .category("GENERAL")
+                .createdAt(event.getTimestamp())
+                .build();
+
+        // Use the existing mapper to create the final response DTO
+        UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcastStub);
+        sendSseEvent(event.getUserId(), response);
     }
 }

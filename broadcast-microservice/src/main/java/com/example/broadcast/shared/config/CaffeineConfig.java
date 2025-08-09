@@ -80,4 +80,13 @@ public class CaffeineConfig {
                 .build();
     }
 
+    // **NEW CACHE BEAN FOR ROLE/ALL BROADCASTS**
+    @Bean
+    public Cache<String, List<BroadcastMessage>> activeGroupBroadcastsCache() {
+        return Caffeine.newBuilder()
+                .maximumSize(100) // Small size is sufficient (1 for "ALL", plus roles)
+                .expireAfterWrite(Duration.ofSeconds(60)) // Short TTL for freshness
+                .recordStats()
+                .build();
+    }
 }

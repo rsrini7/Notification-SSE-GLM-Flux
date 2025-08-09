@@ -1,5 +1,3 @@
-// Location: src/main/java/com/example/broadcast/shared/config/AppProperties.java
-
 package com.example.broadcast.shared.config;
 
 import jakarta.validation.constraints.NotBlank;
@@ -106,6 +104,8 @@ public class AppProperties {
             private String nameAll = "broadcast-events-all";
             @NotBlank
             private String nameSelected = "broadcast-events-selected";
+            @NotBlank
+            private String nameGroup = "broadcast-events-group"; // New topic for group events
             @Positive
             private int partitions = 10;
             @Positive

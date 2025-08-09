@@ -134,26 +134,32 @@ public class UserBroadcastRepository {
         return jdbcTemplate.query(sql, userBroadcastResponseRowMapper, userId);
     }
     
-    public List<UserBroadcastResponse> findUnreadMessagesByUserId(String userId) {
-        String sql = """
-            SELECT
-                ubm.id, ubm.broadcast_id, ubm.user_id, ubm.delivery_status, ubm.read_status,
-                ubm.delivered_at, ubm.read_at, ubm.created_at,
-                bm.sender_name, bm.content, bm.priority, bm.category,
-                bm.created_at as broadcast_created_at, bm.scheduled_at, bm.expires_at
-            FROM
-                user_broadcast_messages ubm
-            JOIN
-                broadcast_messages bm ON ubm.broadcast_id = bm.id
-            WHERE
-                ubm.user_id = ?
-                AND ubm.read_status = 'UNREAD'
-                AND ubm.delivery_status = 'DELIVERED'
-                AND bm.status = 'ACTIVE'
-            ORDER BY
-                ubm.created_at DESC
-            """;
-        return jdbcTemplate.query(sql, userBroadcastResponseRowMapper, userId);
+    /**
+    * This is the updated method using a PreparedStatement callback for consistency and clarity.
+    */
+    public void update(UserBroadcastMessage message) {
+        String sql = "UPDATE user_broadcast_messages SET delivery_status = ?, read_status = ?, delivered_at = ?, read_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setString(1, message.getDeliveryStatus());
+            ps.setString(2, message.getReadStatus());
+
+            if (message.getDeliveredAt() != null) {
+                ps.setObject(3, message.getDeliveredAt().toOffsetDateTime());
+            } else {
+                ps.setNull(3, Types.TIMESTAMP_WITH_TIMEZONE);
+            }
+
+            if (message.getReadAt() != null) {
+                ps.setObject(4, message.getReadAt().toOffsetDateTime());
+            } else {
+                ps.setNull(4, Types.TIMESTAMP_WITH_TIMEZONE);
+            }
+
+            ps.setLong(5, message.getId());
+            return ps;
+        });
     }
 
     public List<UserBroadcastMessage> findPendingMessages(String userId) {

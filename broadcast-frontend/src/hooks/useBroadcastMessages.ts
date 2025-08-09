@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useSseConnection } from './useSseConnection';
 import { userService, type UserBroadcastMessage } from '../services/api';
@@ -23,9 +23,19 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
-      // The API now returns only valid, non-expired messages.
-      const serverMessages = await userService.getUserMessages(userId);
-      setMessages(serverMessages);
+      // **MODIFIED: Fetch both targeted and group messages**
+      const [targetedMessages, groupMessages] = await Promise.all([
+        userService.getUserMessages(userId),
+        userService.getGroupMessages(userId),
+      ]);
+      
+      // Combine and deduplicate messages
+      const allMessages = [...targetedMessages, ...groupMessages];
+      const uniqueMessages = Array.from(new Map(allMessages.map(msg => [msg.id, msg])).values());
+      uniqueMessages.sort((a, b) => new Date(b.broadcastCreatedAt).getTime() - new Date(a.broadcastCreatedAt).getTime());
+
+      setMessages(uniqueMessages);
+
     } catch (error) {
       toast({
         title: 'Error',
@@ -115,22 +125,18 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     onError,
   });
 
-  const markAsRead = useCallback(async (messageId: number) => {
+  const markAsRead = useCallback(async (broadcastId: number) => { // CHANGED: from messageId to broadcastId
     try {
-      await sseConnection.markAsRead(messageId);
+      // The action now sends the request. The UI update is handled by the SSE event.
+      await sseConnection.markAsRead(broadcastId); // CHANGED: from messageId to broadcastId
+    } catch {
       toast({
-        title: 'Action Sent',
-        description: `Message marked as read for ${userId}. It will be removed shortly.`,
+        title: 'Error',
+        description: 'Failed to send read receipt',
+        variant: 'destructive',
       });
-    } catch (error) 
-    {
-     toast({ 
-        title: 'Error', 
-        description: `Failed to mark message as read for ${userId}.`, 
-        variant: 'destructive' 
-     });
     }
-  }, [sseConnection, toast, userId]);
+  }, [sseConnection, toast]);
 
   const stats = useMemo(() => {
     const total = messages.length;

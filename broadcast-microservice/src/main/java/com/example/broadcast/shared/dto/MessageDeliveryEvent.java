@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import java.time.ZonedDateTime;
 
 @Data
-@Builder
+@Builder(toBuilder = true) // This enables the toBuilder() method
 @NoArgsConstructor
 @AllArgsConstructor
 public class MessageDeliveryEvent {
@@ -19,8 +19,6 @@ public class MessageDeliveryEvent {
     private ZonedDateTime timestamp;
     private String message;
     private String errorDetails;
-    @Builder.Default
-    private boolean transientFailure = false;
     @Builder.Default
     private boolean isFireAndForget = false;
 }
