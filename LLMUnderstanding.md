@@ -29,7 +29,7 @@ Event Publishing: A separate polling service (OutboxPollingService) continuously
 
 Event Consumption & Fan-Out: The backend has Kafka consumers listening on dedicated topics (broadcast-events-all and broadcast-events-selected). When an event is consumed, the service fans it out to the intended recipients.
 
-Real-Time Push & Caching: If a target user is online (tracked via a combination of database sessions and cache), the SseService pushes the message directly to their client via an open SSE connection. If the user is offline, the message is stored as a pending event in the cache. The system uses Caffeine for in-memory caching and has a profile to use Redis for distributed caching.
+Real-Time Push & Caching: If a target user is online (tracked via a combination of database sessions and cache), the SseService pushes the message directly to their client via an open SSE connection. If the user is offline, the message is stored as a pending event in the cache. The system uses Redis for distributed caching.
 
 User Reconnection: When an offline user reconnects, the system retrieves their pending messages from the cache or database and delivers them.
 
@@ -44,7 +44,7 @@ Messaging: Apache Kafka is used as the event streaming backbone for asynchronous
 
 Data Storage: PostgreSQL is the primary relational database, with H2 used for development and testing.
 
-Caching: A dual-strategy caching approach is used with Caffeine for fast in-memory caching and Redis for a distributed cache when enabled via a Spring profile.
+Caching: A dual-strategy caching approach is used with Redis for a distributed cache when enabled.
 
 Deployment & DevOps: The application is fully containerized with Docker and designed for Kubernetes, with extensive configurations for scaling (HPA), high availability (PDB), and networking (Nginx).
 

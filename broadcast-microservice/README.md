@@ -7,7 +7,7 @@ A high-performance Java microservice for the Broadcast Messaging System, built w
 - **Real-time SSE Delivery**: Sub-second latency for online users
 - **Persistent Storage**: h2 Database with admin and user-side tracking
 - **Event Streaming**: Kafka-based fan-out with at-least-once semantics
-- **High-Performance Caching**: Caffeine for low-latency operations
+- **High-Performance Caching**: Redis for low-latency operations
 - **Scalable Architecture**: Kubernetes-ready with HPA and PDB
 
 ## Tech Stack

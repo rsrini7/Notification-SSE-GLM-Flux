@@ -23,7 +23,7 @@ This section provides guidance on diagnosing and resolving common issues encount
 
 **Possible Causes & Solutions**:
 - **Incorrect Cache Eviction/Update Policies**: Cache entries are not being invalidated or updated correctly when underlying data changes.
-  - **Solution**: Review cache configuration (<mcsymbol name="CaffeineConfig" filename="CaffeineConfig.java" path="broadcast-microservice/src/main/java/com/example/broadcast/shared/config/CaffeineConfig.java" startline="20" type="class"></mcsymbol>, <mcsymbol name="RedisConfig" filename="RedisConfig.java" path="broadcast-microservice/src/main/java/com/example/broadcast/shared/config/RedisConfig.java" startline="20" type="class"></mcsymbol>) and ensure appropriate eviction policies (e.g., time-based expiry, size limits) and update mechanisms are in place. For distributed caches like Redis, ensure all instances are correctly configured for consistency.
+  - **Solution**: Review cache configuration (<mcsymbol name="RedisConfig" filename="RedisConfig.java" path="broadcast-microservice/src/main/java/com/example/broadcast/shared/config/RedisConfig.java" startline="20" type="class"></mcsymbol>) and ensure appropriate eviction policies (e.g., time-based expiry, size limits) and update mechanisms are in place. For distributed caches like Redis, ensure all instances are correctly configured for consistency.
 - **Cache Misses**: High cache miss rates indicate that frequently accessed data is not being cached effectively.
   - **Solution**: Analyze access patterns and adjust caching strategies to include more relevant data. Ensure cache keys are consistent and correctly generated.
 - **Network Latency to Redis**: High latency between the microservice and the Redis instance can negate performance benefits.

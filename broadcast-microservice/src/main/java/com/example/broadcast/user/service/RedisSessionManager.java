@@ -15,7 +15,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
-@Profile("redis")
 @RequiredArgsConstructor
 public class RedisSessionManager implements DistributedSessionManager {
 

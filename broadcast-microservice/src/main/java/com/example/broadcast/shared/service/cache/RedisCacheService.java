@@ -20,7 +20,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
-@Profile("redis")
 @RequiredArgsConstructor
 @Slf4j
 public class RedisCacheService implements CacheService {

@@ -11,7 +11,6 @@ The Broadcast Microservice follows a reactive and event-driven architecture. Key
 - **Kafka (D)**: Distributed streaming platform for reliable, high-throughput message ingestion and processing.
 - **Redis Cache (G)**: In-memory data store used for caching user connections, pending messages, and broadcast content to improve performance and reduce database load.
 - **PostgreSQL (E)**: Relational database for persistent storage of broadcast information and user data.
-- **Caffeine Cache (F)**: In-memory cache for frequently accessed data within the microservice.
 
 ```mermaid
 graph TD
@@ -20,7 +19,6 @@ graph TD
     C -->|3. Publish Event| D[Kafka]
     D -->|4. Consume Event| C
     C -->|5. Store Data| E[PostgreSQL]
-    C -->|6. Cache Data| F[Caffeine Cache]
     C -->|7. Cache Data| G[Redis Cache]
     C -->|8. Deliver via SSE| A
 
