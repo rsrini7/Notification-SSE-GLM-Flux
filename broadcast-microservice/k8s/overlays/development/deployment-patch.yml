@@ -29,7 +29,13 @@ spec:
               value: "user"
             - name: SPRING_DATASOURCE_PASSWORD
               value: "cGFzc3dvcmQ="
+            - name: SPRING_SQL_INIT_MODE
+              value: "never"
+            - name: SPRING_DATA_REDIS_HOST
+              value: "redis-service"
             - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
-              value: "my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092"
+              value: "kafka-service:9092"
             - name: JAVA_OPTS
               value: "-Xms512m -Xmx1g -XX:+UseG1GC"
+            - name: LOGGING_FILE_NAME
+              value: ""

@@ -2,7 +2,7 @@
 -- Designed for high-scale operations with 400K+ users and 30K+ concurrent connections
 
 -- Enable h2 PostgreSQL compatibility mode
-SET MODE PostgreSQL;
+-- SET MODE PostgreSQL;
 -- Broadcast Messages Table (Admin-side records)
 -- Stores permanent records of all broadcasts created by administrators
 CREATE TABLE IF NOT EXISTS broadcast_messages (
