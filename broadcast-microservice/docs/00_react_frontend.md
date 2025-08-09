@@ -1,4 +1,4 @@
-# 02. The React Frontend
+# The React Frontend
 
 Let's move to the part of the system that users interact with directly: the frontend. This is a modern web application responsible for rendering the user interface (UI).
 
@@ -14,7 +14,7 @@ The frontend is built using **React**, a popular library for building user inter
 
 *   **Components**: Reusable UI pieces. We have components for the admin panel, the user message list, buttons, forms, etc. They are located in `broadcast-frontend/src/components/`.
 *   **Custom Hooks**: These are special functions that contain reusable logic, like connecting to the backend or managing message state. You can find them in `broadcast-frontend/src/hooks/`.
-*   **API Service**: A dedicated file (`broadcast-frontend/src/services/api.ts`) that handles all communication with the [Java Microservice](03_java_microservice.md).
+*   **API Service**: A dedicated file (`broadcast-frontend/src/services/api.ts`) that handles all communication with the [Java Microservice](01_message_broadcasting_system.md).
 
 ### Code Example: Creating a Broadcast
 
@@ -40,7 +40,7 @@ This snippet shows how the form calls a dedicated `api.createBroadcast` function
 
 ### Internal Walkthrough: The `useSseConnection` Hook
 
-The real-time functionality is powered by a custom hook, `useSseConnection`. It's responsible for establishing and maintaining the [Server-Sent Events (SSE)](05_server_sent_events.md) connection.
+The real-time functionality is powered by a custom hook, `useSseConnection`. It's responsible for establishing and maintaining the [Server-Sent Events (SSE)](02_server_sent_events.md) connection.
 
 ```mermaid
 sequenceDiagram
@@ -63,5 +63,3 @@ This hook encapsulates all the complexity of managing the connection, so the UI 
 
 The React frontend is a sophisticated client-side application that provides two distinct user experiences: one for admins and one for users. It uses a clean, service-oriented architecture to communicate with the backend.
 
-Now that we've seen the user-facing side, let's explore the engine that powers it all: the [Java Microservice](03_java_microservice.md).
---- END OF FILE ---

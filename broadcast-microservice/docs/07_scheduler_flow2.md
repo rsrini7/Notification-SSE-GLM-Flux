@@ -1,4 +1,4 @@
-# 10. Scheduler Management and Flows
+# Scheduler Management and Flows
 
 This document outlines the various scheduled tasks within the Broadcast Microservice, their purpose, and how they are managed, especially in a distributed environment using ShedLock.
 
@@ -8,7 +8,6 @@ The Broadcast Microservice utilizes Spring's `@Scheduled` annotation for recurri
 
 ## 1. Outbox Polling Service
 
--   **File:** <mcfile name="OutboxPollingService.java" path="broadcast-microservice/src/main/java/com/example/broadcast/shared/service/OutboxPollingService.java"></mcfile>
 -   **Purpose:** Polls the outbox table for unprocessed events and publishes them to Kafka. This ensures reliable message delivery even if the initial Kafka send fails.
 -   **Frequency:** Every 2 seconds (`fixedDelay = 2000`).
 -   **Implementation:** Uses `@Scheduled(fixedDelay = 2000)` and `@Transactional` to ensure atomicity of polling and publishing.
@@ -38,7 +37,6 @@ sequenceDiagram
 
 ## 2. SSE Connection Manager - Stale Session Cleanup
 
--   **File:** <mcfile name="SseConnectionManager.java" path="broadcast-microservice/src/main/java/com/example/broadcast/user/service/SseConnectionManager.java"></mcfile>
 -   **Purpose:** Periodically identifies and cleans up stale Server-Sent Event (SSE) sessions across the cluster. This ensures that inactive connections are properly closed and resources are released.
 -   **Frequency:** Every 60 seconds (`fixedRate = 60000`).
 -   **Distributed Lock:** `cleanupStaleSseSessions` using ShedLock (`lockAtLeastFor = "PT55S"`, `lockAtMostFor = "PT59S"`).
@@ -71,7 +69,6 @@ sequenceDiagram
 
 ## 3. User Session Cleanup Service
 
--   **File:** <mcfile name="UserSessionCleanupService.java" path="broadcast-microservice/src/main/java/com/example/broadcast/user/service/UserSessionCleanupService.java"></mcfile>
 -   **Purpose:** Purges old, inactive user sessions from the database to enforce data retention policies. This is a heavy deletion task.
 -   **Frequency:** Daily at 2:00 AM (`cron = "0 0 2 * * *"`).
 -   **Distributed Lock:** `purgeOldInactiveSessions` using ShedLock (`lockAtMostFor = "PT15M"`).
@@ -90,7 +87,6 @@ sequenceDiagram
 
 ## 4. Broadcast Expiration Service
 
--   **File:** <mcfile name="BroadcastExpirationService.java" path="broadcast-microservice/src/main/java/com/example/broadcast/admin/service/BroadcastExpirationService.java"></mcfile>
 -   **Purpose:** Periodically checks for active broadcasts that have passed their `expires_at` timestamp and marks them as expired.
 -   **Frequency:** Every 60 seconds (`fixedRate = 60000`).
 -   **Distributed Lock:** `processExpiredBroadcasts` using ShedLock (`lockAtLeastFor = "PT55S"`, `lockAtMostFor = "PT59S"`).
@@ -119,7 +115,6 @@ sequenceDiagram
 
 ## 5. Broadcast Scheduling Service
 
--   **File:** <mcfile name="BroadcastSchedulingService.java" path="broadcast-microservice/src/main/java/com/example/broadcast/admin/service/BroadcastSchedulingService.java"></mcfile>
 -   **Purpose:** Periodically processes broadcasts that were `SCHEDULED` for a future time and are now due. It transitions them to an `ACTIVE` state.
 -   **Frequency:** Every 60 seconds (`fixedRate = 60000`).
 -   **Distributed Lock:** `processScheduledBroadcasts` using ShedLock (`lockAtLeastFor = "PT55S"`, `lockAtMostFor = "PT59S"`).
@@ -144,26 +139,6 @@ sequenceDiagram
     else No due broadcasts
         BSS->>BSS: Do nothing
     end
-```
-
-## ShedLock Configuration
-
--   **File:** <mcfile name="ShedLockConfig.java" path="broadcast-microservice/src/main/java/com/example/broadcast/shared/config/ShedLockConfig.java"></mcfile>
--   **Purpose:** Configures ShedLock, a distributed lock for scheduled tasks. It ensures that a scheduled task runs at most once at the same time across multiple instances of the microservice.
--   **Implementation:** Uses `@EnableSchedulerLock` and defines a `JdbcTemplateLockProvider` bean, which stores lock information in the database.
-
-```mermaid
-classDiagram
-    class ShedLockConfig {
-        +LockProvider lockProvider(DataSource dataSource)
-    }
-    class LockProvider
-    class JdbcTemplateLockProvider
-    class DataSource
-
-    ShedLockConfig --> LockProvider : creates
-    JdbcTemplateLockProvider --|> LockProvider
-    JdbcTemplateLockProvider --> DataSource : uses
 ```
 
 This comprehensive overview covers the various scheduled operations critical to the Broadcast Microservice's functionality, from message delivery and session management to broadcast lifecycle handling, all orchestrated with robust distributed locking.

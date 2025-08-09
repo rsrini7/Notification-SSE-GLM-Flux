@@ -1,4 +1,4 @@
-# 04. User Session Management
+# User Session Management
 
 
 The Broadcast Microservice manages user sessions for Server-Sent Events (SSE) to ensure real-time communication and efficient resource utilization. This document outlines the key components and flows involved in user session management, including session creation, registration, heartbeat updates, and cleanup.
@@ -33,7 +33,7 @@ The Broadcast Microservice manages user sessions for Server-Sent Events (SSE) to
 
 ### 5. UserSessionCleanupService
 
-This is a scheduled service (documented in <mcfile name="09_scheduler_flow.md" path="docs/09_scheduler_flow.md"></mcfile>) responsible for purging old, inactive user sessions from the database.
+This is a scheduled service (documented in <mcfile name="07_scheduler_flow2.md" path="docs/07_scheduler_flow2.md"></mcfile>) responsible for purging old, inactive user sessions from the database.
 
 ## Session Management Flow
 
