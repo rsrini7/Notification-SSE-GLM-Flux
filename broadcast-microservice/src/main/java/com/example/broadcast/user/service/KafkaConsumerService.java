@@ -69,7 +69,6 @@ public class KafkaConsumerService {
         
         try {
 
-             // --- START MODIFIED LOGIC ---
             // If the event is a lifecycle event, just forward it to all online users.
             if (event.getEventType().equals(EventType.CANCELLED.name()) || event.getEventType().equals(EventType.EXPIRED.name())) {
                 List<String> onlineUsers = cacheService.getOnlineUsers();
@@ -81,10 +80,12 @@ public class KafkaConsumerService {
                 acknowledgment.acknowledge();
                 return;
             }
-            // --- END MODIFIED LOGIC ---
+
             // First, fetch the parent broadcast message from the database
             BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId())
                 .orElseThrow(() -> new IllegalStateException("FATAL: Broadcast not found for group event: " + event.getBroadcastId()));
+
+            cacheService.evictActiveGroupBroadcastsCache();
 
             List<String> targetUserIds;
             if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
@@ -123,7 +124,7 @@ public class KafkaConsumerService {
             // Create a specific user event for each online user and process it
             for (String userId : usersToNotify) {
                 MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
-                handleEvent(userEvent);
+                 sseService.deliverGroupBroadcastFromEvent(userEvent);
             }
 
             // After successfully sending to all online users, update the statistics in a single batch.

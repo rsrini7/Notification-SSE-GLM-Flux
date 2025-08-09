@@ -253,4 +253,21 @@ public class SseService {
     public boolean isUserConnected(String userId) {
         return sseConnectionManager.isUserConnected(userId);
     }
+
+    public void deliverGroupBroadcastFromEvent(MessageDeliveryEvent event) {
+        // Build a temporary BroadcastMessage stub from the event data
+        BroadcastMessage broadcastStub = BroadcastMessage.builder()
+                .id(event.getBroadcastId())
+                .content(event.getMessage())
+                // You can add more fields from the event if needed by the frontend
+                .senderName("System") // Provide a default or get from event
+                .priority("NORMAL")
+                .category("GENERAL")
+                .createdAt(event.getTimestamp())
+                .build();
+
+        // Use the existing mapper to create the final response DTO
+        UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcastStub);
+        sendSseEvent(event.getUserId(), response);
+    }
 }
