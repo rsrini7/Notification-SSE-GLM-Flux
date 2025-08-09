@@ -141,6 +141,7 @@ public class BroadcastLifecycleService {
             totalTargeted = fanOutOnWrite(broadcast);
         } else if (Constants.TargetType.ROLE.name().equals(targetType) || Constants.TargetType.ALL.name().equals(targetType)) {
             totalTargeted = fanOutOnRead(broadcast);
+            cacheService.evictActiveGroupBroadcastsCache();
         }
 
         if (totalTargeted > 0) {

@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -87,21 +88,15 @@ public class KafkaConsumerService {
             }
 
             // 2. Synchronously update the cache to prevent race conditions for new connections.
-            List<BroadcastMessage> allActiveGroupBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType("ALL");
-            cacheService.cacheActiveGroupBroadcasts("ALL", allActiveGroupBroadcasts);
-            log.info("Synchronously updated the active 'ALL' user broadcast cache with {} items.", allActiveGroupBroadcasts.size());
-            
-            // Find the specific broadcast from the fresh list to deliver to currently online users.
-            BroadcastMessage broadcast = allActiveGroupBroadcasts.stream()
-                .filter(b -> b.getId().equals(event.getBroadcastId()))
-                .findFirst()
-                .orElse(null);
-            
-            if (broadcast == null) {
-                log.warn("Broadcast {} was not found in the active list after cache update. It may have been cancelled or expired. Acknowledging message.", event.getBroadcastId());
+            Optional<BroadcastMessage> broadcastOpt = broadcastRepository.findById(event.getBroadcastId());
+
+            if (broadcastOpt.isEmpty()) {
+                log.warn("Broadcast {} was not found. It may have been cancelled or expired. Acknowledging message.", event.getBroadcastId());
                 acknowledgment.acknowledge();
                 return;
             }
+            
+            BroadcastMessage broadcast = broadcastOpt.get();
 
             // Determine target users (this part is unchanged)
             List<String> targetUserIds;
