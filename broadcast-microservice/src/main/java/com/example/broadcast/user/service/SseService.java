@@ -7,6 +7,7 @@ import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
+import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
@@ -34,6 +35,7 @@ public class SseService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final ObjectMapper objectMapper;
     private final BroadcastRepository broadcastRepository;
+    private final BroadcastStatisticsRepository broadcastStatisticsRepository;    
     private final MessageStatusService messageStatusService;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
@@ -195,10 +197,8 @@ public class SseService {
                 });
             }
         }
-        // --- END: THIS IS THE CORRECTED LOGIC ---
     }
 
-    // --- ADD THIS NEW METHOD ---
     private void sendActiveGroupMessages(String userId) {
         log.info("Checking for active group (ALL/ROLE) messages for newly connected user: {}", userId);
         // Reuse the logic from UserMessageService to get all relevant group messages for this user.
@@ -208,6 +208,8 @@ public class SseService {
             log.info("Delivering {} active group messages to user: {}", groupMessages.size(), userId);
             for (UserBroadcastResponse response : groupMessages) {
                 sendSseEvent(userId, response);
+
+                broadcastStatisticsRepository.incrementDeliveredCount(response.getBroadcastId());
             }
         }
     }
