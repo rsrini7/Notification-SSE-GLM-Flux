@@ -168,27 +168,6 @@ public class RedisCacheService implements CacheService {
         pendingEventsRedisTemplate.delete(PENDING_EVENTS_KEY_PREFIX + userId);
     }
 
-    @Override
-    public void updateMessageReadStatus(String userId, Long broadcastId) {
-        String key = USER_MESSAGES_KEY_PREFIX + userId;
-        List<UserMessageInfo> messages = userMessagesRedisTemplate.opsForValue().get(key);
-        if (messages != null) {
-            List<UserMessageInfo> updatedMessages = messages.stream()
-                    .map(msg -> {
-                        if (msg.getBroadcastId().equals(broadcastId)) {
-                            return new UserMessageInfo(
-                                msg.getMessageId(), 
-                                msg.getBroadcastId(),
-                                msg.getDeliveryStatus(),
-                                Constants.ReadStatus.READ.name(),
-                                msg.getCreatedAt()
-                            );
-                        }
-                        return msg;
-                    }).collect(Collectors.toList());
-            userMessagesRedisTemplate.opsForValue().set(key, updatedMessages, 24, TimeUnit.HOURS);
-        }
-    }
 
     @Override
     public void cacheBroadcastStats(String statsKey, BroadcastStatsInfo stats) {

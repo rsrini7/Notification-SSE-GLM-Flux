@@ -24,7 +24,6 @@ public interface CacheService {
     List<MessageDeliveryEvent> getPendingEvents(String userId);
     void removePendingEvent(String userId, Long broadcastId);
     void clearPendingEvents(String userId);
-    void updateMessageReadStatus(String userId, Long broadcastId);
     void cacheBroadcastStats(String statsKey, BroadcastStatsInfo stats);
     BroadcastStatsInfo getCachedBroadcastStats(String statsKey);
     Map<String, Object> getCacheStats();

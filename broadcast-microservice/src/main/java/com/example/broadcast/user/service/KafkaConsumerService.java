@@ -203,7 +203,7 @@ public class KafkaConsumerService {
     private void handleMessageRead(MessageDeliveryEvent event) {
         log.info("Handling message read event for user: {}, broadcast: {}", event.getUserId(), event.getBroadcastId());
         sseService.handleMessageEvent(event);
-        cacheService.updateMessageReadStatus(event.getUserId(), event.getBroadcastId());
+        cacheService.removeMessageFromUserCache(event.getUserId(), event.getBroadcastId());
     }
 
     private void handleBroadcastCancelled(MessageDeliveryEvent event) {
