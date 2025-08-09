@@ -39,3 +39,5 @@ spec:
               value: "-Xms512m -Xmx1g -XX:+UseG1GC"
             - name: LOGGING_FILE_NAME
               value: ""
+            - name: MANAGEMENT_TRACING_ENABLED
+              value: "false"
