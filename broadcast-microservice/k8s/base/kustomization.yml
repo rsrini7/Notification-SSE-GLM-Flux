@@ -22,7 +22,7 @@ resources:
   - service.yaml
   - hpa.yaml
   - pod-disruption-budget.yaml
-  - kafka-topic.yaml
+  - kafka/kafka-topic.yaml
   - prometheus-config.yaml
   - postgres/postgres-pvc.yaml
   - postgres/postgres-secret.yaml
