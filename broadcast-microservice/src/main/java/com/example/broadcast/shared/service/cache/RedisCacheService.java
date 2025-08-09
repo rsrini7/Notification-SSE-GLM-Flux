@@ -177,7 +177,6 @@ public class RedisCacheService implements CacheService {
             List<UserMessageInfo> updatedMessages = messages.stream()
                     .map(msg -> {
                         if (msg.getBroadcastId().equals(broadcastId)) {
-                            // Use the new simplified constructor
                             return new UserMessageInfo(
                                 msg.getMessageId(), 
                                 msg.getBroadcastId(),
@@ -257,6 +256,15 @@ public class RedisCacheService implements CacheService {
         }
     }
 
+    // CHANGED: Implement the new method.
+    @Override
+    public void evictBroadcastContent(Long broadcastId) {
+        if (broadcastId != null) {
+            String key = BROADCAST_CONTENT_KEY_PREFIX + broadcastId;
+            broadcastMessageRedisTemplate.delete(key);
+        }
+    }
+
     @Override
     public List<BroadcastMessage> getActiveGroupBroadcasts(String cacheKey) {
         String redisKey = ACTIVE_GROUP_BROADCASTS_KEY_PREFIX + cacheKey;
@@ -271,9 +279,6 @@ public class RedisCacheService implements CacheService {
 
     @Override
     public void evictActiveGroupBroadcastsCache() {
-        // Evicting by pattern is a heavy operation in Redis. In a real high-performance
-        // scenario, one would let the TTL expire or use a more sophisticated eviction strategy.
-        // For this project's scope, a simple SCAN + DEL is acceptable.
         log.warn("Evicting active group broadcasts cache via SCAN operation.");
         try (RedisConnection connection = redisConnectionFactory.getConnection()) {
             ScanOptions options = ScanOptions.scanOptions().match(ACTIVE_GROUP_BROADCASTS_KEY_PREFIX + "*").count(100).build();

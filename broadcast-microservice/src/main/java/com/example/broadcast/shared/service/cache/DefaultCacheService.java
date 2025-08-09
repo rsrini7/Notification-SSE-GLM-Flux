@@ -30,9 +30,8 @@ public class DefaultCacheService implements CacheService {
     private final Cache<String, BroadcastStatsInfo> broadcastStatsCache;
     private final Cache<Long, BroadcastMessage> broadcastContentCache;
     private final Cache<String, Boolean> onlineUsersCache;
-    // **INJECT THE NEW CACHE BEAN**
     private final Cache<String, List<BroadcastMessage>> activeGroupBroadcastsCache;
-
+        
     @Override
     public void registerUserConnection(String userId, String sessionId, String podId) {
         UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, sessionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
@@ -178,7 +177,7 @@ public class DefaultCacheService implements CacheService {
             "broadcastStatsCache", broadcastStatsCache.stats(),
             "broadcastContentCache", broadcastContentCache.stats(),
             "onlineUsersCache", onlineUsersCache.stats(),
-            "activeGroupBroadcastsCache", activeGroupBroadcastsCache.stats() // Add new cache stats
+            "activeGroupBroadcastsCache", activeGroupBroadcastsCache.stats()
         );
     }
 
@@ -194,7 +193,14 @@ public class DefaultCacheService implements CacheService {
         }
     }
 
-    // **IMPLEMENTATION OF NEW METHODS**
+    // CHANGED: Implement the new method.
+    @Override
+    public void evictBroadcastContent(Long broadcastId) {
+        if (broadcastId != null) {
+            broadcastContentCache.invalidate(broadcastId);
+        }
+    }
+
     @Override
     public List<BroadcastMessage> getActiveGroupBroadcasts(String cacheKey) {
         return activeGroupBroadcastsCache.getIfPresent(cacheKey);

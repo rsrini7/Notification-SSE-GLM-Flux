@@ -102,25 +102,31 @@ public class BroadcastLifecycleService {
         log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
         publishLifecycleEvent(broadcast, Constants.EventType.CANCELLED, "Broadcast CANCELLED");
         
-        // **EVICT CACHE ON CANCELLATION**
         cacheService.evictActiveGroupBroadcastsCache();
-        log.info("Broadcast cancelled: {}. Published cancellation events to outbox and evicted group cache.", id);
+        
+        // CHANGED: Evict the specific broadcast from the content cache.
+        cacheService.evictBroadcastContent(id);
+        
+        log.info("Broadcast cancelled: {}. Published cancellation events to outbox and evicted caches.", id);
     }
 
     @Transactional
     public void expireBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
-        
         if (Constants.BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) {
             broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
             broadcastRepository.update(broadcast);
             int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(broadcastId, Constants.DeliveryStatus.SUPERSEDED.name());
             log.info("Updated {} pending user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
             publishLifecycleEvent(broadcast, Constants.EventType.EXPIRED, "Broadcast EXPIRED");
-            // **EVICT CACHE ON EXPIRATION**
+            
             cacheService.evictActiveGroupBroadcastsCache();
-            log.info("Broadcast expired: {}. Published expiration events to outbox and evicted group cache.", broadcastId);
+
+            // CHANGED: Evict the specific broadcast from the content cache.
+            cacheService.evictBroadcastContent(broadcastId);
+
+            log.info("Broadcast expired: {}. Published expiration events to outbox and evicted caches.", broadcastId);
         } else {
             log.info("Broadcast {} was already in a non-active state ({}). No expiration action needed.", broadcastId, broadcast.getStatus());
         }

@@ -30,6 +30,9 @@ public interface CacheService {
     Map<String, Object> getCacheStats();
     Optional<BroadcastMessage> getBroadcastContent(Long broadcastId);
     void cacheBroadcastContent(BroadcastMessage broadcast);
+    
+    // CHANGED: Add new method declaration for evicting specific broadcast content.
+    void evictBroadcastContent(Long broadcastId);
 
     // **NEW METHODS FOR ROLE/ALL BROADCAST CACHING**
     List<BroadcastMessage> getActiveGroupBroadcasts(String cacheKey);
