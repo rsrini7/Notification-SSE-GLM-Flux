@@ -104,7 +104,12 @@ public class KafkaConfig {
         
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
                 new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, cr.partition());
-        return new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
+                
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
+        
+        recoverer.setFailIfSendResultIsError(true);
+        
+        return recoverer;
     }
     
     @Bean

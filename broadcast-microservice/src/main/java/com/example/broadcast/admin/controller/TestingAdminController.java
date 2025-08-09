@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/admin/testing") // MODIFIED: Route is now namespaced under /admin
+@RequestMapping("/api/admin/testing")
 @RequiredArgsConstructor
 public class TestingAdminController {
 
@@ -17,13 +17,15 @@ public class TestingAdminController {
     @PostMapping("/kafka-consumer-failure")
     public ResponseEntity<Void> setKafkaConsumerFailure(@RequestBody Map<String, Boolean> request) {
         boolean enabled = request.getOrDefault("enabled", false);
-        testingConfigService.setKafkaConsumerFailureEnabled(enabled);
+        // Use the new arming method
+        testingConfigService.setArm(enabled);
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/kafka-consumer-failure")
     public ResponseEntity<Map<String, Boolean>> getKafkaConsumerFailure() {
-        boolean isEnabled = testingConfigService.isKafkaConsumerFailureEnabled();
+        // Return the current armed state
+        boolean isEnabled = testingConfigService.isArmed();
         return ResponseEntity.ok(Map.of("enabled", isEnabled));
     }
 }

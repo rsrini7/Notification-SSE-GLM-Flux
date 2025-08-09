@@ -44,6 +44,7 @@ public class DltService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
     private final MessageStatusService messageStatusService;
+    private final TestingConfigurationService testingConfigurationService;
 
     @KafkaListener(
             topics = {
@@ -101,6 +102,10 @@ public class DltService {
                     .originalMessagePayload(payloadJson) // Use the serialized JSON string
                     .build();
             dltRepository.save(dltMessage);
+
+            testingConfigurationService.clearFailureMark(failedEvent.getBroadcastId());
+            log.info("Cleared DLT failure mark for broadcast ID: {}", failedEvent.getBroadcastId());
+
 
             // Step 4: Acknowledge the DLT message
             acknowledgment.acknowledge();

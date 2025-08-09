@@ -119,7 +119,7 @@ public class DefaultCacheService implements CacheService {
         if (pendingEvents == null) return List.of();
         
         return pendingEvents.stream()
-            .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null,false,false))
+            .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null, false))
             .collect(Collectors.toList());
     }
     

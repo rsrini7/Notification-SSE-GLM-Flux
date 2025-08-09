@@ -20,7 +20,5 @@ public class MessageDeliveryEvent {
     private String message;
     private String errorDetails;
     @Builder.Default
-    private boolean transientFailure = false;
-    @Builder.Default
     private boolean isFireAndForget = false;
 }

@@ -9,6 +9,7 @@ import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.EventType;
+import com.example.broadcast.admin.service.TestingConfigurationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -20,8 +21,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,9 +33,7 @@ public class KafkaConsumerService {
     private final UserService userService;
     private final BroadcastRepository broadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
-
-    private static final Map<String, Integer> TRANSIENT_FAILURE_ATTEMPTS = new ConcurrentHashMap<>();
-    private static final int MAX_AUTOMATIC_ATTEMPTS = 3;
+    private final TestingConfigurationService testingConfigurationService;
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name.selected:broadcast-events-selected}",
@@ -50,6 +47,11 @@ public class KafkaConsumerService {
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
         
+        if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
+            log.warn("DLT TEST MODE [SELECTED]: Simulating failure for broadcast ID: {}", event.getBroadcastId());
+            throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
+        }
+
         processBroadcastEvent(event, topic, partition, offset, acknowledgment);
     }
     
@@ -65,9 +67,13 @@ public class KafkaConsumerService {
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
 
-        log.info("Received group broadcast event for broadcast ID: {}", event.getBroadcastId());
-        
         try {
+            if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
+                log.warn("DLT TEST MODE [GROUP]: Simulating failure for broadcast ID: {}", event.getBroadcastId());
+                throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
+            }
+
+            log.info("Received group broadcast event for broadcast ID: {}", event.getBroadcastId());
 
             // If the event is a lifecycle event, just forward it to all online users.
             if (event.getEventType().equals(EventType.CANCELLED.name()) || event.getEventType().equals(EventType.EXPIRED.name())) {
@@ -152,20 +158,6 @@ public class KafkaConsumerService {
         try {
             log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
                     event.getEventId(), topic, partition, offset);
-            
-            if (event.isTransientFailure()) {
-                int attempts = TRANSIENT_FAILURE_ATTEMPTS.getOrDefault(event.getEventId(), 0);
-                if (attempts < MAX_AUTOMATIC_ATTEMPTS) {
-                    TRANSIENT_FAILURE_ATTEMPTS.put(event.getEventId(), attempts + 1);
-                    log.warn("Transient failure flag detected for eventId: {}. Simulating failure BEFORE processing, attempt {}/{}", 
-                             event.getEventId(), attempts + 1, MAX_AUTOMATIC_ATTEMPTS);
-                    throw new RuntimeException("Simulating a transient, recoverable error for DLT redrive testing.");
-                } else {
-                    log.info("Successfully redriving eventId with transient failure flag: {}. Attempts ({}) exceeded max.", 
-                             event.getEventId(), attempts);
-                    TRANSIENT_FAILURE_ATTEMPTS.remove(event.getEventId());
-                }
-            }
 
             handleEvent(event);
             acknowledgment.acknowledge();

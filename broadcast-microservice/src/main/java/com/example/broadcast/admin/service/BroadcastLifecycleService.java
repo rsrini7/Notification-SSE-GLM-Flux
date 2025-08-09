@@ -44,6 +44,7 @@ public class BroadcastLifecycleService {
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
     private final CacheService cacheService;
+    private final TestingConfigurationService testingConfigurationService;
 
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
@@ -67,6 +68,12 @@ public class BroadcastLifecycleService {
 
         broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
         broadcast = broadcastRepository.save(broadcast);
+
+        if (request.isFailureTest()) {
+            testingConfigurationService.markBroadcastForFailure(broadcast.getId());
+            log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
+        }
+
         return triggerBroadcast(broadcast);
     }
 
@@ -116,6 +123,7 @@ public class BroadcastLifecycleService {
     }
 
     private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
+
         String targetType = broadcast.getTargetType();
         int totalTargeted = 0;
 
@@ -134,7 +142,7 @@ public class BroadcastLifecycleService {
         return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
     }
 
-    private int fanOutOnWrite(BroadcastMessage broadcast) {
+    private int fanOutOnWrite(BroadcastMessage broadcast) { 
         List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
         int totalTargeted = userBroadcasts.size();
         if (totalTargeted > 0) {
@@ -143,8 +151,9 @@ public class BroadcastLifecycleService {
 
             String topicName = appProperties.getKafka().getTopic().getNameSelected();
             List<OutboxEvent> eventsToPublish = new ArrayList<>();
+
             for (UserBroadcastMessage userMessage : userBroadcasts) {
-                MessageDeliveryEvent eventPayload = createDeliveryEvent(broadcast, userMessage.getUserId(), false);
+                MessageDeliveryEvent eventPayload = createDeliveryEvent(broadcast, userMessage.getUserId());
                 try {
                     String payloadJson = objectMapper.writeValueAsString(eventPayload);
                     eventsToPublish.add(createOutboxEvent(eventPayload, topicName, payloadJson));
@@ -158,6 +167,7 @@ public class BroadcastLifecycleService {
     }
 
     private int fanOutOnRead(BroadcastMessage broadcast) {
+
         log.info("Fan-out on read for broadcast {} targeting {}", broadcast.getId(), broadcast.getTargetType());
         
         // This assumes broadcastTargetingService has a method to just get the count efficiently.
@@ -165,10 +175,10 @@ public class BroadcastLifecycleService {
 
         if (totalTargeted > 0) {
             String topicName = appProperties.getKafka().getTopic().getNameGroup();
+
             MessageDeliveryEvent eventPayload = createGroupDeliveryEvent(broadcast);
             try {
                 String payloadJson = objectMapper.writeValueAsString(eventPayload);
-                // **CORRECTED METHOD CALL**
                 outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, payloadJson));
             } catch (JsonProcessingException e) {
                 log.error("Critical: Failed to serialize group event payload for outbox. Broadcast {} will not be published.", broadcast.getId(), e);
@@ -181,7 +191,6 @@ public class BroadcastLifecycleService {
         String topicName = getTopicName(broadcast.getTargetType());
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcast.getId());
 
-        // --- START MODIFIED LOGIC ---
         if (!userBroadcasts.isEmpty()) {
             // This is the existing logic for SELECTED users, which is correct.
             List<OutboxEvent> eventsToPublish = new ArrayList<>();
@@ -206,7 +215,6 @@ public class BroadcastLifecycleService {
                 log.error("Critical: Failed to serialize group lifecycle event payload for outbox for broadcast {}.", broadcast.getId(), e);
             }
         }
-    // --- END MODIFIED LOGIC ---
     }
 
     private MessageDeliveryEvent createGroupLifecycleEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
@@ -232,7 +240,7 @@ public class BroadcastLifecycleService {
             .build();
     }
 
-    private MessageDeliveryEvent createDeliveryEvent(BroadcastMessage broadcast, String userId, boolean transientFailure) {
+    private MessageDeliveryEvent createDeliveryEvent(BroadcastMessage broadcast, String userId) {
         return MessageDeliveryEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .broadcastId(broadcast.getId())
@@ -241,12 +249,12 @@ public class BroadcastLifecycleService {
                 .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .message(broadcast.getContent())
-                .transientFailure(transientFailure)
                 .isFireAndForget(broadcast.isFireAndForget())
                 .build();
     }
     
     private MessageDeliveryEvent createGroupDeliveryEvent(BroadcastMessage broadcast) {
+
         return MessageDeliveryEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .broadcastId(broadcast.getId())
