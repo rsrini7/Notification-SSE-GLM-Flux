@@ -70,7 +70,7 @@ spec:
             cpu: "1000m"
         livenessProbe:
           httpGet:
-            path: /api/actuator/health/liveness
+            path: /actuator/health/liveness
             port: 8081
             scheme: HTTPS
           initialDelaySeconds: 60
@@ -79,7 +79,7 @@ spec:
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /api/actuator/health/readiness
+            path: /actuator/health/readiness
             port: 8081
             scheme: HTTPS
           initialDelaySeconds: 30
