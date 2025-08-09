@@ -49,6 +49,9 @@ public class BroadcastLifecycleService {
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
+        // Atomically check and consume the "armed" state for the test mode.
+        boolean isFailureTest = testingConfigurationService.consumeArmedState();
+
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
         BroadcastMessage broadcast = buildBroadcastFromRequest(request);
 
@@ -69,7 +72,7 @@ public class BroadcastLifecycleService {
         broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
         broadcast = broadcastRepository.save(broadcast);
 
-        if (request.isFailureTest()) {
+        if (isFailureTest) {
             testingConfigurationService.markBroadcastForFailure(broadcast.getId());
             log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
         }

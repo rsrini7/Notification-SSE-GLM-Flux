@@ -5,16 +5,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-
-/**
- * A simple, in-memory service to control testing-related configuration.
- * This allows marking broadcasts for failure simulation,
- * enabling/disabling test behaviors without restarting the application.
- *
- * <p>Note: This service is intended for testing purposes only.
- * It should not be used in production environments.</p>
-
- */
 @Service
 public class TestingConfigurationService {
 
