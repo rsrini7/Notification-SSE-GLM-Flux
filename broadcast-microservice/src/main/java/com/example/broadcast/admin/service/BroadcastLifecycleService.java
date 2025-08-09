@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -315,5 +316,20 @@ public class BroadcastLifecycleService {
             return appProperties.getKafka().getTopic().getNameSelected();
         }
         return appProperties.getKafka().getTopic().getNameGroup();
+    }
+
+    /**
+     * Marks a broadcast as FAILED in a new, independent transaction.
+     * This is critical for ensuring the state is updated even if the calling
+     * DLT process has issues.
+     * @param broadcastId The ID of the broadcast to fail.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void failBroadcast(Long broadcastId) {
+        if (broadcastId == null) return;
+        
+        broadcastRepository.updateStatus(broadcastId, Constants.BroadcastStatus.FAILED.name());
+        cacheService.evictActiveGroupBroadcastsCache();
+        log.warn("Marked entire BroadcastMessage {} as FAILED in a new transaction and evicted cache.", broadcastId);
     }
 }

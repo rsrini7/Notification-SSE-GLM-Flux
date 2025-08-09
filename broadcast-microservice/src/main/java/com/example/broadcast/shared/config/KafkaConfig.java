@@ -102,11 +102,14 @@ public class KafkaConfig {
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
             @Qualifier("dltKafkaTemplate") KafkaTemplate<String, Object> dltKafkaTemplate) {
         
+        // THIS IS THE NEW, SMARTER RESOLVER
+        // It creates a TopicPartition for the correct DLT topic, but ALWAYS uses partition 0.
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
-                new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, cr.partition());
-                
+                new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
+
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
         
+        // This setting ensures that if the DLT publish itself fails, the error is not swallowed.
         recoverer.setFailIfSendResultIsError(true);
         
         return recoverer;

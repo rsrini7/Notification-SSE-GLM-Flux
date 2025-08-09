@@ -11,7 +11,8 @@ public final class Constants {
         ACTIVE,
         SCHEDULED,
         EXPIRED,
-        CANCELLED
+        CANCELLED,
+        FAILED
     }
 
     public enum DeliveryStatus {
