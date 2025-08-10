@@ -195,5 +195,5 @@ spring:
       maximum-pool-size: 50 # Set an explicit max size
   sql:
     init:
-      mode: never
+      mode: always
 
