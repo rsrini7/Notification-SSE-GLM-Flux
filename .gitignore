@@ -1,5 +1,6 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 node_modules
+dist
 # dependencies
 /broadcast-frontend/node_modules
 /broadcast-frontend/.pnp
