@@ -23,11 +23,17 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class KafkaConsumerService {
+
+    // Add this field to record the service's startup time
+    private final ZonedDateTime startupTime = ZonedDateTime.now(ZoneOffset.UTC);
+
 
     private final SseService sseService;
     private final CacheService cacheService;
@@ -38,7 +44,7 @@ public class KafkaConsumerService {
 
     @KafkaListener(
             topics = "${broadcast.kafka.topic.name.selected:broadcast-events-selected}",
-            groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}-selected",
+            groupId = "${broadcast.kafka.consumer.selected-group-id}",
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void processSelectedUsersBroadcastEvent(
@@ -48,6 +54,13 @@ public class KafkaConsumerService {
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
         
+        // If the event is older than the pod, ignore it.
+        if (event.getTimestamp().isBefore(this.startupTime)) {
+            log.trace("Skipping old message from pod restart. Event ID: {}", event.getEventId());
+            acknowledgment.acknowledge(); // Acknowledge to advance offset
+            return;
+        }
+
         if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
             log.warn("DLT TEST MODE [SELECTED]: Simulating failure for broadcast ID: {}", event.getBroadcastId());
             throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
@@ -58,7 +71,7 @@ public class KafkaConsumerService {
     
     @KafkaListener(
         topics = "${broadcast.kafka.topic.name.group:broadcast-events-group}",
-        groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}-group",
+        groupId = "${broadcast.kafka.consumer.group-group-id}",
         containerFactory = "kafkaListenerContainerFactory"
     )
     public void processGroupBroadcastEvent(
@@ -67,6 +80,13 @@ public class KafkaConsumerService {
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             Acknowledgment acknowledgment) {
+
+        // If the event is older than the pod, ignore it.
+        if (event.getTimestamp().isBefore(this.startupTime)) {
+            log.trace("Skipping old message from pod restart. Event ID: {}", event.getEventId());
+            acknowledgment.acknowledge(); // Acknowledge to advance offset
+            return;
+        }
 
         try {
             if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
