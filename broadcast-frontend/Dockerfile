@@ -6,7 +6,7 @@ FROM nginx:alpine3.22
 RUN apk add --no-cache gettext
 
 # Copy the static UI files
-COPY ./dist /usr/share/nginx/html
+COPY ./dist/ /usr/share/nginx/html/
 
 # Copy the nginx config as a template file
 COPY ./nginx.conf /etc/nginx/nginx.conf.template
