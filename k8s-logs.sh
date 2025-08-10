@@ -1,0 +1,1 @@
+kubectl logs -f deployment/broadcast-microservice -n broadcast-system

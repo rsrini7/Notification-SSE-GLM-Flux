@@ -1,0 +1,1 @@
+mvn clean package && java "-Dspring.profiles.active=dev-pg" -jar target/broadcast-microservice-1.0.0.jar
