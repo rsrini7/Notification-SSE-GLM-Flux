@@ -1,12 +1,15 @@
 services:
   nginx:
-    image: nginx:latest
+    build: ./broadcast-frontend
+    image: broadcast-nginx:1.0.0
     ports:
       - "443:443"
     volumes:
-      - ./broadcast-frontend/nginx.conf:/etc/nginx/nginx.conf
       - ./broadcast-frontend/localhost.pem:/etc/nginx/certs/localhost.pem
       - ./broadcast-frontend/localhost-key.pem:/etc/nginx/certs/localhost-key.pem
+    environment:
+      - NGINX_ENV=dev
+      - BACKEND_URL=https://host.docker.internal:8081
     depends_on:
       - kafka
       - postgres

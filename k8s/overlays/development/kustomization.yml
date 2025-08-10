@@ -5,7 +5,7 @@ kind: Kustomization
 
 # Point to the base configuration.
 resources:
-  - ../../base
+  - ../base
 
 # Add a common label to all resources in this overlay for easy identification.
 commonLabels:

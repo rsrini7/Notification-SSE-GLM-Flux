@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  namespace: broadcast-system
+spec:
+  type: NodePort # This type is easy to access in local dev environments
+  ports:
+  - port: 443
+    targetPort: 443
+    protocol: TCP
+    # You will access the service on this port from your local machine
+    nodePort: 30443
+  selector:
+    app: nginx-proxy
