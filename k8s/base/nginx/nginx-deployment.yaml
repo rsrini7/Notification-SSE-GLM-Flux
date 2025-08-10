@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: nginx-proxy
-        image: broadcast-nginx:1.0.2
+        image: broadcast-nginx:1.0.3
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 443
