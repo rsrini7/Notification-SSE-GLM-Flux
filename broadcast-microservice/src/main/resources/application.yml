@@ -153,9 +153,6 @@ broadcast:
     pending-events:
       maximum-size: 50000
       expire-after-write: PT6H
-    broadcast-stats:
-      maximum-size: 1000
-      expire-after-write: PT5M
 
   # Database Configuration
   db:

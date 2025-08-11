@@ -53,18 +53,6 @@ public class RedisConfig {
         return template;
     }
 
-    // REMOVED: The RedisTemplate for UserSessionInfo is no longer needed.
-
-    @Bean
-    public RedisTemplate<String, BroadcastStatsInfo> broadcastStatsRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
-        RedisTemplate<String, BroadcastStatsInfo> template = new RedisTemplate<>();
-        template.setConnectionFactory(connectionFactory);
-        Jackson2JsonRedisSerializer<BroadcastStatsInfo> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, BroadcastStatsInfo.class);
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(serializer);
-        return template;
-    }
-
     @Bean
     public RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
         RedisTemplate<String, BroadcastMessage> template = new RedisTemplate<>();

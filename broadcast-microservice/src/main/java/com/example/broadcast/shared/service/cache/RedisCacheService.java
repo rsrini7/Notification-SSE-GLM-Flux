@@ -25,22 +25,16 @@ public class RedisCacheService implements CacheService {
     private final RedisConnectionFactory redisConnectionFactory;
 
     private final RedisTemplate<String, String> stringRedisTemplate;
-    // MERGED: This is now the single template for connection info
     private final RedisTemplate<String, UserConnectionInfo> userConnectionInfoRedisTemplate;
     private final RedisTemplate<String, List<UserMessageInfo>> userMessagesRedisTemplate;
     private final RedisTemplate<String, List<PendingEventInfo>> pendingEventsRedisTemplate;
-    private final RedisTemplate<String, BroadcastStatsInfo> broadcastStatsRedisTemplate;
     private final RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate;
     private final RedisTemplate<String, List<BroadcastMessage>> activeGroupBroadcastsRedisTemplate;
-    // REMOVED: userSessionRedisTemplate is no longer needed.
 
-    // RENAMED: Standardized on "connection"
     private static final String USER_CONNECTION_KEY_PREFIX = "user-conn:";
     private static final String ONLINE_USERS_KEY = "online-users";
     private static final String USER_MESSAGES_KEY_PREFIX = "user-msg:";
     private static final String PENDING_EVENTS_KEY_PREFIX = "pending-evt:";
-    private static final String BROADCAST_STATS_KEY_PREFIX = "broadcast-stats:";
-    // REMOVED: USER_SESSION_KEY_PREFIX is no longer needed.
     private static final String BROADCAST_CONTENT_KEY_PREFIX = "broadcast-content:";
     private static final String ACTIVE_GROUP_BROADCASTS_KEY_PREFIX = "active-group-bcast:";
 
@@ -163,16 +157,6 @@ public class RedisCacheService implements CacheService {
     }
 
     @Override
-    public void cacheBroadcastStats(String statsKey, BroadcastStatsInfo stats) {
-        broadcastStatsRedisTemplate.opsForValue().set(BROADCAST_STATS_KEY_PREFIX + statsKey, stats, 5, TimeUnit.MINUTES);
-    }
-
-    @Override
-    public BroadcastStatsInfo getCachedBroadcastStats(String statsKey) {
-        return broadcastStatsRedisTemplate.opsForValue().get(BROADCAST_STATS_KEY_PREFIX + statsKey);
-    }
-
-    @Override
     public Map<String, Object> getCacheStats() {
         Map<String, Object> stats = new LinkedHashMap<>();
         try (RedisConnection connection = redisConnectionFactory.getConnection()) {
@@ -187,8 +171,6 @@ public class RedisCacheService implements CacheService {
             keyCounts.put("userConnections", countKeysByPattern(connection, USER_CONNECTION_KEY_PREFIX + "*"));
             keyCounts.put("userMessages", countKeysByPattern(connection, USER_MESSAGES_KEY_PREFIX + "*"));
             keyCounts.put("pendingEvents", countKeysByPattern(connection, PENDING_EVENTS_KEY_PREFIX + "*"));
-            // REMOVED: No longer counting user sessions.
-            keyCounts.put("broadcastStats", countKeysByPattern(connection, BROADCAST_STATS_KEY_PREFIX + "*"));
             keyCounts.put("broadcastContent", countKeysByPattern(connection, BROADCAST_CONTENT_KEY_PREFIX + "*"));
             keyCounts.put("onlineUsersSetSize", connection.setCommands().sCard(ONLINE_USERS_KEY.getBytes()));
 

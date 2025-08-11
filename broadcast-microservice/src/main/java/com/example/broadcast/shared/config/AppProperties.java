@@ -41,8 +41,6 @@ public class AppProperties {
         private final UserConnections userConnections = new UserConnections();
         private final UserMessages userMessages = new UserMessages();
         private final PendingEvents pendingEvents = new PendingEvents();
-        // REMOVED: UserSession cache config is removed
-        private final BroadcastStats broadcastStats = new BroadcastStats();
 
         @Data
         public static class UserConnections {
@@ -67,14 +65,6 @@ public class AppProperties {
             private int maximumSize = 50000;
             @NotNull
             private Duration expireAfterWrite = Duration.ofHours(6);
-        }
-
-        @Data
-        public static class BroadcastStats {
-            @Positive
-            private int maximumSize = 1000;
-            @NotNull
-            private Duration expireAfterWrite = Duration.ofMinutes(5);
         }
     }
 
