@@ -50,7 +50,6 @@ public class DltService {
 
     @KafkaListener(
             topics = {
-                "${broadcast.kafka.topic.name.all:broadcast-events-all}" + Constants.DLT_SUFFIX,
                 "${broadcast.kafka.topic.name.selected:broadcast-events-selected}" + Constants.DLT_SUFFIX,
                 "${broadcast.kafka.topic.name.group:broadcast-events-group}" + Constants.DLT_SUFFIX
             },

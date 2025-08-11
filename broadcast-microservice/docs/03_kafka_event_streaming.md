@@ -15,10 +15,8 @@ Apache Kafka is a distributed event streaming platform that excels at handling h
 Key concepts in our Kafka implementation include:
 
 1. **Topics**: We use separate topics for different types of broadcasts:
-   - `broadcast-events-all`: For system-wide broadcasts to all users
    - `broadcast-events-selected`: For broadcasts to specific users
-   - `broadcast-events-group`: For broadcasts to user groups or roles
-   - `broadcast-events-all-dlt`: Dead Letter Topic for failed message processing
+   - `broadcast-events-group`: For broadcasts to all users or groups or roles
 
 2. **Partitioning**: Each topic is divided into 10 partitions, allowing parallel processing of messages
 
@@ -59,28 +57,6 @@ public void processSelectedUsersBroadcastEvent(
 ```
 </details>
 
-<details>
-<summary>Kafka Topic Configuration</summary>
-
-```yaml
-# From kafka-topic.yaml
-apiVersion: kafka.strimzi.io/v1beta2
-kind: KafkaTopic
-metadata:
-  name: broadcast-events-all
-  namespace: kafka-system
-  labels:
-    strimzi.io/cluster: my-cluster
-spec:
-  partitions: 10
-  replicas: 3
-  config:
-    retention.ms: 604800000  # 7 days
-    cleanup.policy: delete
-    compression.type: lz4
-```
-</details>
-
 ## Internal Walkthrough
 
 Let's walk through how Kafka is used in the message delivery process:
@@ -117,9 +93,8 @@ sequenceDiagram
 1. When an administrator creates a broadcast, the `BroadcastLifecycleService` saves it to the database and creates `MessageDeliveryEvent` objects for each recipient
 
 2. These events are published to the appropriate Kafka topic based on the broadcast type:
-   - System-wide broadcasts go to `broadcast-events-all`
    - Targeted broadcasts go to `broadcast-events-selected`
-   - Role-based broadcasts go to `broadcast-events-group`
+   - All users / Role-based broadcasts go to `broadcast-events-group`
 
 3. Kafka distributes these events across partitions, allowing multiple consumers to process them in parallel
 

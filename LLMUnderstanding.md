@@ -27,7 +27,9 @@ Transactional Outbox Pattern, which guarantees that a message event will be sent
 
 Event Publishing: A separate polling service (OutboxPollingService) continuously scans the outbox table for new events, publishes them to a Kafka topic, and then deletes the event from the outbox table.
 
-Event Consumption & Fan-Out: The backend has Kafka consumers listening on dedicated topics (broadcast-events-all and broadcast-events-selected). When an event is consumed, the service fans it out to the intended recipients.
+Event Consumption & Fan-Out-Write: The backend has Kafka consumers listening on dedicated topic (broadcast-events-selected). When an event is consumed, the service fans it out to the intended recipients of Selected Users.
+
+Event Consumption & Fan-Out-Read: The backend has Kafka consumers listening on dedicated topic (broadcast-events-group). When an event is consumed, the service fans it out to the intended recipients all ALL and ROLE based users.
 
 Real-Time Push & Caching: If a target user is online (tracked in cache), the SseService pushes the message directly to their client via an open SSE connection. If the user is offline, the message is stored as a pending event in the cache. The system uses Redis for distributed caching.
 
@@ -57,7 +59,7 @@ The use of a reactive stack (Spring WebFlux/Netty) is the correct choice for a s
 
 The implementation of the Transactional Outbox Pattern is a standout feature, ensuring data consistency between the service's database and the message broker, which is critical in distributed systems.
 
-The solution to Head-of-Line Blocking (a common Kafka anti-pattern) by using separate topics for mass broadcasts (broadcast-events-all) and targeted broadcasts (broadcast-events-selected) is excellent. This ensures that urgent, small-scale messages are not delayed by large, low-priority broadcasts.
+The solution to Head-of-Line Blocking (a common Kafka anti-pattern) by using separate topics for mass broadcasts (broadcast-events-group) and targeted broadcasts (broadcast-events-selected) is excellent. This ensures that urgent, small-scale messages are not delayed by large, low-priority broadcasts.
 
 
 Robustness and Resilience:

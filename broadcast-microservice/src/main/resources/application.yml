@@ -162,7 +162,6 @@ broadcast:
   # Kafka Configuration
   kafka:
     topic:
-      name-all: broadcast-events-all
       name-selected: broadcast-events-selected
       name-group: broadcast-events-group
       partitions: 10

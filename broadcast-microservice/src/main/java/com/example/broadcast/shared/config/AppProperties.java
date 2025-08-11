@@ -85,8 +85,6 @@ public class AppProperties {
         @Data
         public static class Topic {
             @NotBlank
-            private String nameAll = "broadcast-events-all";
-            @NotBlank
             private String nameSelected = "broadcast-events-selected";
             @NotBlank
             private String nameGroup = "broadcast-events-group";

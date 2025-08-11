@@ -129,15 +129,6 @@ public class KafkaConfig {
         configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
         return new DefaultKafkaProducerFactory<>(configProps);
     }
-    
-    @Bean
-    public NewTopic allUsersBroadcastTopic() {
-        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameAll())
-                .partitions(appProperties.getKafka().getTopic().getPartitions())
-                .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
-                .config("retention.ms", "604800000")
-                .build();
-    }
 
     @Bean
     public NewTopic selectedUsersBroadcastTopic() {
@@ -154,15 +145,6 @@ public class KafkaConfig {
                 .partitions(appProperties.getKafka().getTopic().getPartitions())
                 .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
                 .config("retention.ms", "604800000")
-                .build();
-    }
-
-    @Bean
-    public NewTopic allUsersDeadLetterTopic() {
-        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameAll() + Constants.DLT_SUFFIX)
-                .partitions(1)
-                .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
-                .config("retention.ms", "1209600000") // 14 days
                 .build();
     }
 
