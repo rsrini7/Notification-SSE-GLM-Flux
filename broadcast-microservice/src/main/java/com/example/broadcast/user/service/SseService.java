@@ -43,24 +43,19 @@ public class SseService {
     private final UserMessageService userMessageService;
 
     @Transactional
-    public void registerConnection(String userId, String sessionId) {
-        sseConnectionManager.registerConnection(userId, sessionId);
+    public void registerConnection(String userId, String connectionId) {
+        sseConnectionManager.registerConnection(userId, connectionId);
     }
-    
-    public Flux<ServerSentEvent<String>> createEventStream(String userId, String sessionId) {
-        log.info("Orchestrating event stream creation for user: {}, session: {}", userId, sessionId);
-        Flux<ServerSentEvent<String>> eventStream = sseConnectionManager.createEventStream(userId, sessionId);
 
-        // --- START MODIFIED LOGIC ---
-        // 1. Send pending messages specifically targeted to this user (existing logic)
+    public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
+        log.info("Orchestrating event stream creation for user: {}, connection: {}", userId, connectionId);
+        Flux<ServerSentEvent<String>> eventStream = sseConnectionManager.createEventStream(userId, connectionId);
+
         sendPendingMessages(userId);
-        
-        // 2. NEW: Send active global and role-based messages
-        sendActiveGroupMessages(userId); 
-        // --- END MODIFIED LOGIC ---
+        sendActiveGroupMessages(userId);
 
         try {
-            String connectedPayload = objectMapper.writeValueAsString(Map.of("message", "SSE connection established with session " + sessionId));
+            String connectedPayload = objectMapper.writeValueAsString(Map.of("message", "SSE connection established with connection " + connectionId));
             sseConnectionManager.sendEvent(userId, ServerSentEvent.<String>builder()
                 .event(SseEventType.CONNECTED.name())
                 .data(connectedPayload)
@@ -68,13 +63,13 @@ public class SseService {
         } catch (JsonProcessingException e) {
             log.error("Error creating CONNECTED event", e);
         }
-        
+
         return eventStream;
     }
 
     @Transactional
-    public void removeEventStream(String userId, String sessionId) {
-        sseConnectionManager.removeEventStream(userId, sessionId);
+    public void removeEventStream(String userId, String connectionId) {
+        sseConnectionManager.removeEventStream(userId, connectionId);
     }
 
     /**
@@ -229,8 +224,8 @@ public class SseService {
             sseConnectionManager.sendEvent(userId, sse);
 
             if ("Force Logoff".equalsIgnoreCase(response.getCategory())) {
-                log.warn("Force Logoff message delivered to user {}. Terminating their session.", userId);
-                sseConnectionManager.removeEventStream(userId, sseConnectionManager.getSessionIdForUser(userId));
+                log.warn("Force Logoff message delivered to user {}. Terminating their connection.", userId);
+                sseConnectionManager.removeEventStream(userId, sseConnectionManager.getConnectionIdForUser(userId));
             }
         } catch (JsonProcessingException e) {
             log.error("Error delivering message to user as SSE", e);

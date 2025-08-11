@@ -190,17 +190,17 @@ sequenceDiagram
 
 Beyond broadcast message scheduling, the system also includes other important scheduled tasks for maintenance and cleanup:
 
-- **Stale SSE Session Cleanup**: The `SseConnectionManager` includes a scheduled task to identify and clean up stale Server-Sent Events (SSE) sessions across the cluster. This ensures that resources are not held indefinitely by disconnected or inactive clients.
+- **Stale SSE Connection Cleanup**: The `SseConnectionManager` includes a scheduled task to identify and clean up stale Server-Sent Events (SSE) connections across the cluster. This ensures that resources are not held indefinitely by disconnected or inactive clients.
 
 <details>
-<summary>Stale SSE Session Cleanup</summary>
+<summary>Stale SSE Connection Cleanup</summary>
 
 ```java
 // Excerpt from SseConnectionManager.java
 @Scheduled(fixedRate = 60000)
-@SchedulerLock(name = "cleanupStaleSseSessions", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
-public void cleanupStaleSessions() {
-    // Logic to find and remove stale sessions
+@SchedulerLock(name = "cleanupStaleSseConnections", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
+public void cleanupStaleConnections() {
+    // Logic to find and remove stale connections
 }
 ```
 </details>

@@ -77,7 +77,7 @@ public class RedisCacheService implements CacheService {
     private final RedisTemplate<String, UserConnectionInfo> userConnectionInfoRedisTemplate;
     private final RedisTemplate<String, List<UserMessageInfo>> userMessagesRedisTemplate;
     private final RedisTemplate<String, List<PendingEventInfo>> pendingEventsRedisTemplate;
-    private final RedisTemplate<String, UserSessionInfo> userSessionRedisTemplate;
+    private final RedisTemplate<String, UserConnectionInfo> userConnectionRedisTemplate;
     private final RedisTemplate<String, BroadcastStatsInfo> broadcastStatsRedisTemplate;
     private final RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate;
     private final RedisTemplate<String, List<BroadcastMessage>> activeGroupBroadcastsRedisTemplate;
@@ -85,18 +85,18 @@ public class RedisCacheService implements CacheService {
     // ... other fields and methods
 
     @Override
-    public void registerUserConnection(String userId, String sessionId, String podId) {
-        UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, sessionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
+    public void registerUserConnection(String userId, String connectionId, String podId) {
+        UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, connectionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
         String userKey = USER_CONNECTION_KEY_PREFIX + userId;
         // TTL of 1 hour for user connection info
         userConnectionInfoRedisTemplate.opsForValue().set(userKey, connectionInfo, 1, TimeUnit.HOURS);
         stringRedisTemplate.opsForSet().add(ONLINE_USERS_KEY, userId);
 
-        UserSessionInfo sessionInfo = new UserSessionInfo(userId, sessionId, podId, ZonedDateTime.now());
-        String sessionKey = USER_SESSION_KEY_PREFIX + sessionId;
-        // TTL of 30 minutes for user session info
-        userSessionRedisTemplate.opsForValue().set(sessionKey, sessionInfo, 30, TimeUnit.MINUTES);
-        log.debug("User connection and session registered in Redis: {} on pod {}", userId, podId);
+        UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, connectionId, podId, ZonedDateTime.now());
+        String connectionKey = USER_CONNECTION_KEY_PREFIX + connectionId;
+        // TTL of 30 minutes for user connection info
+        userConnectionRedisTemplate.opsForValue().set(connectionKey, connectionInfo, 30, TimeUnit.MINUTES);
+        log.debug("User connection and connection registered in Redis: {} on pod {}", userId, podId);
     }
 
     @Override
@@ -196,7 +196,7 @@ Redis Caching integrates with:
 
 - [Server-Sent Events](02_server_sent_events.md) which uses Redis to track connected users
 - [Database Schema Design](06_database_schema_design.md) which Redis caches to reduce load
-- [User Session Management](04_user_session_management1.md) which heavily relies on Redis for session storage
+- [User Connection Management](04_user_connection_management1.md) which heavily relies on Redis for connection storage
 
 
 ## Conclusion

@@ -43,8 +43,8 @@ export default function () {
   const userID = getRandomUser();
   
   group('User Session: SSE and API Calls', function () {
-    const sessionID = `k6-session-${Date.now()}`;
-    const sseUrl = `${BASE_URL}/api/sse/connect?userId=${userID}&sessionId=${sessionID}`;
+    const connectionID = `k6-connection-${Date.now()}`;
+    const sseUrl = `${BASE_URL}/api/sse/connect?userId=${userID}&connectionId=${connectionID}`;
     const sseParams = {
       headers: { 'Accept': 'text/event-stream' },
     };

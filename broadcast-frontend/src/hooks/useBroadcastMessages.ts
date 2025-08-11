@@ -56,7 +56,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
           if (payload.category === 'Force Logoff') {
             toast({
               title: 'Logged Off',
-              description: 'Your session has been terminated by an administrator.',
+              description: 'Your connection has been terminated by an administrator.',
               variant: 'destructive',
             });
             // Call disconnect with the new force flag

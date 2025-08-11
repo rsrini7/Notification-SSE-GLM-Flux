@@ -27,21 +27,22 @@ import java.util.concurrent.ConcurrentHashMap;
  * This class is the single source of truth for in-memory connection state on this pod.
  * Its responsibilities include:
  * - Creating and storing in-memory sinks for each client connection.
- * - Tracking active user-to-session mappings.
- * - Persisting session state to the database.
+ * - Tracking active user-to-connection mappings.
+ * - Persisting connection state.
  * - Sending periodic heartbeats to keep connections alive.
- * - Cleaning up stale or disconnected sessions from memory and the database.
+ * - Cleaning up stale or disconnected connections from memory and the distributed store.
  */
+// CHANGED: Terminology updated from "session" to "connection"
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class SseConnectionManager {
 
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
-    private final Map<String, Set<String>> userSessionMap = new ConcurrentHashMap<>();
-    private final Map<String, String> sessionIdToUserIdMap = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> userConnectionMap = new ConcurrentHashMap<>();
+    private final Map<String, String> connectionIdToUserIdMap = new ConcurrentHashMap<>();
 
-    private final DistributedSessionManager sessionManager;
+    private final DistributedConnectionManager connectionManager;
     private final CacheService cacheService;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
@@ -64,86 +65,84 @@ public class SseConnectionManager {
      * Creates an in-memory sink and a corresponding Flux stream for a new client connection.
      * This method also handles the cleanup logic for when the connection is terminated.
      *
-     * @param userId    The ID of the connecting user.
-     * @param sessionId The unique ID for this specific session.
+     * @param userId       The ID of the connecting user.
+     * @param connectionId The unique ID for this specific connection.
      * @return A Flux of ServerSentEvent that the client can subscribe to.
      */
-    public Flux<ServerSentEvent<String>> createEventStream(String userId, String sessionId) {
-        log.debug("Creating SSE event stream for user: {}, session: {}", userId, sessionId);
+    public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
+        log.debug("Creating SSE event stream for user: {}, connection: {}", userId, connectionId);
         Sinks.Many<ServerSentEvent<String>> sink = Sinks.many().multicast().onBackpressureBuffer();
-        userSinks.put(sessionId, sink);
-        userSessionMap.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
-        sessionIdToUserIdMap.put(sessionId, userId);
+        userSinks.put(connectionId, sink);
+        userConnectionMap.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(connectionId);
+        connectionIdToUserIdMap.put(connectionId, userId);
         return sink.asFlux()
-                .doOnCancel(() -> removeEventStream(userId, sessionId))
-                .doOnError(throwable -> removeEventStream(userId, sessionId))
-                .doOnTerminate(() -> removeEventStream(userId, sessionId));
+                .doOnCancel(() -> removeEventStream(userId, connectionId))
+                .doOnError(throwable -> removeEventStream(userId, connectionId))
+                .doOnTerminate(() -> removeEventStream(userId, connectionId));
     }
 
     /**
-     * Persists the user's session to the database and registers it in the cache.
+     * Persists the user's connection to the distributed store and registers it in the cache.
      *
-     * @param userId    The user's ID.
-     * @param sessionId The session's unique ID.
+     * @param userId       The user's ID.
+     * @param connectionId The connection's unique ID.
      */
-    public void registerConnection(String userId, String sessionId) {
-        sessionManager.registerSession(userId, sessionId, appProperties.getPod().getId());
-        cacheService.registerUserConnection(userId, sessionId, appProperties.getPod().getId());
-        log.info("User session saved for user: {}, session: {}", userId, sessionId);
+    public void registerConnection(String userId, String connectionId) {
+        connectionManager.registerConnection(userId, connectionId, appProperties.getPod().getId());
+        cacheService.registerUserConnection(userId, connectionId, appProperties.getPod().getId());
+        log.info("User connection saved for user: {}, connection: {}", userId, connectionId);
     }
 
     /**
-     * Removes a user's session from in-memory maps and updates its status
-     * in the database and cache to INACTIVE.
+     * Removes a user's connection from in-memory maps and updates its status
+     * in the distributed store and cache to INACTIVE.
      *
-     * @param userId    The user's ID.
-     * @param sessionId The session's unique ID.
+     * @param userId       The user's ID.
+     * @param connectionId The connection's unique ID.
      */
-    public void removeEventStream(String userId, String sessionId) {
-        Sinks.Many<ServerSentEvent<String>> sink = userSinks.remove(sessionId);
+    public void removeEventStream(String userId, String connectionId) {
+        Sinks.Many<ServerSentEvent<String>> sink = userSinks.remove(connectionId);
         if (sink != null) {
             sink.tryEmitComplete();
-            Set<String> sessions = userSessionMap.get(userId);
-            if (sessions != null) {
-                sessions.remove(sessionId);
-                if (sessions.isEmpty()) {
-                    userSessionMap.remove(userId);
+            Set<String> connections = userConnectionMap.get(userId);
+            if (connections != null) {
+                connections.remove(connectionId);
+                if (connections.isEmpty()) {
+                    userConnectionMap.remove(userId);
                 }
             }
-            sessionIdToUserIdMap.remove(sessionId);
-            sessionManager.removeSession(userId, sessionId, appProperties.getPod().getId());
-            cacheService.unregisterUserConnection(userId, sessionId);
-            log.info("Cleanly disconnected session {} for user {}", sessionId, userId);
+            connectionIdToUserIdMap.remove(connectionId);
+            connectionManager.removeConnection(userId, connectionId, appProperties.getPod().getId());
+            cacheService.unregisterUserConnection(userId, connectionId);
+            log.info("Cleanly disconnected connection {} for user {}", connectionId, userId);
         }
     }
 
     /**
-     * Scheduled job to find and mark stale sessions as INACTIVE across the cluster.
+     * Scheduled job to find and mark stale connections as INACTIVE across the cluster.
      * It also cleans up any corresponding in-memory sinks on the current pod.
      */
     @Scheduled(fixedRate = 60000)
-    @SchedulerLock(name = "cleanupStaleSseSessions", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
-    public void cleanupStaleSessions() {
+    @SchedulerLock(name = "cleanupStaleSseConnections", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
+    public void cleanupStaleConnections() {
         try {
             long staleThresholdSeconds = (appProperties.getSse().getHeartbeatInterval() / 1000) * 3;
             long thresholdTimestamp = ZonedDateTime.now().minusSeconds(staleThresholdSeconds).toEpochSecond();
-            Set<String> staleSessionIds = sessionManager.getStaleSessionIds(thresholdTimestamp);
-            if (staleSessionIds.isEmpty()) return;
-
-            log.warn("Found {} total stale sessions cluster-wide to clean up.", staleSessionIds.size());
-
-            for (String sessionId : staleSessionIds) {
-                sessionManager.getSessionDetails(sessionId).ifPresent(details -> {
+            Set<String> staleConnectionIds = connectionManager.getStaleConnectionIds(thresholdTimestamp);
+            if (staleConnectionIds.isEmpty()) return;
+            log.warn("Found {} total stale connections cluster-wide to clean up.", staleConnectionIds.size());
+            for (String connectionId : staleConnectionIds) {
+                connectionManager.getConnectionDetails(connectionId).ifPresent(details -> {
                     if (appProperties.getPod().getId().equals(details.getPodId())) {
-                        removeEventStream(details.getUserId(), sessionId);
+                        removeEventStream(details.getUserId(), connectionId);
                     } else {
-                        cacheService.unregisterUserConnection(details.getUserId(), sessionId);
+                        cacheService.unregisterUserConnection(details.getUserId(), connectionId);
                     }
                 });
             }
-            sessionManager.removeSessions(staleSessionIds);
+            connectionManager.removeConnections(staleConnectionIds);
         } catch (Exception e) {
-            log.error("Error during stale session cleanup task: {}", e.getMessage(), e);
+            log.error("Error during stale connection cleanup task: {}", e.getMessage(), e);
         }
     }
 
@@ -151,17 +150,17 @@ public class SseConnectionManager {
         serverHeartbeatSubscription = Flux.interval(Duration.ofMillis(appProperties.getSse().getHeartbeatInterval()), Schedulers.parallel())
             .doOnNext(tick -> {
                 try {
-                    Set<String> sessionIdsOnThisPod = userSinks.keySet();
-                    if (sessionIdsOnThisPod.isEmpty()) return;
-                    
-                    sessionManager.updateHeartbeats(appProperties.getPod().getId(), sessionIdsOnThisPod);
+                    Set<String> connectionIdsOnThisPod = userSinks.keySet();
+                    if (connectionIdsOnThisPod.isEmpty()) return;
+
+                    connectionManager.updateHeartbeats(appProperties.getPod().getId(), connectionIdsOnThisPod);
 
                     String payload = objectMapper.writeValueAsString(Map.of("timestamp", ZonedDateTime.now()));
                     ServerSentEvent<String> heartbeatEvent = ServerSentEvent.<String>builder()
-                            .event("HEARTBEAT").data(payload).build();
+                        .event("HEARTBEAT").data(payload).build();
 
-                    for (String sessionId : sessionIdsOnThisPod) {
-                        String userId = sessionIdToUserIdMap.get(sessionId);
+                    for (String connectionId : connectionIdsOnThisPod) {
+                        String userId = connectionIdToUserIdMap.get(connectionId);
                         if (userId != null) {
                             sendEvent(userId, heartbeatEvent);
                         }
@@ -174,30 +173,30 @@ public class SseConnectionManager {
     }
 
     /**
-     * Pushes an event to all active sessions for a given user.
-     * If emitting an event fails, it triggers an asynchronous cleanup of the failed session.
+     * Pushes an event to all active connections for a given user.
+     * If emitting an event fails, it triggers an asynchronous cleanup of the failed connection.
      *
      * @param userId The ID of the user to send the event to.
      * @param event  The ServerSentEvent to send.
      */
     public void sendEvent(String userId, ServerSentEvent<String> event) {
-        Set<String> sessionIds = userSessionMap.get(userId);
-        if (sessionIds != null && !sessionIds.isEmpty()) {
-            for (String sessionId : sessionIds) {
-                Sinks.Many<ServerSentEvent<String>> sink = userSinks.get(sessionId);
+        Set<String> connectionIds = userConnectionMap.get(userId);
+        if (connectionIds != null && !connectionIds.isEmpty()) {
+            for (String connectionId : connectionIds) {
+                Sinks.Many<ServerSentEvent<String>> sink = userSinks.get(connectionId);
                 if (sink != null) {
                     Sinks.EmitResult result = sink.tryEmitNext(event);
                     if (result.isFailure()) {
-                        log.warn("Failed to emit SSE event for user {}, session {}. Result: {}. Proactively cleaning up stale connection.", userId, sessionId, result);
-                        cleanupFailedSessionAsync(userId, sessionId);
+                        log.warn("Failed to emit SSE event for user {}, connection {}. Result: {}. Proactively cleaning up stale connection.", userId, connectionId, result);
+                        cleanupFailedConnectionAsync(userId, connectionId);
                     }
                 }
             }
         }
     }
 
-    private void cleanupFailedSessionAsync(String userId, String sessionId) {
-        Schedulers.boundedElastic().schedule(() -> removeEventStream(userId, sessionId));
+    private void cleanupFailedConnectionAsync(String userId, String connectionId) {
+        Schedulers.boundedElastic().schedule(() -> removeEventStream(userId, connectionId));
     }
 
     public int getConnectedUserCount() {
@@ -205,20 +204,20 @@ public class SseConnectionManager {
     }
 
     public boolean isUserConnected(String userId) {
-        Set<String> sessions = userSessionMap.get(userId);
-        return sessions != null && !sessions.isEmpty();
+        Set<String> connections = userConnectionMap.get(userId);
+        return connections != null && !connections.isEmpty();
     }
 
     /**
-     * Retrieves the first available session ID for a given user.
+     * Retrieves the first available connection ID for a given user.
      * This is used for server-initiated actions like force logoff.
      * @param userId The user's ID.
-     * @return An active session ID for the user, or null if none is found.
+     * @return An active connection ID for the user, or null if none is found.
      */
-    public String getSessionIdForUser(String userId) {
-        Set<String> sessions = userSessionMap.get(userId);
-        if (sessions != null && !sessions.isEmpty()) {
-            return sessions.iterator().next(); // Return the first available session
+    public String getConnectionIdForUser(String userId) {
+        Set<String> connections = userConnectionMap.get(userId);
+        if (connections != null && !connections.isEmpty()) {
+            return connections.iterator().next();
         }
         return null;
     }

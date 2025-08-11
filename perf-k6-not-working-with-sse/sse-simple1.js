@@ -19,8 +19,8 @@ function getRandomUser() {
 
 export default function () {
   const userID = getRandomUser();
-  const sessionID = `k6-session-${__VU}-${__ITER}`;
-  const sseUrl = `${BASE_URL}/api/sse/connect?userId=${userID}&sessionId=${sessionID}`;
+  const connectionID = `k6-connection-${__VU}-${__ITER}`;
+  const sseUrl = `${BASE_URL}/api/sse/connect?userId=${userID}&connectionId=${connectionID}`;
   
   console.log(`VU ${__VU}: Attempting to connect as ${userID}...`);
 

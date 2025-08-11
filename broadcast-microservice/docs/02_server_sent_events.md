@@ -31,20 +31,20 @@ In our system, SSE connections are managed by the `SseConnectionManager` and `Ss
 @RateLimiter(name = "sseConnectLimiter", fallbackMethod = "connectFallback")
 public Flux<ServerSentEvent<String>> connect(
         @RequestParam String userId,
-        @RequestParam(required = false) String sessionId,
+        @RequestParam(required = false) String connectionId,
         ServerWebExchange exchange) {
 
-    log.info("SSE connection request from user: {}, session: {}, IP: {}",
-             userId, sessionId, exchange.getRequest().getRemoteAddress() != null ? 
+    log.info("SSE connection request from user: {}, connection: {}, IP: {}",
+             userId, connectionId, exchange.getRequest().getRemoteAddress() != null ? 
                  exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
 
-    if (sessionId == null || sessionId.trim().isEmpty()) {
-        sessionId = UUID.randomUUID().toString();
+    if (connectionId == null || connectionId.trim().isEmpty()) {
+        connectionId = UUID.randomUUID().toString();
     }
 
-    sseService.registerConnection(userId, sessionId);
-    Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, sessionId);
-    log.info("SSE connection established for user: {}, session: {}", userId, sessionId);
+    sseService.registerConnection(userId, connectionId);
+    Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, connectionId);
+    log.info("SSE connection established for user: {}, connection: {}", userId, connectionId);
     return eventStream;
 }
 ```
@@ -55,9 +55,9 @@ public Flux<ServerSentEvent<String>> connect(
 
 ```java
 // From SseService.java
-public Flux<ServerSentEvent<String>> createEventStream(String userId, String sessionId) {
-    log.info("Orchestrating event stream creation for user: {}, session: {}", userId, sessionId);
-    Flux<ServerSentEvent<String>> eventStream = sseConnectionManager.createEventStream(userId, sessionId);
+public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
+    log.info("Orchestrating event stream creation for user: {}, connection: {}", userId, connectionId);
+    Flux<ServerSentEvent<String>> eventStream = sseConnectionManager.createEventStream(userId, connectionId);
 
     // Send pending messages specifically targeted to this user
     sendPendingMessages(userId);
@@ -67,7 +67,7 @@ public Flux<ServerSentEvent<String>> createEventStream(String userId, String ses
 
     try {
         String connectedPayload = objectMapper.writeValueAsString(Map.of("message", 
-                                "SSE connection established with session " + sessionId));
+                                "SSE connection established with connection " + connectionId));
         sseConnectionManager.sendEvent(userId, ServerSentEvent.<String>builder()
             .event(SseEventType.CONNECTED.name())
             .data(connectedPayload)
@@ -95,11 +95,11 @@ sequenceDiagram
     participant Database
 
     Client->>SseController: GET /api/sse/connect?userId=123
-    SseController->>SseService: registerConnection(userId, sessionId)
-    SseService->>SseConnectionManager: registerConnection(userId, sessionId)
+    SseController->>SseService: registerConnection(userId, connectionId)
+    SseService->>SseConnectionManager: registerConnection(userId, connectionId)
     SseConnectionManager->>Redis: Record active connection
-    SseController->>SseService: createEventStream(userId, sessionId)
-    SseService->>SseConnectionManager: createEventStream(userId, sessionId)
+    SseController->>SseService: createEventStream(userId, connectionId)
+    SseService->>SseConnectionManager: createEventStream(userId, connectionId)
     SseConnectionManager-->>SseService: Return Flux<ServerSentEvent>
     SseService->>Database: Fetch pending messages
     SseService->>SseConnectionManager: Send pending messages
@@ -119,8 +119,8 @@ sequenceDiagram
     Note over Client,SseController: Client disconnects
 
     Client->>SseController: POST /api/sse/disconnect
-    SseController->>SseService: unregisterConnection(userId, sessionId)
-    SseService->>SseConnectionManager: removeConnection(userId, sessionId)
+    SseController->>SseService: unregisterConnection(userId, connectionId)
+    SseService->>SseConnectionManager: removeConnection(userId, connectionId)
     SseConnectionManager->>Redis: Remove active connection
     SseConnectionManager-->>SseService: Connection removed
     SseService-->>SseController: Success
@@ -143,11 +143,11 @@ SSE is a critical component that works closely with:
 - [Message Broadcasting System](01_message_broadcasting_system.md) which generates the messages to be delivered
 - [Kafka Event Streaming](03_kafka_event_streaming.md) which triggers the delivery process
 - [Redis Caching](05_redis_caching.md) which helps manage connection state across multiple instances
-- [User Session Management](06_user_session_management.md) which details how user sessions are managed for SSE connections
+- [User Connection Management](06_user_connection_management.md) which details how user connections are managed for SSE connections
 
 
 ## Conclusion
 
-Server-Sent Events provide an elegant solution for real-time message delivery in our Broadcast Messaging System. By establishing persistent connections with clients, we can push messages to them as soon as they're available, ensuring sub-second delivery latency for online users. The SSE implementation is designed to be scalable and resilient, with support for reconnection, distributed session management, and high-concurrency operations.
+Server-Sent Events provide an elegant solution for real-time message delivery in our Broadcast Messaging System. By establishing persistent connections with clients, we can push messages to them as soon as they're available, ensuring sub-second delivery latency for online users. The SSE implementation is designed to be scalable and resilient, with support for reconnection, distributed connection management, and high-concurrency operations.
 
 In the next chapter, we'll explore how [Kafka Event Streaming](03_kafka_event_streaming.md) enables efficient message distribution across the system.

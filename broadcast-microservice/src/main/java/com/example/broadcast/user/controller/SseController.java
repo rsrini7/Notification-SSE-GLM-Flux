@@ -1,7 +1,7 @@
 package com.example.broadcast.user.controller;
 
 import com.example.broadcast.shared.config.AppProperties;
-import com.example.broadcast.user.service.DistributedSessionManager;
+import com.example.broadcast.user.service.DistributedConnectionManager; // CHANGED
 import com.example.broadcast.user.service.SseService;
 import com.example.broadcast.user.service.UserMessageService;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
@@ -28,30 +28,32 @@ public class SseController {
 
     private final SseService sseService;
     private final UserMessageService userMessageService;
-    private final DistributedSessionManager sessionManager;
+    private final DistributedConnectionManager connectionManager; // CHANGED
     private final AppProperties appProperties;
 
     @GetMapping(value = "/connect", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RateLimiter(name = "sseConnectLimiter", fallbackMethod = "connectFallback")
     public Flux<ServerSentEvent<String>> connect(
             @RequestParam String userId,
-            @RequestParam(required = false) String sessionId,
+            // CHANGED: Renamed parameter
+            @RequestParam(required = false) String connectionId,
             ServerWebExchange exchange) {
 
-        log.info("SSE connection request from user: {}, session: {}, IP: {}",
-                 userId, sessionId, exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
+        log.info("SSE connection request from user: {}, connectionId: {}, IP: {}",
+                 userId, connectionId,
+                 exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
 
-        if (sessionId == null || sessionId.trim().isEmpty()) {
-            sessionId = UUID.randomUUID().toString();
+        if (connectionId == null || connectionId.trim().isEmpty()) {
+            connectionId = UUID.randomUUID().toString();
         }
 
-        sseService.registerConnection(userId, sessionId);
-        Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, sessionId);
-        log.info("SSE connection established for user: {}, session: {}", userId, sessionId);
+        sseService.registerConnection(userId, connectionId);
+        Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, connectionId);
+        log.info("SSE connection established for user: {}, connection: {}", userId, connectionId);
         return eventStream;
     }
 
-    public Flux<ServerSentEvent<String>> connectFallback(String userId, String sessionId, ServerWebExchange exchange, RequestNotPermitted ex) {
+    public Flux<ServerSentEvent<String>> connectFallback(String userId, String connectionId, ServerWebExchange exchange, RequestNotPermitted ex) {
         log.warn("Connection rate limit exceeded for user: {}. IP: {}. Details: {}",
             userId,
             exchange.getRequest().getRemoteAddress(),
@@ -62,18 +64,19 @@ public class SseController {
     @PostMapping("/disconnect")
     public ResponseEntity<String> disconnect(
             @RequestParam String userId,
-            @RequestParam String sessionId) {
+            // CHANGED: Renamed parameter
+            @RequestParam String connectionId) {
 
-        log.info("Disconnect request from user: {}, session: {}", userId, sessionId);
-        sseService.removeEventStream(userId, sessionId);
+        log.info("Disconnect request from user: {}, connection: {}", userId, connectionId);
+        sseService.removeEventStream(userId, connectionId);
         return ResponseEntity.ok("Disconnected successfully");
     }
 
     @GetMapping("/stats")
     public ResponseEntity<java.util.Map<String, Object>> getStats() {
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
-        stats.put("totalActiveUsers", sessionManager.getTotalActiveUsers());
-        stats.put("podActiveUsers", sessionManager.getPodActiveUsers(appProperties.getPod().getId()));
+        stats.put("totalActiveUsers", connectionManager.getTotalActiveUsers()); // CHANGED
+        stats.put("podActiveUsers", connectionManager.getPodActiveUsers(appProperties.getPod().getId())); // CHANGED
         stats.put("sseConnectedUsers", sseService.getConnectedUserCount());
         stats.put("podId", appProperties.getPod().getId());
         stats.put("timestamp", ZonedDateTime.now());

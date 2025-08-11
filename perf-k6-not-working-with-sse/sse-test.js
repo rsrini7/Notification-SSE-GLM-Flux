@@ -66,8 +66,8 @@ export default function (data) {
   const userID = user.username;
   const expectedBroadcastId = data.broadcastId;
 
-  const sessionID = `k6-session-${__VU}-${__ITER}`;
-  const sseUrl = `${BASE_URL}/api/sse/connect?userId=${userID}&sessionId=${sessionID}`;
+  const connectionID = `k6-connection-${__VU}-${__ITER}`;
+  const sseUrl = `${BASE_URL}/api/sse/connect?userId=${userID}&connectionId=${connectionID}`;
   const sseParams = { headers: { 'Accept': 'text/event-stream' } };
 
   group(`User Session VU=${__VU} (${userID})`, function () {

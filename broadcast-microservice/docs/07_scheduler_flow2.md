@@ -35,52 +35,52 @@ sequenceDiagram
     end
 ```
 
-## 2. SSE Connection Manager - Stale Session Cleanup
+## 2. SSE Connection Manager - Stale Connection Cleanup
 
--   **Purpose:** Periodically identifies and cleans up stale Server-Sent Event (SSE) sessions across the cluster. This ensures that inactive connections are properly closed and resources are released.
+-   **Purpose:** Periodically identifies and cleans up stale Server-Sent Event (SSE) connections across the cluster. This ensures that inactive connections are properly closed and resources are released.
 -   **Frequency:** Every 60 seconds (`fixedRate = 60000`).
--   **Distributed Lock:** `cleanupStaleSseSessions` using ShedLock (`lockAtLeastFor = "PT55S"`, `lockAtMostFor = "PT59S"`).
+-   **Distributed Lock:** `cleanupStaleSseConnections` using ShedLock (`lockAtLeastFor = "PT55S"`, `lockAtMostFor = "PT59S"`).
 -   **Implementation:** Uses `@Scheduled(fixedRate = 60000)` and `@SchedulerLock`.
 
 ```mermaid
 sequenceDiagram
     participant SCM as SseConnectionManager
-    participant DSM as DistributedSessionManager
+    participant DSM as DistributedConnectionManager
     participant CS as CacheService
     participant DB as Database
 
-    SCM->>DSM: Get stale session IDs (cluster-wide)
-    DSM-->>SCM: Return stale session IDs
-    alt Stale sessions found
-        loop For each stale session
-            SCM->>DSM: Get session details
-            DSM-->>SCM: Return session details (including pod ID)
-            alt Session on current pod
+    SCM->>DSM: Get stale connection IDs (cluster-wide)
+    DSM-->>SCM: Return stale connection IDs
+    alt Stale connections found
+        loop For each stale connection
+            SCM->>DSM: Get connection details
+            DSM-->>SCM: Return connection details (including pod ID)
+            alt Connection on current pod
                 SCM->>SCM: Remove in-memory event stream
-            else Session on other pod
+            else Connection on other pod
                 SCM->>CS: Unregister user connection
             end
         end
-        SCM->>DSM: Remove stale sessions from distributed store
-    else No stale sessions
+        SCM->>DSM: Remove stale connections from distributed store
+    else No stale connections
         SCM->>SCM: Do nothing
     end
 ```
 
-## 3. User Session Cleanup Service
+## 3. User Connection Cleanup Service
 
--   **Purpose:** Purges old, inactive user sessions from the database to enforce data retention policies. This is a heavy deletion task.
+-   **Purpose:** Purges old, inactive user connections from the database to enforce data retention policies. This is a heavy deletion task.
 -   **Frequency:** Daily at 2:00 AM (`cron = "0 0 2 * * *"`).
--   **Distributed Lock:** `purgeOldInactiveSessions` using ShedLock (`lockAtMostFor = "PT15M"`).
+-   **Distributed Lock:** `purgeOldInactiveConnections` using ShedLock (`lockAtMostFor = "PT15M"`).
 -   **Implementation:** Uses `@Scheduled(cron = "0 0 2 * * *")`, `@Transactional`, and `@SchedulerLock`.
 
 ```mermaid
 sequenceDiagram
-    participant USCS as UserSessionCleanupService
+    participant USCS as UserConnectionCleanupService
     participant DB as Database
 
     USCS->>USCS: Calculate retention threshold (e.g., 3 days ago)
-    USCS->>DB: Delete inactive sessions older than threshold
+    USCS->>DB: Delete inactive connections older than threshold
     DB-->>USCS: Return count of deleted records
     USCS->>USCS: Log cleanup result
 ```
@@ -141,4 +141,4 @@ sequenceDiagram
     end
 ```
 
-This comprehensive overview covers the various scheduled operations critical to the Broadcast Microservice's functionality, from message delivery and session management to broadcast lifecycle handling, all orchestrated with robust distributed locking.
+This comprehensive overview covers the various scheduled operations critical to the Broadcast Microservice's functionality, from message delivery and connection management to broadcast lifecycle handling, all orchestrated with robust distributed locking.

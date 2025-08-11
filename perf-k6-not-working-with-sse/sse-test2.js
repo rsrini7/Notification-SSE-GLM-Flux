@@ -35,9 +35,9 @@ const BASE_URL = 'https://localhost:8081';
 export default function () {
   const user = users[__VU % users.length];
   const userID = user.username;
-  // FIX: Use Date.now() to ensure the session ID is unique for every connection attempt.
-  const sessionID = `k6-session-${__VU}-${Date.now()}`;
-  const sseUrl = `${BASE_URL}/api/sse/connect?userId=${userID}&sessionId=${sessionID}`;
+  // FIX: Use Date.now() to ensure the connection ID is unique for every connection attempt.
+  const connectionID = `k6-connection-${__VU}-${Date.now()}`;
+  const sseUrl = `${BASE_URL}/api/sse/connect?userId=${userID}&connectionId=${connectionID}`;
   const sseParams = { headers: { 'Accept': 'text/event-stream' } };
 
   const response = sse.open(sseUrl, sseParams, function (client) {

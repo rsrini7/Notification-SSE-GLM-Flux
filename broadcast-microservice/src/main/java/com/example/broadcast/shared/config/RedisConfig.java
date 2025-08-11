@@ -1,4 +1,5 @@
 package com.example.broadcast.shared.config;
+
 import com.example.broadcast.shared.dto.cache.*;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.fasterxml.jackson.databind.JavaType;
@@ -13,7 +14,6 @@ import java.util.List;
 
 @Configuration
 public class RedisConfig {
-
 
     @Bean
     public RedisTemplate<String, UserConnectionInfo> userConnectionInfoRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
@@ -53,15 +53,7 @@ public class RedisConfig {
         return template;
     }
 
-    @Bean
-    public RedisTemplate<String, UserSessionInfo> userSessionRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
-        RedisTemplate<String, UserSessionInfo> template = new RedisTemplate<>();
-        template.setConnectionFactory(connectionFactory);
-        Jackson2JsonRedisSerializer<UserSessionInfo> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, UserSessionInfo.class);
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(serializer);
-        return template;
-    }
+    // REMOVED: The RedisTemplate for UserSessionInfo is no longer needed.
 
     @Bean
     public RedisTemplate<String, BroadcastStatsInfo> broadcastStatsRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
@@ -83,7 +75,6 @@ public class RedisConfig {
         return template;
     }
 
-    // **NEW REDIS TEMPLATE BEAN FOR ROLE/ALL BROADCASTS**
     @Bean
     public RedisTemplate<String, List<BroadcastMessage>> activeGroupBroadcastsRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
         RedisTemplate<String, List<BroadcastMessage>> template = new RedisTemplate<>();

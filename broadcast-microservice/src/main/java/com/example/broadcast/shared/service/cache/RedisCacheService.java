@@ -25,42 +25,43 @@ public class RedisCacheService implements CacheService {
     private final RedisConnectionFactory redisConnectionFactory;
 
     private final RedisTemplate<String, String> stringRedisTemplate;
+    // MERGED: This is now the single template for connection info
     private final RedisTemplate<String, UserConnectionInfo> userConnectionInfoRedisTemplate;
     private final RedisTemplate<String, List<UserMessageInfo>> userMessagesRedisTemplate;
     private final RedisTemplate<String, List<PendingEventInfo>> pendingEventsRedisTemplate;
-    private final RedisTemplate<String, UserSessionInfo> userSessionRedisTemplate;
     private final RedisTemplate<String, BroadcastStatsInfo> broadcastStatsRedisTemplate;
     private final RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate;
     private final RedisTemplate<String, List<BroadcastMessage>> activeGroupBroadcastsRedisTemplate;
+    // REMOVED: userSessionRedisTemplate is no longer needed.
 
+    // RENAMED: Standardized on "connection"
     private static final String USER_CONNECTION_KEY_PREFIX = "user-conn:";
     private static final String ONLINE_USERS_KEY = "online-users";
     private static final String USER_MESSAGES_KEY_PREFIX = "user-msg:";
     private static final String PENDING_EVENTS_KEY_PREFIX = "pending-evt:";
     private static final String BROADCAST_STATS_KEY_PREFIX = "broadcast-stats:";
-    private static final String USER_SESSION_KEY_PREFIX = "user-sess:";
+    // REMOVED: USER_SESSION_KEY_PREFIX is no longer needed.
     private static final String BROADCAST_CONTENT_KEY_PREFIX = "broadcast-content:";
     private static final String ACTIVE_GROUP_BROADCASTS_KEY_PREFIX = "active-group-bcast:";
 
     @Override
-    public void registerUserConnection(String userId, String sessionId, String podId) {
-        UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, sessionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
+    public void registerUserConnection(String userId, String connectionId, String podId) {
+        // MERGED: A single object is now created and stored.
+        UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, connectionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
         String userKey = USER_CONNECTION_KEY_PREFIX + userId;
-        userConnectionInfoRedisTemplate.opsForValue().set(userKey, connectionInfo, 1, TimeUnit.HOURS);
+        // The TTL is now handled by the DistributedConnectionManager's configuration
+        userConnectionInfoRedisTemplate.opsForValue().set(userKey, connectionInfo, 30, TimeUnit.MINUTES);
         stringRedisTemplate.opsForSet().add(ONLINE_USERS_KEY, userId);
-
-        UserSessionInfo sessionInfo = new UserSessionInfo(userId, sessionId, podId, ZonedDateTime.now());
-        String sessionKey = USER_SESSION_KEY_PREFIX + sessionId;
-        userSessionRedisTemplate.opsForValue().set(sessionKey, sessionInfo, 30, TimeUnit.MINUTES);
-        log.debug("User connection and session registered in Redis: {} on pod {}", userId, podId);
+        // REMOVED: Logic for creating and storing a separate UserSessionInfo is gone.
+        log.debug("User connection registered in Redis: {} on pod {}", userId, podId);
     }
 
     @Override
-    public void unregisterUserConnection(String userId, String sessionId) {
+    public void unregisterUserConnection(String userId, String connectionId) {
         userConnectionInfoRedisTemplate.delete(USER_CONNECTION_KEY_PREFIX + userId);
         stringRedisTemplate.opsForSet().remove(ONLINE_USERS_KEY, userId);
-        userSessionRedisTemplate.delete(USER_SESSION_KEY_PREFIX + sessionId);
-        log.debug("User connection and session unregistered from Redis: {}", userId);
+        // REMOVED: Logic for deleting a separate UserSessionInfo is gone.
+        log.debug("User connection unregistered from Redis: {}", userId);
     }
 
     @Override
@@ -69,17 +70,12 @@ public class RedisCacheService implements CacheService {
         UserConnectionInfo connectionInfo = userConnectionInfoRedisTemplate.opsForValue().get(userKey);
         if (connectionInfo != null) {
             UserConnectionInfo updatedInfo = new UserConnectionInfo(
-                    connectionInfo.getUserId(), connectionInfo.getSessionId(), connectionInfo.getPodId(),
+                    connectionInfo.getUserId(), connectionInfo.getConnectionId(), connectionInfo.getPodId(),
                     connectionInfo.getConnectedAt(), ZonedDateTime.now()
             );
-            userConnectionInfoRedisTemplate.opsForValue().set(userKey, updatedInfo, 1, TimeUnit.HOURS);
-            
-            String sessionKey = USER_SESSION_KEY_PREFIX + connectionInfo.getSessionId();
-            UserSessionInfo sessionInfo = userSessionRedisTemplate.opsForValue().get(sessionKey);
-            if (sessionInfo != null) {
-                UserSessionInfo updatedSession = new UserSessionInfo(userId, sessionInfo.getSessionId(), sessionInfo.getPodId(), ZonedDateTime.now());
-                userSessionRedisTemplate.opsForValue().set(sessionKey, updatedSession, 30, TimeUnit.MINUTES);
-            }
+            // MERGED: Updating this one key now refreshes the sliding TTL automatically.
+            userConnectionInfoRedisTemplate.opsForValue().set(userKey, updatedInfo, 30, TimeUnit.MINUTES);
+            // REMOVED: Logic for updating a separate UserSessionInfo is gone.
         }
     }
 
@@ -166,7 +162,6 @@ public class RedisCacheService implements CacheService {
         pendingEventsRedisTemplate.delete(PENDING_EVENTS_KEY_PREFIX + userId);
     }
 
-
     @Override
     public void cacheBroadcastStats(String statsKey, BroadcastStatsInfo stats) {
         broadcastStatsRedisTemplate.opsForValue().set(BROADCAST_STATS_KEY_PREFIX + statsKey, stats, 5, TimeUnit.MINUTES);
@@ -192,7 +187,7 @@ public class RedisCacheService implements CacheService {
             keyCounts.put("userConnections", countKeysByPattern(connection, USER_CONNECTION_KEY_PREFIX + "*"));
             keyCounts.put("userMessages", countKeysByPattern(connection, USER_MESSAGES_KEY_PREFIX + "*"));
             keyCounts.put("pendingEvents", countKeysByPattern(connection, PENDING_EVENTS_KEY_PREFIX + "*"));
-            keyCounts.put("userSessions", countKeysByPattern(connection, USER_SESSION_KEY_PREFIX + "*"));
+            // REMOVED: No longer counting user sessions.
             keyCounts.put("broadcastStats", countKeysByPattern(connection, BROADCAST_STATS_KEY_PREFIX + "*"));
             keyCounts.put("broadcastContent", countKeysByPattern(connection, BROADCAST_CONTENT_KEY_PREFIX + "*"));
             keyCounts.put("onlineUsersSetSize", connection.setCommands().sCard(ONLINE_USERS_KEY.getBytes()));
@@ -232,7 +227,6 @@ public class RedisCacheService implements CacheService {
         }
     }
 
-    // CHANGED: Implement the new method.
     @Override
     public void evictBroadcastContent(Long broadcastId) {
         if (broadcastId != null) {

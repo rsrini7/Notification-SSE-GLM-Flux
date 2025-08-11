@@ -10,8 +10,10 @@ import java.util.Optional;
 
 public interface CacheService {
 
-    void registerUserConnection(String userId, String sessionId, String podId);
-    void unregisterUserConnection(String userId, String sessionId);
+    // CHANGED: Renamed sessionId to connectionId in method signatures
+    void registerUserConnection(String userId, String connectionId, String podId);
+    void unregisterUserConnection(String userId, String connectionId);
+
     void updateUserActivity(String userId);
     boolean isUserOnline(String userId);
     UserConnectionInfo getUserConnectionInfo(String userId);
@@ -29,11 +31,7 @@ public interface CacheService {
     Map<String, Object> getCacheStats();
     Optional<BroadcastMessage> getBroadcastContent(Long broadcastId);
     void cacheBroadcastContent(BroadcastMessage broadcast);
-    
-    // CHANGED: Add new method declaration for evicting specific broadcast content.
     void evictBroadcastContent(Long broadcastId);
-
-    // **NEW METHODS FOR ROLE/ALL BROADCAST CACHING**
     List<BroadcastMessage> getActiveGroupBroadcasts(String cacheKey);
     void cacheActiveGroupBroadcasts(String cacheKey, List<BroadcastMessage> broadcasts);
     void evictActiveGroupBroadcastsCache();

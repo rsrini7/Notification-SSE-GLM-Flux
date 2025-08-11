@@ -41,14 +41,16 @@ public class AppProperties {
         private final UserConnections userConnections = new UserConnections();
         private final UserMessages userMessages = new UserMessages();
         private final PendingEvents pendingEvents = new PendingEvents();
-        private final UserSession userSession = new UserSession();
+        // REMOVED: UserSession cache config is removed
         private final BroadcastStats broadcastStats = new BroadcastStats();
+
         @Data
         public static class UserConnections {
             @Positive
             private int maximumSize = 50000;
+            // CHANGED: Using expireAfterAccess for a sliding expiration
             @NotNull
-            private Duration expireAfterWrite = Duration.ofHours(1);
+            private Duration expireAfterAccess = Duration.ofMinutes(30);
         }
 
         @Data
@@ -65,14 +67,6 @@ public class AppProperties {
             private int maximumSize = 50000;
             @NotNull
             private Duration expireAfterWrite = Duration.ofHours(6);
-        }
-
-        @Data
-        public static class UserSession {
-            @Positive
-            private int maximumSize = 10000;
-            @NotNull
-            private Duration expireAfterAccess = Duration.ofMinutes(30);
         }
 
         @Data
@@ -105,7 +99,7 @@ public class AppProperties {
             @NotBlank
             private String nameSelected = "broadcast-events-selected";
             @NotBlank
-            private String nameGroup = "broadcast-events-group"; // New topic for group events
+            private String nameGroup = "broadcast-events-group";
             @Positive
             private int partitions = 10;
             @Positive
