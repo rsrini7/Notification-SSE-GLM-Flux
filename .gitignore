@@ -11,6 +11,8 @@ dist
 !.yarn/releases
 !.yarn/versions
 
+html/
+
 # testing
 /coverage
 
