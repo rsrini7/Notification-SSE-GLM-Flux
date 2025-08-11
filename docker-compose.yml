@@ -51,6 +51,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    command: ["-c", "max_connections=300"]
 
   # START OF CHANGE: Add Redis service
   redis:

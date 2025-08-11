@@ -18,6 +18,9 @@ spec:
           image: postgres:15
           ports:
             - containerPort: 5432
+          args:
+            - "-c"
+            - "max_connections=300"
           env:
             - name: POSTGRES_DB
               value: "broadcastdb"
