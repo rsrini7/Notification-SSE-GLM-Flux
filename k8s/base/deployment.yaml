@@ -98,22 +98,22 @@ spec:
       - name: logs
         emptyDir: {}
       terminationGracePeriodSeconds: 60
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - broadcast-microservice
-              topologyKey: kubernetes.io/hostname
-      tolerations:
-      - key: "broadcast-node"
-        operator: "Equal"
-        value: "true"
-        effect: "NoSchedule"
-      nodeSelector:
-        node-role.kubernetes.io/worker: "true"
+      # affinity:
+      #   podAntiAffinity:
+      #     preferredDuringSchedulingIgnoredDuringExecution:
+      #     - weight: 100
+      #       podAffinityTerm:
+      #         labelSelector:
+      #           matchExpressions:
+      #           - key: app
+      #             operator: In
+      #             values:
+      #             - broadcast-microservice
+      #         topologyKey: kubernetes.io/hostname
+      # tolerations:
+      # - key: "broadcast-node"
+      #   operator: "Equal"
+      #   value: "true"
+      #   effect: "NoSchedule"
+      # nodeSelector:
+      #   node-role.kubernetes.io/worker: "true"
