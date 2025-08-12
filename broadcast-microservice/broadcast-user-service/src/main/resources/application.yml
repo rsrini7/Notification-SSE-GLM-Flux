@@ -1,0 +1,66 @@
+server:
+  port: 8082 # User service port
+  shutdown: graceful
+
+spring:
+  application:
+    name: broadcast-user-service # User service name
+  threads:
+    virtual:
+      enabled: true
+
+  # --- SHARED CONFIGURATIONS ---
+  datasource:
+    url: jdbc:h2:mem:broadcastdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: false
+  sql:
+    init:
+      mode: always
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  kafka:
+    bootstrap-servers: localhost:9092
+    # Consumer configuration is critical for this service
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      # Each consumer instance gets a unique ID for scaling, based on the pod name or a random UUID
+      group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "*"
+    listener:
+      ack-mode: MANUAL_IMMEDIATE
+      concurrency: 3
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: UTC
+
+# --- MANAGEMENT & MONITORING ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,ratelimiters,redis-cache-stats
+  endpoint:
+    health:
+      show-details: always
+
+# --- CUSTOM PROPERTIES ---
+broadcast:
+  sse:
+    timeout: 300000
+    heartbeat-interval: 30000
+  # Defines specific group IDs for different consumer listeners
+  kafka:
+    consumer:
+      selected-group-id: "broadcast-selected-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
+      group-group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"

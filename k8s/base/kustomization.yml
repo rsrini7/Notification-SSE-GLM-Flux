@@ -17,8 +17,10 @@ resources:
   - role-binding.yaml
   - configmap.yaml
   - network-policy.yaml
-  - deployment.yaml
-  - service.yaml
+  - admin-deployment.yaml
+  - user-deployment.yaml
+  - admin-service.yaml
+  - user-service.yaml
   - hpa.yaml
   - pod-disruption-budget.yaml
 

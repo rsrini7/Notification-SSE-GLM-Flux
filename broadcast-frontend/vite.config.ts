@@ -23,7 +23,7 @@ function rootPathPlugin() {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Load the appropriate .env file
+  // Load the appropriate .env file based on the mode
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
@@ -44,8 +44,15 @@ export default defineConfig(({ mode }) => {
         },
         http2: true,
         proxy: {
-          '/api': {
-            target: env.VITE_API_PROXY_TARGET,
+          // Proxy requests for the Admin API
+          '/api/admin': {
+            target: env.VITE_ADMIN_API_PROXY_TARGET,
+            changeOrigin: true,
+            secure: false,
+          },
+          // Proxy requests for the User API (REST and SSE)
+          '/api/user': {
+            target: env.VITE_USER_API_PROXY_TARGET,
             changeOrigin: true,
             secure: false,
           },

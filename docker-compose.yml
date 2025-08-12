@@ -8,8 +8,46 @@ services:
       - ./broadcast-frontend/localhost.pem:/etc/nginx/certs/localhost.pem
       - ./broadcast-frontend/localhost-key.pem:/etc/nginx/certs/localhost-key.pem
     environment:
+      # NGINX_ENV and BACKEND_URL are used by the entrypoint script
       - NGINX_ENV=dev
-      - BACKEND_URL=https://host.docker.internal:8081
+      # NEW: Define separate URLs for the admin and user services
+      # - ADMIN_BACKEND_URL=https://admin-service:8081
+      # - USER_BACKEND_URL=https://user-service:8082
+      - ADMIN_BACKEND_URL=https://host.docker.internal:8081
+      - USER_BACKEND_URL=https://host.docker.internal:8082      
+    # depends_on:
+    #   - admin-service
+    #   - user-service
+
+  # NEW: Service definition for the admin microservice
+  admin-service:
+    build:
+      context: ./broadcast-microservice/broadcast-admin-service
+    image: broadcast-admin-service:1.0.0
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev-pg
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      - kafka
+      - postgres
+      - redis
+
+  # NEW: Service definition for the user microservice
+  user-service:
+    build:
+      context: ./broadcast-microservice/broadcast-user-service
+    image: broadcast-user-service:1.0.0
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev-pg
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     depends_on:
       - kafka
       - postgres
@@ -17,8 +55,6 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.3.0
-    depends_on:
-      - zookeeper
     ports:
       - "9092:9092"
     environment:
@@ -27,6 +63,8 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+    depends_on:
+      - zookeeper
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.0
@@ -43,17 +81,17 @@ services:
 
   postgres:
     image: postgres:15
+    # ... (rest of postgres config is unchanged)
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: broadcastdb
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     command: ["-c", "max_connections=300"]
 
-  # START OF CHANGE: Add Redis service
   redis:
     image: redis:7-alpine
     ports:

@@ -1,0 +1,69 @@
+server:
+  port: 8081 # Admin service port
+  shutdown: graceful
+
+spring:
+  application:
+    name: broadcast-admin-service # Admin service name
+  threads:
+    virtual:
+      enabled: true
+
+  # --- SHARED CONFIGURATIONS ---
+  datasource:
+    url: jdbc:h2:mem:broadcastdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: false
+  sql:
+    init:
+      mode: always
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer: # This service is the primary producer
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+    # DLT Consumer for handling failed messages
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      group-id: ${broadcast.kafka.consumer.dlt-group-id}
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "*"
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: UTC
+
+# --- MANAGEMENT & MONITORING ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,ratelimiters,redis-cache-stats
+  endpoint:
+    health:
+      show-details: always
+
+# --- CUSTOM PROPERTIES ---
+broadcast:
+  db:
+    batch-size: 1000
+  kafka:
+    topic:
+      name-selected: broadcast-events-selected
+      name-group: broadcast-events-group
+    consumer:
+      dlt-group-id: broadcast-dlt-group # Group ID for the DLT listener
