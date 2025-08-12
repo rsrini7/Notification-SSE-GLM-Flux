@@ -30,7 +30,7 @@ spec:
                   name: postgres-secret
                   key: postgres-password
             - name: SPRING_SQL_INIT_MODE
-              value: "always"
+              value: "never"
             - name: SPRING_DATA_REDIS_HOST
               value: "redis-service"
             - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
