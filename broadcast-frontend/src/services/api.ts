@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-console.log("Admin API Base URL:", import.meta.env.VITE_ADMIN_API_BASE_URL);
+console.log("Admin API Base URL:", import.meta.env.VITE_API_BASE_URL);
 console.log("User API Base URL:", import.meta.env.VITE_USER_API_BASE_URL);
 
 // Create an Axios instance for the Admin Service

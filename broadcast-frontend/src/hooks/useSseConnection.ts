@@ -94,7 +94,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     const newConnectionId = generateConnectionId();
     connectionIdRef.current = newConnectionId;
     // CHANGED: URL parameter is now connectionId
-    const sseUrl = `${baseUrl}/api/user/sse/connect?userId=${userId}&connectionId=${newConnectionId}`;
+    const sseUrl = `${baseUrl}/sse/connect?userId=${userId}&connectionId=${newConnectionId}`;
     
     eventSourceRef.current = new EventSource(sseUrl);
 
@@ -146,7 +146,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
     // CHANGED: Use connectionId in disconnect beacon
     if (connectionIdRef.current && !isForceDisconnect) {
-      navigator.sendBeacon(`${baseUrl}/api/user/sse/disconnect?userId=${userId}&connectionId=${connectionIdRef.current}`);
+      navigator.sendBeacon(`${baseUrl}/sse/disconnect?userId=${userId}&connectionId=${connectionIdRef.current}`);
     }
     if (state.connected) {
       onDisconnectRef.current?.();
@@ -164,7 +164,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       throw error;
     }
     try {
-      const response = await fetch(`${baseUrl}/api/user/messages/read`, {
+      const response = await fetch(`${baseUrl}/messages/read`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

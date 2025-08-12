@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
@@ -7,20 +7,25 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
-  // UPDATED: Load env file from the project's root directory (__dirname),
-  // regardless of where the 'npm' command is run from.
-  const env = loadEnv(mode, __dirname, '');
+  // Add a log to be 100% sure which mode is being used
+  console.log(`Vite is running in mode: "${mode}"`);
 
-  // Create a define block to manually expose VITE_ variables to the client
-  const envWithVitePrefix = Object.entries(env)
-    .filter(([key]) => key.startsWith('VITE_'))
-    .reduce<{ [key: string]: string }>(
-      (acc, [key, val]) => {
-        acc[`import.meta.env.${key}`] = JSON.stringify(val);
-        return acc;
-      },
-      {},
-    );
+  // --- START OF HARDCODED CONFIGURATION ---
+
+  let adminProxyTarget = '';
+  let userProxyTarget = '';
+  const clientBaseUrl = '/api'; // For client-side code, we always use the relative path
+
+  // Set the proxy targets based on the mode
+  if (mode === 'compose') {
+    adminProxyTarget = 'https://localhost:8081';
+    userProxyTarget = 'https://localhost:8082';
+  } else if (mode === 'k8s') {
+    adminProxyTarget = 'https://localhost:30443';
+    userProxyTarget = 'https://localhost:30443';
+  }
+
+  // --- END OF HARDCODED CONFIGURATION ---
 
   return {
     base: '/',
@@ -30,7 +35,11 @@ export default defineConfig(({ mode }) => {
         fastRefresh: false,
       }),
     ],
-    define: envWithVitePrefix,
+    // Manually define the variables for the client-side code
+    define: {
+      'import.meta.env.VITE_ADMIN_API_BASE_URL': JSON.stringify(`${clientBaseUrl}/admin`),
+      'import.meta.env.VITE_USER_API_BASE_URL': JSON.stringify(`${clientBaseUrl}/user`),
+    },
     server: {
       port: 3000,
       host: true,
@@ -41,12 +50,12 @@ export default defineConfig(({ mode }) => {
       http2: true,
       proxy: {
         '/api/admin': {
-          target: env.VITE_ADMIN_API_PROXY_TARGET,
+          target: adminProxyTarget,
           changeOrigin: true,
           secure: false,
         },
         '/api/user': {
-          target: env.VITE_USER_API_PROXY_TARGET,
+          target: userProxyTarget,
           changeOrigin: true,
           secure: false,
         },
