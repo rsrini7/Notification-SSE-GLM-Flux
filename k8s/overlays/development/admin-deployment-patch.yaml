@@ -18,6 +18,8 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: "dev-pg"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres-service:5432/broadcastdb"
             - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
               value: "org.postgresql.Driver"
             - name: SPRING_DATASOURCE_USERNAME
