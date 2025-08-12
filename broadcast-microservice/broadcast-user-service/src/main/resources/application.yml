@@ -69,3 +69,14 @@ broadcast:
     consumer:
       selected-group-id: "broadcast-selected-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
       group-group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
+---
+# PostgreSQL-specific profile for local development
+spring:
+  config:
+    activate:
+      on-profile: "dev-pg"
+  datasource:
+    url: jdbc:postgresql://localhost:5432/broadcastdb
+    driver-class-name: org.postgresql.Driver # Explicitly set the PostgreSQL driver
+    username: user
+    password: password
