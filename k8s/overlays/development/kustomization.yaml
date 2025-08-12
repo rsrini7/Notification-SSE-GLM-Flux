@@ -10,11 +10,11 @@ commonLabels:
   environment: development
 
 patches:
-  - path: admin-deployment-patch.yml
+  - path: admin-deployment-patch.yaml
     target:
       kind: Deployment
       name: broadcast-admin-service
-  - path: user-deployment-patch.yml
+  - path: user-deployment-patch.yaml
     target:
       kind: Deployment
       name: broadcast-user-service

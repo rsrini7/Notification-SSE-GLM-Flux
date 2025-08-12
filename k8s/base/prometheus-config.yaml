@@ -4,7 +4,7 @@ metadata:
   name: prometheus-config
   namespace: monitoring
 data:
-  prometheus.yml: |
+  prometheus.yaml: |
     global:
       scrape_interval: 15s
       evaluation_interval: 15s
@@ -28,4 +28,4 @@ data:
           - alertmanager.monitoring.svc.cluster.local:9093
     
     rule_files:
-    - "/etc/prometheus/rules/broadcast-alerts.yml"
+    - "/etc/prometheus/rules/broadcast-alerts.yaml"
