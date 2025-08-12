@@ -58,6 +58,12 @@ management:
       show-details: always
 
 # --- CUSTOM PROPERTIES ---
+
+h2:
+  console:
+    web-port: 8083 # Admin H2 Console on port 8083
+    tcp-port: 9093
+    
 broadcast:
   db:
     batch-size: 1000
