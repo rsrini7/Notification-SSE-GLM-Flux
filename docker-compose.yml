@@ -1,73 +1,88 @@
+# Define a reusable base configuration for the Nginx service
+x-nginx-base: &nginx_base
+  build: ./broadcast-frontend
+  image: broadcast-nginx:1.0.5
+  ports:
+    - "443:443"
+
 services:
-  nginx:
-    build: ./broadcast-frontend
-    image: broadcast-nginx:1.0.5
-    ports:
-      - "443:443"
+  # ===================================================================
+  #  DEV PROFILE - Nginx connects to backend running outside Docker
+  # ===================================================================
+  nginx-dev:
+    profiles:
+      - dev
+    <<: *nginx_base
     volumes:
       - ./broadcast-frontend/localhost.pem:/etc/nginx/certs/localhost.pem
-      - ./broadcast-frontend/localhost-key.pem:/etc/nginx/certs/localhost-key.pem
+      - ./broadcast-frontend/localhost-key.pem:/etc/nginx/certs/localhost-key.pem    
     environment:
       - NGINX_ENV=dev
       - ADMIN_BACKEND_URL=https://host.docker.internal:8081
-      - USER_BACKEND_URL=https://host.docker.internal:8082     
+      - USER_BACKEND_URL=https://host.docker.internal:8082
 
-      # - NGINX_ENV=prod
-      # - ADMIN_BACKEND_URL=https://admin-service:8081
-      # - USER_BACKEND_URL=https://user-service:8082
-      
+  # ===================================================================
+  #  PROD PROFILE - Nginx and Backend services all run in Docker
+  # ===================================================================
+  nginx-prod:
+    profiles:
+      - prod
+    <<: *nginx_base
+    volumes:
+      - ./broadcast-frontend/localhost.pem:/etc/nginx/certs/tls.crt
+      - ./broadcast-frontend/localhost-key.pem:/etc/nginx/certs/tls.key
+    environment:
+      - NGINX_ENV=prod
+      - ADMIN_BACKEND_URL=https://admin-service:8081
+      - USER_BACKEND_URL=https://user-service:8082
+    depends_on:
+      admin-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+
+  admin-service:
+    profiles:
+      - prod
+    image: broadcast-admin-service:1.0.0
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev-pg
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LOGGING_FILE_NAME=/var/log/app/broadcast-admin-service.log
+    volumes:
+      - ./logs/admin:/var/log/app
     depends_on:
       - kafka
       - postgres
-      - redis 
-      # - admin-service:
-      #     condition: service_healthy
-      # - user-service:
-      #     condition: service_healthy
+      - redis
 
-  # NEW: Service definition for the admin microservice
-  # admin-service:
-  #   # build:
-  #   #   context: ./broadcast-microservice/broadcast-admin-service
-  #   image: broadcast-admin-service:1.0.0
-  #   ports:
-  #     - "8081:8081"
-  #   environment:
-  #     - SPRING_PROFILES_ACTIVE=dev-pg
-  #     - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
-  #     - SPRING_DATA_REDIS_HOST=redis
-  #     - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-  #     - LOGGING_FILE_NAME="/var/log/app/broadcast-admin-service.log"
-  #     - MANAGEMENT_TRACING_ENABLED="false"
-  #   volumes:
-  #     - ./logs/admin:/var/log/app
-  #   depends_on:
-  #     - kafka
-  #     - postgres
-  #     - redis
+  user-service:
+    profiles:
+      - prod
+    image: broadcast-user-service:1.0.0
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev-pg
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LOGGING_FILE_NAME=/var/log/app/broadcast-user-service.log
+    volumes:
+      - ./logs/user:/var/log/app
+    depends_on:
+      - kafka
+      - postgres
+      - redis
+      - admin-service
 
-  # NEW: Service definition for the user microservice
-  # user-service:
-  #   # build:
-  #   #   context: ./broadcast-microservice/broadcast-user-service
-  #   image: broadcast-user-service:1.0.0
-  #   ports:
-  #     - "8082:8082"
-  #   environment:
-  #     - SPRING_PROFILES_ACTIVE=dev-pg
-  #     - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
-  #     - SPRING_DATA_REDIS_HOST=redis
-  #     - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-  #     - LOGGING_FILE_NAME="/var/log/app/broadcast-user-service.log"
-  #     - MANAGEMENT_TRACING_ENABLED="false"
-  #   volumes:
-  #     - ./logs/user:/var/log/app
-  #   depends_on:
-  #     - kafka
-  #     - postgres
-  #     - redis
-  #     - admin-service
-
+  # ===================================================================
+  #  COMMON INFRASTRUCTURE SERVICES (always run)
+  # ===================================================================
   kafka:
     image: confluentinc/cp-kafka:7.3.0
     ports:
@@ -75,7 +90,7 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
     depends_on:
@@ -89,14 +104,8 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
-  zipkin:
-    image: openzipkin/zipkin
-    ports:
-      - "9411:9411"
-
   postgres:
     image: postgres:15
-    # ... (rest of postgres config is unchanged)
     ports:
       - "5432:5432"
     environment:
