@@ -7,6 +7,8 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import com.example.broadcast.shared.config.AppProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.ComponentScan;
+
 
 /**
  * Main application class for the Broadcast Messaging Microservice
@@ -25,6 +27,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 @EnableConfigurationProperties({
     AppProperties.class
 })
+@ComponentScan("com.example.broadcast")
 public class BroadcastUserApplication {
 
     public static void main(String[] args) {
