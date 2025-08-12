@@ -1,5 +1,5 @@
 server:
-  port: 8081 # Admin service port
+  port: 8081
   shutdown: graceful
   http2:
     enabled: true
@@ -9,9 +9,10 @@ server:
     key-store: "classpath:keystore.p12"
     key-store-password: "password"
     key-alias: "netty"
+
 spring:
   application:
-    name: broadcast-admin-service # Admin service name
+    name: broadcast-microservice
   threads:
     virtual:
       enabled: true
@@ -21,7 +22,7 @@ spring:
     url: jdbc:h2:mem:broadcastdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
     driver-class-name: org.h2.Driver
     username: sa
-    password:
+    password: 
   h2:
     console:
       enabled: false
@@ -33,6 +34,7 @@ spring:
       mode: always
       schema-locations: classpath:sql/schema.sql
       data-locations: classpath:sql/data.sql
+
   data:
     redis:
       host: localhost
@@ -52,7 +54,7 @@ spring:
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      group-id: ${broadcast.kafka.consumer.dlt-group-id}
+      group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
       auto-offset-reset: earliest
       properties:
         spring.json.trusted.packages: "*"
@@ -133,13 +135,7 @@ resilience4j:
         maxConcurrentCalls: 10
         maxWaitDuration: 10ms
 
-# --- CUSTOM PROPERTIES ---
-
-h2:
-  console:
-    web-port: 8083 # Admin H2 Console on port 8083
-    tcp-port: 9093
-    
+# Custom Configuration
 broadcast:
   # SSE Configuration
   sse:
@@ -171,7 +167,12 @@ broadcast:
       partitions: 10
       replication-factor: 1
     consumer:
-      dlt-group-id: broadcast-dlt-group # Group ID for the DLT listener
+      selected-group-id: "broadcast-selected-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
+      group-group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
+      dlt-group-id: broadcast-dlt-group
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
 
 ---
 # PostgreSQL-specific profile
