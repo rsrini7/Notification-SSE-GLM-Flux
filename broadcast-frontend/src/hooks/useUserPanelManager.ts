@@ -12,18 +12,30 @@ export const useUserPanelManager = () => {
     const fetchAllUsers = async () => {
       try {
         const userList = await userService.getAllUsers();
-        setAllUsers(userList);
+        // **THIS IS THE FIX**: Check if the response is actually an array before setting it.
+        // If the API call fails gracefully (e.g., returns an error object), this prevents a crash.
+        if (Array.isArray(userList)) {
+          setAllUsers(userList);
+        } else {
+          // If the response is not an array, log an error and keep allUsers as an empty array.
+          console.error("Failed to fetch a valid user list. API response was not an array.");
+          setAllUsers([]); // Ensure it remains a valid array
+        }
       } catch (error) {
         toast({
           title: 'Error Fetching Users',
-          description: `Could not retrieve the list of all users. ${error}`,
+          description: `Could not retrieve the list of all users. The admin service may be unavailable.`,
           variant: 'destructive',
         });
+        // Ensure state is a valid empty array on error
+        setAllUsers([]);
       }
     };
     fetchAllUsers();
   }, [toast]);
-  
+
+  // With the fix above, `allUsers` is now guaranteed to be an array,
+  // so this line will no longer crash.
   const availableUsers = useMemo(() => allUsers.filter(u => !users.includes(u)), [allUsers, users]);
 
   const addUser = useCallback(() => {
@@ -31,7 +43,7 @@ export const useUserPanelManager = () => {
 
     if (userToAdd && !users.includes(userToAdd)) {
       setUsers(prevUsers => [...prevUsers, userToAdd]);
-      setSelectedUserId(''); // Clear selection after adding
+      setSelectedUserId('');
       toast({ title: 'User Added', description: `Panel for ${userToAdd} is now active.` });
     } else if (userToAdd && users.includes(userToAdd)) {
       toast({ title: 'User Exists', description: `A panel for ${userToAdd} is already open.`, variant: 'destructive' });
