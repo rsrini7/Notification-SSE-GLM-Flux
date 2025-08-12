@@ -14,10 +14,15 @@ services:
       # - ADMIN_BACKEND_URL=https://admin-service:8081
       # - USER_BACKEND_URL=https://user-service:8082
       - ADMIN_BACKEND_URL=https://host.docker.internal:8081
-      - USER_BACKEND_URL=https://host.docker.internal:8082      
-    # depends_on:
-    #   - admin-service
-    #   - user-service
+      - USER_BACKEND_URL=https://host.docker.internal:8082     
+    depends_on:
+      - kafka
+      - postgres
+      - redis 
+      # - admin-service:
+      #     condition: service_healthy
+      # - user-service:
+      #     condition: service_healthy
 
   # NEW: Service definition for the admin microservice
   # admin-service:
