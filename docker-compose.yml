@@ -15,14 +15,14 @@ services:
       # - USER_BACKEND_URL=https://user-service:8082
       - ADMIN_BACKEND_URL=https://host.docker.internal:8081
       - USER_BACKEND_URL=https://host.docker.internal:8082      
-    # depends_on:
-    #   - admin-service
-    #   - user-service
+    depends_on:
+      - admin-service
+      - user-service
 
   # NEW: Service definition for the admin microservice
   admin-service:
-    build:
-      context: ./broadcast-microservice/broadcast-admin-service
+    # build:
+    #   context: ./broadcast-microservice/broadcast-admin-service
     image: broadcast-admin-service:1.0.0
     ports:
       - "8081:8081"
@@ -31,6 +31,10 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LOGGING_FILE_NAME="/var/log/app/broadcast-admin-service.log"
+      - MANAGEMENT_TRACING_ENABLED="false"
+    volumes:
+      - ./logs/admin:/var/log/app
     depends_on:
       - kafka
       - postgres
@@ -38,8 +42,8 @@ services:
 
   # NEW: Service definition for the user microservice
   user-service:
-    build:
-      context: ./broadcast-microservice/broadcast-user-service
+    # build:
+    #   context: ./broadcast-microservice/broadcast-user-service
     image: broadcast-user-service:1.0.0
     ports:
       - "8082:8082"
@@ -48,6 +52,10 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LOGGING_FILE_NAME="/var/log/app/broadcast-user-service.log"
+      - MANAGEMENT_TRACING_ENABLED="false"
+    volumes:
+      - ./logs/user:/var/log/app
     depends_on:
       - kafka
       - postgres
