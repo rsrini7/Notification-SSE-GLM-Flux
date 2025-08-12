@@ -8,13 +8,14 @@ services:
       - ./broadcast-frontend/localhost.pem:/etc/nginx/certs/localhost.pem
       - ./broadcast-frontend/localhost-key.pem:/etc/nginx/certs/localhost-key.pem
     environment:
-      # NGINX_ENV and BACKEND_URL are used by the entrypoint script
       - NGINX_ENV=dev
-      # NEW: Define separate URLs for the admin and user services
-      # - ADMIN_BACKEND_URL=https://admin-service:8081
-      # - USER_BACKEND_URL=https://user-service:8082
       - ADMIN_BACKEND_URL=https://host.docker.internal:8081
       - USER_BACKEND_URL=https://host.docker.internal:8082     
+
+      # - NGINX_ENV=prod
+      # - ADMIN_BACKEND_URL=https://admin-service:8081
+      # - USER_BACKEND_URL=https://user-service:8082
+      
     depends_on:
       - kafka
       - postgres
