@@ -86,7 +86,7 @@ The frontend is configured to connect to a Java backend:
 -   `DELETE /api/broadcasts/{id}` - Cancel a broadcast.
 -   `GET /api/broadcasts/{id}/stats` - Get broadcast statistics.
 -   `GET /api/user/messages` - Get user messages.
--   `POST /api/sse/read` - Mark a message as read.
+-   `POST /api/user/sse/read` - Mark a message as read.
 -   `GET /api/dlt/messages` - Get all messages from the Dead Letter Topic.
 -   `POST /api/dlt/redrive/{id}` - Re-process a failed message from the DLT.
 -   `DELETE /api/dlt/delete/{id}` - Delete a message from the DLT.

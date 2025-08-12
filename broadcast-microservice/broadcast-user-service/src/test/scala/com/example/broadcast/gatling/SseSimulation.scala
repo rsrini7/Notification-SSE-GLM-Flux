@@ -24,7 +24,7 @@ class SseSimulation extends Simulation {
     .feed(userFeeder)
     .exec(
       sse("Connect and Wait for Message")
-        .get("/api/sse/connect?userId=#{ID}")
+        .get("/api/user/sse/connect?userId=#{ID}")
         .await(60 seconds)(
           // MODIFIED: The check is now updated to match the new SSE message format.
           sse.checkMessage("Check for Broadcast")

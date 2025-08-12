@@ -94,7 +94,7 @@ sequenceDiagram
     participant Redis
     participant Database
 
-    Client->>SseController: GET /api/sse/connect?userId=123
+    Client->>SseController: GET /api/user/sse/connect?userId=123
     SseController->>SseService: registerConnection(userId, connectionId)
     SseService->>SseConnectionManager: registerConnection(userId, connectionId)
     SseConnectionManager->>Redis: Record active connection
@@ -113,12 +113,12 @@ sequenceDiagram
     SseConnectionManager->>SseConnectionManager: Create ServerSentEvent
     SseConnectionManager-->>Client: Stream new message event
 
-    Client->>SseController: POST /api/sse/read?messageId=456
+    Client->>SseController: POST /api/user/sse/read?messageId=456
     SseController->>Database: Update read status
 
     Note over Client,SseController: Client disconnects
 
-    Client->>SseController: POST /api/sse/disconnect
+    Client->>SseController: POST /api/user/sse/disconnect
     SseController->>SseService: unregisterConnection(userId, connectionId)
     SseService->>SseConnectionManager: removeConnection(userId, connectionId)
     SseConnectionManager->>Redis: Remove active connection
@@ -127,7 +127,7 @@ sequenceDiagram
     SseController-->>Client: Disconnection Acknowledged
 ```
 
-1. The client initiates an SSE connection by making a GET request to the `/api/sse/connect` endpoint
+1. The client initiates an SSE connection by making a GET request to the `/api/user/sse/connect` endpoint
 2. The `SseController` registers the connection with the `SseService`
 3. The `SseService` delegates to the `SseConnectionManager` to create and manage the event stream
 4. The system fetches any pending messages for the user and sends them immediately

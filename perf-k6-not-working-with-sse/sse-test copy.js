@@ -36,7 +36,7 @@ export default function () {
   const userID = user.username;
   
   const connectionID = `k6-connection-${__VU}-${__ITER}`;
-  const sseUrl = `${BASE_URL}/api/sse/connect?userId=${userID}&connectionId=${connectionID}`;
+  const sseUrl = `${BASE_URL}/api/user/sse/connect?userId=${userID}&connectionId=${connectionID}`;
   const sseParams = { headers: { 'Accept': 'text/event-stream' } };
 
   group(`User Session VU=${__VU} (${userID})`, function () {
@@ -88,9 +88,9 @@ export default function () {
                             
                             group('API: Mark Message as Read', function() {
                                 const messageId = parsedData.data.id;
-                                const readUrl = `${BASE_URL}/api/sse/read?userId=${userID}&messageId=${messageId}`;
+                                const readUrl = `${BASE_URL}/api/user/sse/read?userId=${userID}&messageId=${messageId}`;
                                 const res = http.post(readUrl);
-                                check(res, { 'POST /api/sse/read status is 200': (r) => r.status === 200 });
+                                check(res, { 'POST /api/user/sse/read status is 200': (r) => r.status === 200 });
                             });
                         }
                         // After receiving and processing the one message we care about, close the connection.
