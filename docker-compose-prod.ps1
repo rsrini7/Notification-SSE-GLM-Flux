@@ -1,1 +1,1 @@
- docker-compose --profile prod up --build --force-recreate --no-cache
+ docker-compose --profile prod up --build --force-recreate
