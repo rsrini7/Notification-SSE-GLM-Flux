@@ -6,14 +6,12 @@ import { userService, type UserBroadcastMessage } from '../services/api';
 
 interface UseBroadcastMessagesOptions {
   userId: string;
-  baseUrl?: string;
   autoConnect?: boolean;
 }
 
 export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const {
     userId,
-    baseUrl = '',
     autoConnect = true
   } = options;
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
@@ -23,13 +21,11 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
-      // **MODIFIED: Fetch both targeted and group messages**
       const [targetedMessages, groupMessages] = await Promise.all([
         userService.getUserMessages(userId),
         userService.getGroupMessages(userId),
       ]);
       
-      // Combine and deduplicate messages
       const allMessages = [...targetedMessages, ...groupMessages];
       const uniqueMessages = Array.from(new Map(allMessages.map(msg => [msg.id, msg])).values());
       uniqueMessages.sort((a, b) => new Date(b.broadcastCreatedAt).getTime() - new Date(a.broadcastCreatedAt).getTime());
@@ -90,11 +86,9 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
             });
         }
         break;
-
       case 'CONNECTED':
         console.log(`SSE Connection Confirmed via Event for user: ${userId}`, payload);
         break;
-
       case 'HEARTBEAT':
         break;
       default:
@@ -107,17 +101,12 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     fetchMessages();
   }, [toast, fetchMessages, userId]);
 
-  const onDisconnect = useCallback(() => {
-    // Intentionally left blank to make reconnections silent.
-  }, []);
-
-  const onError = useCallback(() => {
-    // Intentionally left blank. The hook will log the error to the console.
-  }, []);
+  const onDisconnect = useCallback(() => { /* Silent */ }, []);
+  const onError = useCallback(() => { /* Silent */ }, []);
 
   const sseConnection = useSseConnection({
     userId,
-    baseUrl,
+    baseUrl: import.meta.env.VITE_USER_API_BASE_URL,
     autoConnect,
     onMessage: handleSseEvent,
     onConnect,
@@ -125,7 +114,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     onError,
   });
 
-  const markAsRead = useCallback(async (broadcastId: number) => { // CHANGED: from messageId to broadcastId
+  const markAsRead = useCallback(async (broadcastId: number) => {
     try {
       // The action now sends the request. The UI update is handled by the SSE event.
       await sseConnection.markAsRead(broadcastId); // CHANGED: from messageId to broadcastId

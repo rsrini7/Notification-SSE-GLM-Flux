@@ -50,7 +50,7 @@ sequenceDiagram
     participant Backend as Java Backend
 
     Component->>Hook: Renders and calls the hook
-    Hook->>EventSource: new EventSource('/api/sse/subscribe')
+    Hook->>EventSource: new EventSource('/api/user/sse/subscribe')
     EventSource->>Backend: Opens persistent HTTP connection
     Backend-->>EventSource: Sends message chunks
     EventSource-->>Hook: Fires 'message' event

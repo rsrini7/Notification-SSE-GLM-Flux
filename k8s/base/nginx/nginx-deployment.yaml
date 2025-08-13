@@ -15,16 +15,18 @@ spec:
     spec:
       containers:
       - name: nginx-proxy
-        image: broadcast-nginx:1.0.4
+        image: broadcast-nginx:1.0.5
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 443
-        # Add this environment section
         env:
         - name: NGINX_ENV
           value: "prod"
-        - name: BACKEND_URL
-          value: "https://broadcast-service:8081"
+        # UPDATED: Point to the internal K8s service names and ports
+        - name: ADMIN_BACKEND_URL
+          value: "https://broadcast-admin-service:8081"
+        - name: USER_BACKEND_URL
+          value: "https://broadcast-user-service:8082"
         volumeMounts:
         - name: ssl-certs
           mountPath: /etc/nginx/certs

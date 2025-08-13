@@ -76,7 +76,7 @@ affinity:
           - key: app
             operator: In
             values:
-            - broadcast-microservice
+            - broadcast-user-service
         topologyKey: kubernetes.io/hostname
 ```
 
@@ -160,9 +160,6 @@ kubectl apply -f configmap.yaml
 
 # Apply Network Policy
 kubectl apply -f network-policy.yaml
-
-# Apply Kafka Topics
-kubectl apply -f kafka-topic.yaml
 
 # Apply main resources
 kubectl apply -f deployment.yaml
@@ -273,16 +270,14 @@ kubectl get --raw /api/v1/namespaces/monitoring/services/prometheus:http/proxy/a
 ### Debug Commands
 ```bash
 # Check pod logs
-kubectl logs -f deployment/broadcast-microservice -n broadcast-system
+kubectl logs -f deployment/broadcast-user-service -n broadcast-system
 
 # Check pod events
-kubectl describe pod -l app=broadcast-microservice -n broadcast-system
+kubectl describe pod -l app=broadcast-user-service -n broadcast-system
 
 # Check HPA events
-kubectl describe hpa broadcast-microservice-hpa -n broadcast-system
+kubectl describe hpa broadcast-user-service-hpa -n broadcast-system
 
-# Check Kafka consumer groups
-kubectl exec -it kafka-broker -- bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group broadcast-service-group
 ```
 
 This comprehensive Kubernetes deployment ensures the broadcast microservice can handle the target scale of 400,000 users with 30,000 concurrent connections while maintaining high availability, performance, and observability.

@@ -1,0 +1,1 @@
+ docker-compose --profile dev up --build  --build --force-recreate

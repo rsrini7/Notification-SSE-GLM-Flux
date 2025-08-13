@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broadcast-admin-service
+  namespace: broadcast-system
+  labels:
+    app: broadcast-admin-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: broadcast-admin-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: broadcast-admin-service
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/api/actuator/prometheus"
+    spec:
+      serviceAccountName: broadcast-service-account
+      containers:
+      - name: broadcast-admin-service
+        image: broadcast-admin-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+          name: api
+        env:
+        - name: JAVA_OPTS
+          value: "-Xms512m -Xmx1g -XX:+UseG1GC"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: BROADCAST_POD_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: JAVA_OPTS
+          value: "-Xms512m -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "dev-pg"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8081
+            scheme: HTTPS
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8081
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+        - name: logs
+          mountPath: /var/log
+      volumes:
+      - name: config-volume
+        configMap:
+          name: broadcast-config
+      - name: logs
+        emptyDir: {}
+      terminationGracePeriodSeconds: 60
+      # affinity:
+      #   podAntiAffinity:
+      #     preferredDuringSchedulingIgnoredDuringExecution:
+      #     - weight: 100
+      #       podAffinityTerm:
+      #         labelSelector:
+      #           matchExpressions:
+      #           - key: app
+      #             operator: In
+      #             values:
+      #             - broadcast-microservice
+      #         topologyKey: kubernetes.io/hostname
+      # tolerations:
+      # - key: "broadcast-node"
+      #   operator: "Equal"
+      #   value: "true"
+      #   effect: "NoSchedule"
+      # nodeSelector:
+      #   node-role.kubernetes.io/worker: "true"

@@ -12,18 +12,24 @@ export const useUserPanelManager = () => {
     const fetchAllUsers = async () => {
       try {
         const userList = await userService.getAllUsers();
-        setAllUsers(userList);
+        if (Array.isArray(userList)) {
+          setAllUsers(userList);
+        } else {
+          console.error("Failed to fetch a valid user list. API response was not an array.");
+          setAllUsers([]); // Ensure it remains a valid array
+        }
       } catch (error) {
         toast({
           title: 'Error Fetching Users',
-          description: `Could not retrieve the list of all users. ${error}`,
+          description: `Could not retrieve user list. The admin service may still be starting.`,
           variant: 'destructive',
         });
+        setAllUsers([]);
       }
     };
     fetchAllUsers();
   }, [toast]);
-  
+
   const availableUsers = useMemo(() => allUsers.filter(u => !users.includes(u)), [allUsers, users]);
 
   const addUser = useCallback(() => {
@@ -31,7 +37,7 @@ export const useUserPanelManager = () => {
 
     if (userToAdd && !users.includes(userToAdd)) {
       setUsers(prevUsers => [...prevUsers, userToAdd]);
-      setSelectedUserId(''); // Clear selection after adding
+      setSelectedUserId('');
       toast({ title: 'User Added', description: `Panel for ${userToAdd} is now active.` });
     } else if (userToAdd && users.includes(userToAdd)) {
       toast({ title: 'User Exists', description: `A panel for ${userToAdd} is already open.`, variant: 'destructive' });

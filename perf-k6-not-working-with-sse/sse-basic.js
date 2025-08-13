@@ -2,7 +2,7 @@ import sse from "k6/x/sse";
 import { check, sleep } from "k6";
 
 export default function () {
-    const url = "https://localhost:8081/api/sse/connect?userId=user-001&connectionId=k6-connection-1-1";
+    const url = "https://localhost:8081/api/user/sse/connect?userId=user-001&connectionId=k6-connection-1-1";
     const params = {};
 
     const response = sse.open(url, params, function (client) {

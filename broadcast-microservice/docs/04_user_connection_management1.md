@@ -39,7 +39,7 @@ This is a scheduled service (documented in <mcfile name="07_scheduler_flow2.md" 
 
 ### 1. Connection Establishment
 
-When a client connects to the SSE endpoint (`/api/sse/connect`):
+When a client connects to the SSE endpoint (`/api/user/sse/connect`):
 
 ```mermaid
 sequenceDiagram
@@ -50,7 +50,7 @@ sequenceDiagram
     participant DistributedConnectionManager
     participant CacheService
 
-    Client->>SseController: GET /api/sse/connect (userId, connectionId)
+    Client->>SseController: GET /api/user/sse/connect (userId, connectionId)
     SseController->>SseService: registerConnection(userId, connectionId)
     SseService->>SseConnectionManager: registerConnection(userId, connectionId)
     SseConnectionManager->>DistributedConnectionManager: registerConnection(userId, connectionId, podId)
@@ -100,7 +100,7 @@ sequenceDiagram
     participant UserConnectionCleanupService
 
     alt Client Disconnects
-        Client->>SseController: POST /api/sse/disconnect (userId, connectionId)
+        Client->>SseController: POST /api/user/sse/disconnect (userId, connectionId)
         SseController->>SseService: removeEventStream(userId, connectionId)
         SseService->>SseConnectionManager: removeEventStream(userId, connectionId)
         SseConnectionManager->>SseConnectionManager: Remove from in-memory maps

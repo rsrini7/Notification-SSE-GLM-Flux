@@ -1,1 +1,0 @@
-kubectl port-forward svc/broadcast-service -n broadcast-system 8081:8081

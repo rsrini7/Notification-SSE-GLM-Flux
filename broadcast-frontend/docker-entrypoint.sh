@@ -1,32 +1,34 @@
 #!/bin/sh
 
+# Default to 'prod' if NGINX_ENV is not set
 NGINX_ENV=${NGINX_ENV:-prod}
 echo "--- Starting Nginx in $NGINX_ENV mode ---"
 
+# Determine which config and cert files to use based on the environment
 if [ "$NGINX_ENV" = "dev" ]; then
-  RESOLVER_CONFIG="resolver 127.0.0.11;"
+  SOURCE_CONFIG="/etc/nginx/nginx.dev.conf"
   CERT_FILE_NAME="localhost.pem"
   KEY_FILE_NAME="localhost-key.pem"
 else
-  RESOLVER_CONFIG=""
+  SOURCE_CONFIG="/etc/nginx/nginx.prod.conf"
   CERT_FILE_NAME="tls.crt"
   KEY_FILE_NAME="tls.key"
 fi
 
-export BACKEND_URL
+DEST_CONFIG="/etc/nginx/nginx.conf"
+
+# Export variables so envsubst can find them
+export ADMIN_BACKEND_URL
+export USER_BACKEND_URL
 export CERT_FILE_NAME
 export KEY_FILE_NAME
-envsubst '$BACKEND_URL,$CERT_FILE_NAME,$KEY_FILE_NAME' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf.tmp
 
-awk -v resolver_config="$RESOLVER_CONFIG" '{
-  sub("##RESOLVER_DIRECTIVE##", resolver_config);
-  print
-}' /etc/nginx/nginx.conf.tmp > /etc/nginx/nginx.conf
-
-rm /etc/nginx/nginx.conf.tmp
+# Substitute environment variables in the chosen config file
+envsubst '$ADMIN_BACKEND_URL,$USER_BACKEND_URL,$CERT_FILE_NAME,$KEY_FILE_NAME' < "$SOURCE_CONFIG" > "$DEST_CONFIG"
 
 echo "--- Final Nginx Configuration ---"
-cat /etc/nginx/nginx.conf
+cat "$DEST_CONFIG"
 echo "---------------------------------"
 
+# Execute the main Nginx process
 exec nginx -g 'daemon off;'
