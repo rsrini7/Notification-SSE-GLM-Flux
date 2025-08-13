@@ -117,13 +117,15 @@ CREATE INDEX idx_user_preferences_user_id ON user_preferences (user_id);
 -- DLT Messages Table
 CREATE TABLE dlt_messages (
     id VARCHAR(255) PRIMARY KEY,
+    broadcast_id BIGINT,
     original_key VARCHAR(255),
     original_topic VARCHAR(255) NOT NULL,
     original_partition INT NOT NULL,
     original_offset BIGINT NOT NULL,
     exception_message TEXT,
     failed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    original_message_payload TEXT
+    original_message_payload TEXT,
+    UNIQUE (broadcast_id, original_key)
 );
 CREATE INDEX idx_dlt_failed_at ON dlt_messages (failed_at);
 

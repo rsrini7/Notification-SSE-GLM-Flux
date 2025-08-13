@@ -25,6 +25,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -83,15 +84,15 @@ public class DltService {
             payloadJson = "{\"error\":\"Could not serialize payload\"}";
         }
 
-        // NEW LOGIC: Differentiate between a user-specific and a group failure.
+        // Differentiate between a user-specific and a group failure.
         if (failedEvent.getUserId() != null) {
-            // --- PATH FOR "SELECTED" USERS ---
+            // FOR "SELECTED" USERS ---
             displayTitle = String.format("Failed event for user %s (Broadcast: %d)",
                     failedEvent.getUserId(), failedEvent.getBroadcastId());
             // This marks the specific user's message record as FAILED.
             handleProcessingFailure(failedEvent);
         } else {
-            // --- NEW PATH FOR "ALL" / "ROLE" USERS ---
+            // FOR "ALL" / "ROLE" USERS ---
             displayTitle = String.format("Failed group broadcast event (Broadcast: %d)",
                     failedEvent.getBroadcastId());
             // Call the new, separately transacted method to update the status
@@ -103,6 +104,7 @@ public class DltService {
         log.error("DLT Received Message. Key: {}, Topic: {}, Reason: {}.", key, originalTopic, displayTitle);
         DltMessage dltMessage = DltMessage.builder()
                 .id(UUID.randomUUID().toString())
+                .broadcastId(failedEvent.getBroadcastId())
                 .originalKey(key)
                 .originalTopic(originalTopic)
                 .originalPartition(originalPartition)
@@ -112,11 +114,17 @@ public class DltService {
                 .failedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .originalMessagePayload(payloadJson)
                 .build();
-        dltRepository.save(dltMessage);
-
-        // testingConfigurationService.clearFailureMark(failedEvent.getBroadcastId());
-        // log.info("Cleared DLT failure mark for broadcast ID: {}", failedEvent.getBroadcastId());
-
+        
+         try {
+            // This is the main change: wrap the save in a try-catch block
+            dltRepository.save(dltMessage);
+            log.info("Saved new DLT message for broadcast ID: {}", failedEvent.getBroadcastId());
+        } catch (DataIntegrityViolationException e) {
+            // This is the expected exception for the 2nd and 3rd pods.
+            // It means a DLT record for this broadcastId already exists.
+            log.warn("Ignoring duplicate DLT message for broadcast ID: {}. A record already exists.", failedEvent.getBroadcastId());
+        }
+                
         acknowledgment.acknowledge();
     }
     

@@ -13,6 +13,7 @@ import java.time.ZonedDateTime;
 @AllArgsConstructor
 public class DltMessage {
     private String id;
+    private Long broadcastId;
     private String originalKey; // ADD THIS FIELD
     private String originalTopic;
     private int originalPartition;
