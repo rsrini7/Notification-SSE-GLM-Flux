@@ -2,8 +2,7 @@ package com.example.broadcast.admin.controller;
 
 import com.example.broadcast.shared.service.TestingConfigurationService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-
+import lombok.extern.slf4j.Slf4j; // ADD THIS IMPORT
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,7 +19,7 @@ public class TestingAdminController {
     @PostMapping("/kafka-consumer-failure")
     public ResponseEntity<Void> setKafkaConsumerFailure(@RequestBody Map<String, Boolean> request) {
         boolean enabled = request.getOrDefault("enabled", false);
-        log.info("setKafkaConsumerFailure set request: {}", enabled);
+        log.info("Received request to set DLT Test Mode. Enabled: {}", enabled);
         testingConfigurationService.setArm(enabled);
         return ResponseEntity.ok().build();
     }
@@ -28,7 +27,7 @@ public class TestingAdminController {
     @GetMapping("/kafka-consumer-failure")
     public ResponseEntity<Map<String, Boolean>> getKafkaConsumerFailure() {
         boolean isEnabled = testingConfigurationService.isArmed();
-        log.info("setKafkaConsumerFailure get request: {}", isEnabled);
+        log.info("Received request to get DLT Test Mode status. Currently Enabled: {}", isEnabled);
         return ResponseEntity.ok(Map.of("enabled", isEnabled));
     }
 }
