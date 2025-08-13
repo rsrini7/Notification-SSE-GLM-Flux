@@ -7,12 +7,14 @@ import { userService, type UserBroadcastMessage } from '../services/api';
 interface UseBroadcastMessagesOptions {
   userId: string;
   autoConnect?: boolean;
+  onForcedDisconnect?: (userId: string) => void;
 }
 
 export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const {
     userId,
-    autoConnect = true
+    autoConnect = true,
+    onForcedDisconnect 
   } = options;
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,6 +59,11 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
             });
             // Call disconnect with the new force flag
             sseConnection.disconnect(true); 
+
+            // NEW: If the callback exists, call it to trigger the panel's removal
+            if (onForcedDisconnect) {
+              onForcedDisconnect(userId);
+            }
           }
 
           setMessages(prev => {
@@ -94,7 +101,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
       default:
         console.log('Unhandled SSE event type:', event.type);
     }
-  }, [toast, userId]);
+  }, [toast, userId, onForcedDisconnect]);
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });

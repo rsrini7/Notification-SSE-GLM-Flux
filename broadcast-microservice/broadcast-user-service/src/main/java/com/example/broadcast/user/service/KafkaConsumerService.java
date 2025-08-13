@@ -95,48 +95,38 @@ public class KafkaConsumerService {
             }
 
             log.info("Received group broadcast event for broadcast ID: {}", event.getBroadcastId());
-
-            if (event.getEventType().equals(EventType.CANCELLED.name()) || event.getEventType().equals(EventType.EXPIRED.name())) {
-                List<String> onlineUsers = cacheService.getOnlineUsers();
-                log.info("Fanning out group lifecycle event {} for broadcast {} to {} online users.", event.getEventType(), event.getBroadcastId(), onlineUsers.size());
-                for (String userId : onlineUsers) {
-                    MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
-                    handleEvent(userEvent); // This will route to SseService to push a 'MESSAGE_REMOVED' event
-                }
-                acknowledgment.acknowledge();
-                return; // Exit early
-            }
-
-            // 2. Synchronously update the cache to prevent race conditions for new connections.
+            
             Optional<BroadcastMessage> broadcastOpt = broadcastRepository.findById(event.getBroadcastId());
-
             if (broadcastOpt.isEmpty()) {
                 log.warn("Broadcast {} was not found. It may have been cancelled or expired. Acknowledging message.", event.getBroadcastId());
                 acknowledgment.acknowledge();
                 return;
             }
-            
             BroadcastMessage broadcast = broadcastOpt.get();
 
-            // Determine target users (this part is unchanged)
-            List<String> targetUserIds;
-            if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
-                targetUserIds = userService.getAllUserIds();
-            } else if (Constants.TargetType.ROLE.name().equals(broadcast.getTargetType())) {
-                targetUserIds = broadcast.getTargetIds().stream()
-                    .flatMap(role -> userService.getUserIdsByRole(role).stream())
-                    .distinct()
-                    .collect(Collectors.toList());
-            } else {
-                targetUserIds = Collections.emptyList();
+            // CHANGED: Logic for lifecycle events (EXPIRED, CANCELLED) is now more robust
+            if (event.getEventType().equals(EventType.CANCELLED.name()) || event.getEventType().equals(EventType.EXPIRED.name())) {
+                // Determine the full list of targeted users for this group broadcast
+                List<String> allTargetedUsers = determineAllTargetedUsers(broadcast);
+                log.info("Fanning out group lifecycle event {} for broadcast {} to all {} originally targeted users (online or offline).", event.getEventType(), event.getBroadcastId(), allTargetedUsers.size());
+                
+                // Perform cleanup and notify for EVERY targeted user
+                for (String userId : allTargetedUsers) {
+                    MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
+                    handleEvent(userEvent); // This will route to handleBroadcastExpired/Cancelled to clean up the cache
+                }
+                acknowledgment.acknowledge();
+                return; // Exit early
             }
-            
-            // Deliver to online users and update stats (this part is unchanged)
+
+            // Logic for CREATED events remains the same
             List<String> onlineUsers = cacheService.getOnlineUsers();
+            List<String> targetUserIds = determineAllTargetedUsers(broadcast);
+            
             List<String> usersToNotify = targetUserIds.stream()
                 .filter(onlineUsers::contains)
                 .collect(Collectors.toList());
-            
+
             log.info("Delivering group broadcast {} to {} online users out of {} total targets.", event.getBroadcastId(), usersToNotify.size(), targetUserIds.size());
             for (String userId : usersToNotify) {
                 MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
@@ -154,6 +144,21 @@ public class KafkaConsumerService {
             log.error("Failed to process group message from topic {}. Root cause: {}", topic, e.getMessage(), e);
             throw new MessageProcessingException("Failed to process group message", e, event);
         }
+    }
+
+    /**
+     * NEW HELPER METHOD: Centralizes the logic for determining all users targeted by a group broadcast.
+     */
+    private List<String> determineAllTargetedUsers(BroadcastMessage broadcast) {
+        if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
+            return userService.getAllUserIds();
+        } else if (Constants.TargetType.ROLE.name().equals(broadcast.getTargetType())) {
+            return broadcast.getTargetIds().stream()
+                .flatMap(role -> userService.getUserIdsByRole(role).stream())
+                .distinct()
+                .collect(Collectors.toList());
+        }
+        return Collections.emptyList();
     }
 
     private void processBroadcastEvent(

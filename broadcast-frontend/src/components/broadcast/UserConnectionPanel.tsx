@@ -9,7 +9,11 @@ import { useBroadcastMessages } from '../../hooks/useBroadcastMessages';
 import { type UserBroadcastMessage } from '../../services/api';
 
 // A self-contained panel for a single user's connection and messages
-const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string) => void }> = ({ userId, onRemove }) => {
+const UserConnectionPanel: React.FC<{ 
+  userId: string; 
+  onRemove: (userId: string) => void 
+  onForcedDisconnect: (userId: string) => void;
+}> = ({ userId, onRemove, onForcedDisconnect }) => {
   const { toast } = useToast();
   const {
     messages,
@@ -17,7 +21,11 @@ const UserConnectionPanel: React.FC<{ userId: string; onRemove: (userId: string)
     stats,
     sseConnection,
     actions,
-  } = useBroadcastMessages({ userId, autoConnect: true });
+  } = useBroadcastMessages({ 
+    userId, 
+    autoConnect: true,
+    onForcedDisconnect: onForcedDisconnect
+ });
 
   const toggleConnection = () => {
     if (sseConnection.connected) {

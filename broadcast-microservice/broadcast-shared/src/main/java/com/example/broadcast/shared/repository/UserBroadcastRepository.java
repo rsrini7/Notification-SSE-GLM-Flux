@@ -226,6 +226,19 @@ public class UserBroadcastRepository {
         return jdbcTemplate.update(sql, newStatus, broadcastId);
     }
 
+     /**
+     * NEW METHOD: Updates all user messages for a broadcast (both PENDING and DELIVERED) to a new status.
+     * This is used during expiration to ensure consistency for all targeted users.
+     */
+    public int updateNonFinalStatusesByBroadcastId(Long broadcastId, String newStatus) {
+        String sql = """
+            UPDATE user_broadcast_messages 
+            SET delivery_status = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE broadcast_id = ? AND delivery_status IN ('PENDING', 'DELIVERED')
+        """;
+        return jdbcTemplate.update(sql, newStatus, broadcastId);
+    }
+
     public List<Long> findActiveBroadcastIdsByUserId(String userId) {
         String sql = "SELECT broadcast_id FROM user_broadcast_messages WHERE user_id = ? AND delivery_status = 'DELIVERED'";
         return jdbcTemplate.queryForList(sql, Long.class, userId);

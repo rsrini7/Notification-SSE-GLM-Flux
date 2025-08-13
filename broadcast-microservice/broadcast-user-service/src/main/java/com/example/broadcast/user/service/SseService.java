@@ -223,10 +223,10 @@ public class SseService {
             
             sseConnectionManager.sendEvent(userId, sse);
 
-            if ("Force Logoff".equalsIgnoreCase(response.getCategory())) {
-                log.warn("Force Logoff message delivered to user {}. Terminating their connection.", userId);
-                sseConnectionManager.removeEventStream(userId, sseConnectionManager.getConnectionIdForUser(userId));
-            }
+            // if ("Force Logoff".equalsIgnoreCase(response.getCategory())) {
+            //     log.warn("Force Logoff message delivered to user {}. Terminating their connection.", userId);
+            //     sseConnectionManager.removeEventStream(userId, sseConnectionManager.getConnectionIdForUser(userId));
+            // }
         } catch (JsonProcessingException e) {
             log.error("Error delivering message to user as SSE", e);
         }

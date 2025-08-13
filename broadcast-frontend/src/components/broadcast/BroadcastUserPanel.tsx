@@ -61,7 +61,7 @@ const BroadcastUserPanel: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {users.map(userId => (
-          <UserConnectionPanel key={userId} userId={userId} onRemove={removeUser} />
+          <UserConnectionPanel key={userId} userId={userId} onRemove={removeUser} onForcedDisconnect={removeUser} />
         ))}
       </div>
     </div>
