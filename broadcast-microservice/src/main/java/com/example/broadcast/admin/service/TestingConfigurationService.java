@@ -1,64 +1,72 @@
 package com.example.broadcast.admin.service;
 
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
+
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class TestingConfigurationService {
 
-    // This Set stores the ID of the broadcast that is designated to fail.
-    private final Set<Long> failingBroadcastIds = ConcurrentHashMap.newKeySet();
-    
-    // This flag "arms" the system to capture the next broadcast ID.
-    private final AtomicBoolean armed = new AtomicBoolean(false);
+    private final RedisTemplate<String, String> stringRedisTemplate;
 
-    /**
-     * Called by the controller to arm or disarm the failure test.
-     */
+    private static final String DLT_FAILURE_IDS_KEY = "dlt-failure:broadcast-ids";
+    private static final String DLT_ARMED_KEY = "dlt-failure:armed";
+
+    @PostConstruct
+    public void checkBean() {
+        // This log will run once on startup and tell us exactly what kind of bean was injected.
+        log.info("[DEBUG-REDIS] Injected RedisTemplate bean of class: {}", stringRedisTemplate.getClass().getName());
+    }
+
     public void setArm(boolean shouldArm) {
-        this.armed.set(shouldArm);
-    }
-
-    /**
-     * Called by the controller to check the current armed state for the UI.
-     */
-    public boolean isArmed() {
-        return this.armed.get();
-    }
-
-    /**
-     * Called by the broadcast creation service. It atomically checks if the system
-     * is armed and, if so, consumes the state so it only happens once.
-     * @return true if the system was armed.
-     */
-    public boolean consumeArmedState() {
-        return this.armed.getAndSet(false);
-    }
-
-    /**
-     * Marks a specific broadcast ID for failure simulation.
-     */
-    public void markBroadcastForFailure(Long broadcastId) {
-        if (broadcastId != null) {
-            failingBroadcastIds.add(broadcastId);
+        log.info("[DEBUG-REDIS] Attempting to set 'armed' status to: {}", shouldArm);
+        if (shouldArm) {
+            stringRedisTemplate.opsForValue().set(DLT_ARMED_KEY, "true");
+            // VERIFICATION STEP: Immediately read the key back
+            String verification = stringRedisTemplate.opsForValue().get(DLT_ARMED_KEY);
+            log.info("[DEBUG-REDIS] Read-after-write verification for 'armed' key. Result: '{}'", verification);
+        } else {
+            stringRedisTemplate.delete(DLT_ARMED_KEY);
+            log.info("[DEBUG-REDIS] Deleted 'armed' key.");
         }
     }
 
-    /**
-     * Checks if a given broadcast ID is marked for failure.
-     */
-    public boolean isMarkedForFailure(Long broadcastId) {
-        return broadcastId != null && failingBroadcastIds.contains(broadcastId);
+    public boolean isArmed() {
+        return Boolean.TRUE.equals(stringRedisTemplate.hasKey(DLT_ARMED_KEY));
     }
 
-    /**
-     * Clears the failure mark for a broadcast ID after it's been handled by the DLT.
-     */
+    public boolean consumeArmedState() {
+        log.info("[DEBUG-REDIS] Attempting to consume 'armed' key...");
+        boolean wasArmed = stringRedisTemplate.opsForValue().getAndDelete(DLT_ARMED_KEY) != null;
+        log.info("[DEBUG-REDIS] Consumed 'armed' key. Was present: {}", wasArmed);
+        return wasArmed;
+    }
+
+    public void markBroadcastForFailure(Long broadcastId) {
+        if (broadcastId != null) {
+            log.info("[DEBUG-REDIS] Attempting to mark broadcast ID {} for failure...", broadcastId);
+            stringRedisTemplate.opsForSet().add(DLT_FAILURE_IDS_KEY, String.valueOf(broadcastId));
+            // VERIFICATION STEP: Immediately check if the member was added
+            boolean isMember = Boolean.TRUE.equals(stringRedisTemplate.opsForSet().isMember(DLT_FAILURE_IDS_KEY, String.valueOf(broadcastId)));
+            log.info("[DEBUG-REDIS] Read-after-write verification for broadcast ID {}. Is member: {}", broadcastId, isMember);
+        }
+    }
+
+    public boolean isMarkedForFailure(Long broadcastId) {
+        if (broadcastId == null) {
+            return false;
+        }
+        return Boolean.TRUE.equals(stringRedisTemplate.opsForSet().isMember(DLT_FAILURE_IDS_KEY, String.valueOf(broadcastId)));
+    }
+
     public void clearFailureMark(Long broadcastId) {
         if (broadcastId != null) {
-            failingBroadcastIds.remove(broadcastId);
+            stringRedisTemplate.opsForSet().remove(DLT_FAILURE_IDS_KEY, String.valueOf(broadcastId));
         }
     }
 }
