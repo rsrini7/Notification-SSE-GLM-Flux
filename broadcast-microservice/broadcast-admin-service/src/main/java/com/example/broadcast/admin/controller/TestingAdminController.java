@@ -2,6 +2,8 @@ package com.example.broadcast.admin.controller;
 
 import com.example.broadcast.shared.service.TestingConfigurationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,22 +12,23 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/admin/testing")
 @RequiredArgsConstructor
+@Slf4j
 public class TestingAdminController {
 
-    private final TestingConfigurationService testingConfigService;
+    private final TestingConfigurationService testingConfigurationService;
 
     @PostMapping("/kafka-consumer-failure")
     public ResponseEntity<Void> setKafkaConsumerFailure(@RequestBody Map<String, Boolean> request) {
         boolean enabled = request.getOrDefault("enabled", false);
-        // Use the new arming method
-        testingConfigService.setArm(enabled);
+        log.info("setKafkaConsumerFailure set request: {}", enabled);
+        testingConfigurationService.setArm(enabled);
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/kafka-consumer-failure")
     public ResponseEntity<Map<String, Boolean>> getKafkaConsumerFailure() {
-        // Return the current armed state
-        boolean isEnabled = testingConfigService.isArmed();
+        boolean isEnabled = testingConfigurationService.isArmed();
+        log.info("setKafkaConsumerFailure get request: {}", isEnabled);
         return ResponseEntity.ok(Map.of("enabled", isEnabled));
     }
 }

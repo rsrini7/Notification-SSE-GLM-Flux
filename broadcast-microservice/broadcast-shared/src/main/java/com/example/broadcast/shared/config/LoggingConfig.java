@@ -38,9 +38,9 @@ public class LoggingConfig {
             return chain.filter(exchange)
                 .then(Mono.fromRunnable(() -> {
                     // Log the outgoing response
-                    if (log.isDebugEnabled()) {
+                    if (log.isTraceEnabled()) {
                         long duration = System.currentTimeMillis() - startTime;
-                        log.debug("Outgoing response: {} {} - {} in {}ms", 
+                        log.trace("Outgoing response: {} {} - {} in {}ms", 
                             method,
                             path,
                             exchange.getResponse().getStatusCode(),
