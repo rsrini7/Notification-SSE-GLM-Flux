@@ -1,0 +1,27 @@
+sequenceDiagram
+    participant AdminUI as Admin UI
+    participant AdminSvc as Admin Service
+    participant DB as PostgreSQL DB
+    participant Scheduler as BroadcastSchedulingService
+    participant Kafka as Kafka Broker
+    
+    AdminUI->>+AdminSvc: 1. POST /api/admin/broadcasts<br/>(with future scheduled_at)
+    AdminSvc->>+DB: 2. INSERT to broadcast_messages<br/>(status = 'SCHEDULED')
+    DB-->>-AdminSvc: Success
+    AdminSvc-->>-AdminUI: 3. Returns 200 OK
+    
+    Note over AdminUI, Scheduler: ... Time passes ...
+    
+    loop Every 1 Minute
+        Scheduler->>+DB: 4. SELECT * FROM broadcast_messages<br/>WHERE status='SCHEDULED' AND scheduled_at <= now()
+        DB-->>-Scheduler: Returns due broadcasts
+    end
+    
+    Scheduler->>+AdminSvc: 5. processScheduledBroadcast()
+    
+    Note over AdminSvc, DB: 6. DB Transaction Begins
+    AdminSvc->>DB: UPDATE broadcast_messages<br/>SET status = 'ACTIVE'
+    AdminSvc->>DB: INSERT to outbox_events (type='CREATED')
+    Note over AdminSvc, DB: Transaction Commits
+    
+    Note over AdminSvc, Kafka: 7. Delivery now proceeds via the<br/>Outbox Poller and Kafka as shown in the<br/>"Immediate Broadcast" diagram.

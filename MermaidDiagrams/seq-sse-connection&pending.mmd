@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant UserUI as User UI (Browser)
+    participant UserSvc as User Service
+    participant SseSvc as SSE Service
+    participant Redis as Redis Cache
+    
+    UserUI->>+UserSvc: 1. GET /api/user/sse/connect
+    UserSvc->>+SseSvc: 2. createEventStream()
+    SseSvc->>+Redis: 3. Register Connection<br/>(in 'user-conn:*' & 'online-users')
+    Redis-->>-SseSvc: Success
+    
+    Note over SseSvc, Redis: 4. Check for messages missed while offline
+    SseSvc->>+Redis: Get pending events? (from 'pending-evt:<userId>')
+    Redis-->>-SseSvc: Returns list of pending events
+    
+    loop For each pending event
+        SseSvc->>UserUI: 5. Push pending message via SSE
+    end
+    
+    SseSvc->>+Redis: 6. DELETE processed pending events
+    Redis-->>-SseSvc: Success
+    SseSvc-->>-UserSvc: Returns Event Stream to controller
+    UserSvc-->>-UserUI: 7. Connection established (200 OK)
+    
+    Note over UserUI, SseSvc: 8. SSE connection remains open for<br/>new real-time messages and heartbeats.

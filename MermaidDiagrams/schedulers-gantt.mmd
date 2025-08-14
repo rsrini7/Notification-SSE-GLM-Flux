@@ -1,0 +1,20 @@
+gantt
+    title Application Schedulers Overview
+    dateFormat  HH:mm:ss
+    axisFormat  %M:%S
+
+    section Outbox Polling Service - High Frequency
+    Poll 1 (repeats every 2s) :crit, 00:00:00, 2s
+    Poll 2                      :crit, 00:00:02, 2s
+    Poll 3                      :crit, 00:00:04, 2s
+    And so on...                :      00:00:06, 54s
+
+    section SSE Heartbeat - Pod Local
+    Heartbeat Cycle 1 (repeats every 30s) :active, 00:00:30, 5s
+    Heartbeat Cycle 2                     :active, 00:01:00, 5s
+    Heartbeat Cycle 3                     :active, 00:01:30, 5s
+
+    section Cluster-Wide Jobs - Once per Minute
+    Check for Due Broadcasts      : 00:01:00, 5s
+    Check for Expired Broadcasts  : 00:01:05, 5s
+    Clean Up Stale SSE Connections: 00:01:10, 5s

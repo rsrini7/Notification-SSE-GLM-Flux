@@ -1,0 +1,19 @@
+stateDiagram-v2
+    direction LR
+    [*] --> SCHEDULED: Admin creates broadcast <br/> with future start time
+
+    SCHEDULED --> ACTIVE: Scheduling Service job runs <br/> (scheduled_at time passes)
+    
+    state ACTIVE {
+        direction LR
+        [*] --> IMMEDIATE: Admin creates broadcast <br/> for immediate delivery
+        IMMEDIATE --> [*]
+    }
+    
+    ACTIVE --> EXPIRED: Expiration Service job runs <br/> (expires_at time passes)
+    ACTIVE --> CANCELLED: Admin cancels broadcast via API
+    ACTIVE --> FAILED: DLT event for a group <br/> broadcast is consumed
+    
+    EXPIRED --> [*]
+    CANCELLED --> [*]
+    FAILED --> [*]

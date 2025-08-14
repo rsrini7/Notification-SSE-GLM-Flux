@@ -1,0 +1,32 @@
+sequenceDiagram
+    participant User as User (Browser)
+    participant UI as React UI
+    participant UserService as User Service
+    participant DB as PostgreSQL DB
+    participant Redis as Redis Cache
+    participant Kafka as Kafka Broker
+
+    User->>+UI: 1. Clicks "Mark Read"
+
+    UI->>+UserService: 2. POST /api/user/messages/read <br/> (userId, broadcastId)
+
+    Note over UserService, DB: 3. Synchronous Database & Cache Updates
+    UserService->>+DB: UPDATE user_broadcast_messages <br/> SET read_status='READ'
+    DB-->>-UserService: Success
+    UserService->>+DB: UPDATE broadcast_statistics <br/> (increment read_count)
+    DB-->>-UserService: Success
+    UserService->>+Redis: REMOVE message from 'user-msg:[userId]' cache
+    Redis-->>-UserService: Success
+    
+    Note over UserService, Kafka: 4. Asynchronous Confirmation via Outbox
+    UserService->>+DB: INSERT into outbox_events <br/> (type='READ')
+    DB-->>-UserService: Success
+    
+    UserService-->>-UI: 5. Returns 200 OK (immediate response)
+    UI-->>-User: UI updates optimistically
+
+    Note right of Kafka: ... Outbox Poller runs ...
+
+    Kafka->>+UserService: 6. Delivers READ event to Consumer
+    UserService->>+UI: 7. Pushes SSE Event <br/> (type='READ_RECEIPT')
+    UI-->>-User: 8. Confirmation received (optional UI update)
