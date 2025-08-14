@@ -44,33 +44,33 @@ graph TD
     class RedisCache redis
     
     %% PRIMARY FLOW: IMMEDIATE BROADCAST
-    AdminUser -->|1. Creates Broadcast| ReactUI
-    ReactUI -->|2. POST /api/admin/broadcasts| AdminController
+    AdminUser -->|1- Creates Broadcast| ReactUI
+    ReactUI -->|2- POST /api/admin/broadcasts| AdminController
     AdminController --> LifecycleService
-    LifecycleService -->|3. DB Transaction| PostgresDB
-    OutboxPoller -->|4. Polls & Locks Events| PostgresDB
-    OutboxPoller -->|5. Publishes CREATED Event| Kafka
-    Kafka -->|6. Delivers Event| KafkaConsumer
-    KafkaConsumer -->|7. Checks Online Status| RedisCache
-    KafkaConsumer -->|8a. Forwards to SSE Service| SseService
-    SseService -->|9a. Pushes Message via SSE| ReactUI
+    LifecycleService -->|3- DB Transaction| PostgresDB
+    OutboxPoller -->|4- Polls & Locks Events| PostgresDB
+    OutboxPoller -->|5- Publishes CREATED Event| Kafka
+    Kafka -->|6- Delivers Event| KafkaConsumer
+    KafkaConsumer -->|7- Checks Online Status| RedisCache
+    KafkaConsumer -->|8a- Forwards to SSE Service| SseService
+    SseService -->|9a- Pushes Message via SSE| ReactUI
     SseService -->|Updates Status to DELIVERED| PostgresDB
-    KafkaConsumer -->|8b. Caches Pending Event| RedisCache
+    KafkaConsumer -->|8b- Caches Pending Event| RedisCache
     
     %% SECONDARY FLOWS
-    ReactUI -->|A. DELETE broadcasts Cancel| AdminController
+    ReactUI -->|A- DELETE broadcasts Cancel| AdminController
     AdminController --> LifecycleService
     LifecycleService -->|Publishes CANCELLED Event via Outbox| OutboxPoller
     KafkaConsumer --> SseService
     
-    ReactUI -->|B. POST messages read| UserController
+    ReactUI -->|B- POST messages read| UserController
     UserController -->|Updates DB creates Outbox event| PostgresDB
     OutboxPoller -->|Publishes READ Event| Kafka
     KafkaConsumer -->|Pushes READ_RECEIPT via SSE| SseService
     
-    KafkaConsumer -->|C. Message Processing Fails| Kafka
+    KafkaConsumer -->|C- Message Processing Fails| Kafka
     Kafka -->|Routes to DLT| DltListener
     DltListener -->|Consumes from DLT stores in DB| PostgresDB
     
-    SchedulingService -->|D. Activates due broadcasts| PostgresDB
-    ExpirationService -->|E. Expires old broadcasts| PostgresDB
+    SchedulingService -->|D- Activates due broadcasts| PostgresDB
+    ExpirationService -->|E- Expires old broadcasts| PostgresDB

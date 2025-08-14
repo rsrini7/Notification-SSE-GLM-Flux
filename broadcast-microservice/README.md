@@ -204,19 +204,19 @@ graph TD
 
 
     %% Happy Path: Broadcast Creation and Delivery
-    UI -- 1. POST /api/admin/broadcasts --> Nginx
-    Nginx -- 2. Proxies Request --> AdminController
-    AdminController -- 3. createBroadcast --> LifecycleService
-    LifecycleService -- "4. DB Transaction" --> Postgres
+    UI -- 1- POST /api/admin/broadcasts --> Nginx
+    Nginx -- 2- Proxies Request --> AdminController
+    AdminController -- 3- createBroadcast --> LifecycleService
+    LifecycleService -- "4- DB Transaction" --> Postgres
     Postgres -- "Saves to broadcast_messages & outbox_events" --> LifecycleService
-    OutboxPoller -- 5. Polls for new events --> Postgres
-    OutboxPoller -- 6. Publishes Event --> KafkaTopic
-    KafkaConsumer -- 7. Consumes Event --> KafkaTopic
-    KafkaConsumer -- 8. Is user online? --> Redis
-    KafkaConsumer -- 9a. If Online --> SseService
-    SseService -- "10. Pushes SSE Event" --> UI
+    OutboxPoller -- 5- Polls for new events --> Postgres
+    OutboxPoller -- 6- Publishes Event --> KafkaTopic
+    KafkaConsumer -- 7- Consumes Event --> KafkaTopic
+    KafkaConsumer -- 8- Is user online? --> Redis
+    KafkaConsumer -- 9a- If Online --> SseService
+    SseService -- "10- Pushes SSE Event" --> UI
     SseService -- "Updates Status to DELIVERED" --> Postgres
-    KafkaConsumer -- 9b. If Offline --> Redis
+    KafkaConsumer -- 9b- If Offline --> Redis
     Redis -- "Caches in pending-evt:<userId>" --> KafkaConsumer
     
     %% User Reconnection Path
@@ -226,12 +226,12 @@ graph TD
     SseService -- "Pushes pending messages via SSE" --> UI
 
     %% DLT Path: Failure and Redrive
-    KafkaConsumer -- "A. Processing Fails" --> KafkaConsumer
-    KafkaConsumer -- "B. After Retries, sends to DLT" --> KafkaDLT
-    DltService -- "C. Consumes from DLT" --> KafkaDLT
-    DltService -- "D. Saves to dlt_messages table" --> Postgres
-    UI -- "E. Admin clicks 'Redrive'" --> Nginx
-    Nginx -- "F. POST /api/admin/dlt/redrive" --> DltService
-    DltService -- "G. Resets message status" --> Postgres
-    DltService -- "H. Re-publishes original event" --> KafkaTopic
+    KafkaConsumer -- "A- Processing Fails" --> KafkaConsumer
+    KafkaConsumer -- "B- After Retries, sends to DLT" --> KafkaDLT
+    DltService -- "C- Consumes from DLT" --> KafkaDLT
+    DltService -- "D- Saves to dlt_messages table" --> Postgres
+    UI -- "E- Admin clicks 'Redrive'" --> Nginx
+    Nginx -- "F- POST /api/admin/dlt/redrive" --> DltService
+    DltService -- "G- Resets message status" --> Postgres
+    DltService -- "H- Re-publishes original event" --> KafkaTopic
 ```
