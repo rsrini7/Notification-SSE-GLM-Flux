@@ -44,7 +44,9 @@ A modern React frontend for the Broadcast Messaging System, built with Vite, Typ
     This will support only max 6 user connections including admin.
     Navigate to `https://localhost:3000`
 
-    Navigate to `https://localhost` for nginx http2 support for more than 6 parallel http connections test from browser.
+    Navigate to `https://localhost` for nginx http2 support for more than 6 parallel http connections test from browser for local / docker compose.
+
+    Navigate to `https://localhost:30443` for nginx http2 support for more than 6 parallel http connections test from browser if the app deployed to k8s.
 
 ## Available Scripts
 
@@ -77,20 +79,22 @@ broadcast-frontend/
 
 The frontend is configured to connect to a Java backend:
 
-- **Development**: `https://localhost:8081`
+- **Development**: 
+    - Admin Service: `https://localhost:8081` 
+    - User Service : `https://localhost:8082`
 
 ### API Endpoints Used
 
--   `GET /api/broadcasts` - Get all broadcasts.
--   `POST /api/broadcasts` - Create a new broadcast.
--   `DELETE /api/broadcasts/{id}` - Cancel a broadcast.
--   `GET /api/broadcasts/{id}/stats` - Get broadcast statistics.
+-   `GET /api/admin/broadcasts` - Get all broadcasts.
+-   `POST /api/admin/broadcasts` - Create a new broadcast.
+-   `DELETE /api/admin/broadcasts/{id}` - Cancel a broadcast.
+-   `GET /api/admin/broadcasts/{id}/stats` - Get broadcast statistics.
 -   `GET /api/user/messages` - Get user messages.
 -   `POST /api/user/sse/read` - Mark a message as read.
--   `GET /api/dlt/messages` - Get all messages from the Dead Letter Topic.
--   `POST /api/dlt/redrive/{id}` - Re-process a failed message from the DLT.
--   `DELETE /api/dlt/delete/{id}` - Delete a message from the DLT.
--   `DELETE /api/dlt/purge/{id}` - Permanently purge a message from the DLT and Kafka.
+-   `GET /api/admin/dlt/messages` - Get all messages from the Dead Letter Topic.
+-   `POST /api/admin/dlt/redrive/{id}` - Re-process a failed message from the DLT.
+-   `DELETE /api/admin/dlt/delete/{id}` - Delete a message from the DLT.
+-   `DELETE /api/admin/dlt/purge/{id}` - Permanently purge a message from the DLT and Kafka.
 
 ## Components
 
