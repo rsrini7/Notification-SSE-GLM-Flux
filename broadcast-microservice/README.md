@@ -51,6 +51,7 @@ A high-performance Java microservice for the Broadcast Messaging System, built w
 - **broadcast_statistics**: Performance metrics
 - **dlt_messages**: Dead Letter Topic for failed messages
 - **outbox_events**: Outbox table for event sourcing
+- **shedlock**:  Shedlock table to prevent duplicate execution of scheduled tasks across multiple application instances
 
 ## Scaling Guide
 
@@ -83,23 +84,28 @@ A high-performance Java microservice for the Broadcast Messaging System, built w
 -   `http://localhost:8083` - H2 Console
 -   `jdbc:h2:mem:broadcastdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL` - JDBC URL
 -   `sa` - Username
--   `password` - Password
+-   `` - Password
 
 ## Backend Project Structure
 
 ```
 broadcast-microservice/
-├── KUBERNETES_GUIDE.md
-├── k8s/              # Kubernetes deployment configurations
-│   ├── base/         # Base Kubernetes manifests
-│   └── overlays/     # Environment-specific Kubernetes overlays
-├── pom.xml           # Maven project file
-└── src/
-    ├── main/
-    │   ├── java/     # Main Java source code
-    │   └── resources/ # Application resources (e.g., application.yml, static files)
-    └── test/
-        └── scala/    # Test source code (if any Scala tests are present)
+├── KUBERNETES_GUIDE.md               # Kubernetes deployment guide
+├── README.md                         # Project documentation
+├── gen-p12.bat                       # Certificate generation script
+├── pom.xml                           # Main Maven project file
+├── broadcast-admin-service/          # Admin service module
+│   ├── Dockerfile                    # Docker configuration
+│   ├── pom.xml                       # Admin service Maven file
+│   ├── src/                          # Source code
+├── broadcast-shared/                 # Shared module
+│   ├── pom.xml                       # Shared module Maven file
+│   ├── src/                          # Shared source code
+├── broadcast-user-service/           # User service module
+│   ├── pom.xml                       # User service Maven file
+│   ├── src/                          # Source code
+│   └── ...                           # Similar structure to admin service
+└── docs/                             # Documentation
 ```
 
 ## Development
@@ -108,13 +114,14 @@ broadcast-microservice/
 
 ```bash
 # Generate SSL keystore for the microservice
-keytool -genkeypair -alias netty -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore broadcast-microservice/src/main/resources/keystore.p12 -validity 3650 -storepass password -keypass password -dname "CN=localhost, OU=IT, O=MyCompany, L=Bangalore, ST=Karnataka, C=IN"
+gen-p12.bat
 
-# Start with Redis profile
-mvn spring-boot:run -Dspring-boot.run.profiles=redis
+# Start with Postgres profile
+mvn spring-boot:run "-Dspring-boot.run.profiles=pg-dev"
 
-# Build and run with Redis profile
-mvn clean package && java "-Dspring.profiles.active=redis" -jar target/broadcast-microservice-1.0.0.jar
+# Build and run with Postgres profile
+mvn clean package && java "-Dspring.profiles.active=pg-dev" -jar target/broadcast-admin-service-1.0.0.jar
+mvn clean package && java "-Dspring.profiles.active=pg-dev" -jar target/broadcast-user-service-1.0.0.jar
 ```
 
 ## Deployment
@@ -149,199 +156,82 @@ mvn gatling:test
 ### System Design Diagram Backend
 ```mermaid
 graph TD
-    subgraph "User Interface"
-        A[Web Browser] -- "HTTP/HTTPS" --> B(Nginx Reverse Proxy)
+    subgraph "User Interaction & Frontend"
+        AdminUser[Admin User]
+        UI[React Frontend App]
+        AdminUser -- Manages Broadcasts --> UI
     end
 
-    subgraph "Frontend (React/Vite)"
-        B -- "Proxies to" --> C(broadcast-frontend)
-        C -- "Real-time SSE" --> D(broadcast-microservice)
-        C -- "REST API" --> D
+    subgraph "Entry & Caching"
+        Nginx[Nginx Reverse Proxy]
+        Redis[Redis Cache]
     end
 
-    subgraph "Backend (Java/Spring Boot/Netty)"
-        D(broadcast-microservice) -- "Publishes Events" --> E(Kafka Broker)
-        D -- "Reads/Writes" --> F(Postgres Database)
-        D -- "Caches Data" --> G(Redis Cache)
+    subgraph "Backend: Admin Service"
+        AdminController[BroadcastAdminController]
+        LifecycleService[BroadcastLifecycleService]
+        DltService[DltService]
+        OutboxPoller["OutboxPollingService (Scheduled)"]
     end
 
-    subgraph "Event Streaming"
-        E -- "Consumes/Produces" --> D
-        E -- "DLT" --> H(Dead Letter Topic)
+    subgraph "Backend: User Service"
+        UserController[UserMessageController & SseController]
+        KafkaConsumer[KafkaConsumerService]
+        SseService[SseService]
     end
 
-    subgraph "Data Storage"
-        F -- "Stores Broadcasts, User Messages" --> D
+    subgraph "Data & Eventing Infrastructure"
+        KafkaTopic[Kafka Topic broadcast-events-selected/group]
+        KafkaDLT[Kafka DLT...-dlt]
+        Postgres[PostgreSQL Database]
     end
 
-    subgraph "Caching"
-        G -- "High-Performance Caching" --> D
-    end
+    %% Styles
+    style AdminUser fill:#d4edff,stroke:#333
+    style UI fill:#d4edff,stroke:#333
+    style Nginx fill:#e2f0d9,stroke:#333
+    style AdminController fill:#fff2cc,stroke:#333
+    style LifecycleService fill:#fff2cc,stroke:#333
+    style DltService fill:#f8d7da,stroke:#333
+    style OutboxPoller fill:#fff2cc,stroke:#333
+    style UserController fill:#fff2cc,stroke:#333
+    style KafkaConsumer fill:#fff2cc,stroke:#333
+    style SseService fill:#fff2cc,stroke:#333
+    style Postgres fill:#d6d8db,stroke:#333
+    style Redis fill:#f5c6cb,stroke:#333
+    style KafkaTopic fill:#cce5ff,stroke:#333
+    style KafkaDLT fill:#f8d7da,stroke:#333
 
-    subgraph "Monitoring & Observability"
-        D -- "Metrics, Logs, Traces" --> I(Monitoring System)
-    end
 
-    subgraph "Deployment (Kubernetes)"
-        J(Kubernetes Cluster) -- "Deploys" --> D
-        J -- "Manages" --> F
-        J -- "Manages" --> E
-        J -- "Manages" --> G
-    end
+    %% Happy Path: Broadcast Creation and Delivery
+    UI -- 1. POST /api/admin/broadcasts --> Nginx
+    Nginx -- 2. Proxies Request --> AdminController
+    AdminController -- 3. createBroadcast --> LifecycleService
+    LifecycleService -- "4. DB Transaction" --> Postgres
+    Postgres -- "Saves to broadcast_messages & outbox_events" --> LifecycleService
+    OutboxPoller -- 5. Polls for new events --> Postgres
+    OutboxPoller -- 6. Publishes Event --> KafkaTopic
+    KafkaConsumer -- 7. Consumes Event --> KafkaTopic
+    KafkaConsumer -- 8. Is user online? --> Redis
+    KafkaConsumer -- 9a. If Online --> SseService
+    SseService -- "10. Pushes SSE Event" --> UI
+    SseService -- "Updates Status to DELIVERED" --> Postgres
+    KafkaConsumer -- 9b. If Offline --> Redis
+    Redis -- "Caches in pending-evt:<userId>" --> KafkaConsumer
+    
+    %% User Reconnection Path
+    UI -- "User Connects" --> UserController
+    UserController -- "Calls on connect" --> SseService
+    SseService -- "Gets pending messages" --> Redis
+    SseService -- "Pushes pending messages via SSE" --> UI
 
-    A -.-> K(Admin User)
-    K -- "Manages Broadcasts" --> C
-
-    classDef default fill:#fff,stroke:#333,stroke-width:2px;
-    classDef database fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef cache fill:#ff9,stroke:#333,stroke-width:2px;
-    classDef eventstream fill:#9ff,stroke:#333,stroke-width:2px;
-    classDef deployment fill:#9f9,stroke:#333,stroke-width:2px;
-
-    class F database;
-    class G cache;
-    class E eventstream;
-    class J deployment;
-
-    click A "Web Browser"
-    click B "nginx.conf"
-    click C "broadcast-frontend"
-    click D "broadcast-microservice"
-    click E "Kafka Broker"
-    click F "Postgres Database"
-    click G "Redis Cache"
-    click H "Dead Letter Topic"
-    click I "Monitoring System"
-    click J "Kubernetes Cluster"
-    click K "Admin User"
-```
-
-### Code Map Backend
-```mermaid
-graph TD
-    subgraph broadcast_frontend_src_App_tsx [src/App.tsx]
-        App_tsx_App(App) -- "Uses" --> App_tsx_useBroadcastManagement(useBroadcastManagement)
-        App_tsx_App -- "Uses" --> App_tsx_useBroadcastMessages(useBroadcastMessages)
-        App_tsx_App -- "Uses" --> App_tsx_useSseConnection(useSseConnection)
-        App_tsx_App -- "Renders" --> App_tsx_BroadcastAdminPanel(BroadcastAdminPanel)
-        App_tsx_App -- "Renders" --> App_tsx_BroadcastUserPanel(BroadcastUserPanel)
-    end
-
-    subgraph broadcast_frontend_src_main_tsx [src/main.tsx]
-        main_tsx_main(main) -- "Renders" --> broadcast_frontend_src_App_tsx
-    end
-
-    subgraph broadcast_frontend_src_hooks_useBroadcastManagement_ts [src/hooks/useBroadcastManagement.ts]
-        useBroadcastManagement_ts_useBroadcastManagement(useBroadcastManagement) -- "Calls" --> broadcast_frontend_src_services_api_ts_api(api)
-    end
-
-    subgraph broadcast_frontend_src_hooks_useBroadcastMessages_ts [src/hooks/useBroadcastMessages.ts]
-        useBroadcastMessages_ts_useBroadcastMessages(useBroadcastMessages) -- "Calls" --> broadcast_frontend_src_services_api_ts_api(api)
-    end
-
-    subgraph broadcast_frontend_src_hooks_useSseConnection_ts [src/hooks/useSseConnection.ts]
-        useSseConnection_ts_useSseConnection(useSseConnection) -- "Connects to" --> broadcast_microservice_sse_endpoint(SSE Endpoint)
-    end
-
-    subgraph broadcast_frontend_src_services_api_ts [src/services/api.ts]
-        api_ts_api(api) -- "Makes HTTP Requests" --> broadcast_microservice_rest_endpoints(REST Endpoints)
-    end
-
-    subgraph broadcast_frontend_src_components_broadcast_BroadcastAdminPanel_tsx [src/components/broadcast/BroadcastAdminPanel.tsx]
-        BroadcastAdminPanel_tsx_BroadcastAdminPanel(BroadcastAdminPanel) -- "Uses" --> useBroadcastManagement_ts_useBroadcastManagement
-        BroadcastAdminPanel_tsx_BroadcastAdminPanel -- "Renders" --> BroadcastCreationForm_tsx_BroadcastCreationForm(BroadcastCreationForm)
-        BroadcastAdminPanel_tsx_BroadcastAdminPanel -- "Renders" --> BroadcastManagementList_tsx_BroadcastManagementList(BroadcastManagementList)
-        BroadcastAdminPanel_tsx_BroadcastAdminPanel -- "Renders" --> DltManagementPanel_tsx_DltManagementPanel(DltManagementPanel)
-    end
-
-    subgraph broadcast_frontend_src_components_broadcast_BroadcastUserPanel_tsx [src/components/broadcast/BroadcastUserPanel.tsx]
-        BroadcastUserPanel_tsx_BroadcastUserPanel(BroadcastUserPanel) -- "Uses" --> useBroadcastMessages_ts_useBroadcastMessages
-        BroadcastUserPanel_tsx_BroadcastUserPanel -- "Uses" --> useUserPanelManager_ts_useUserPanelManager(useUserPanelManager)
-    end
-
-    subgraph broadcast_frontend_src_components_broadcast_BroadcastCreationForm_tsx [src/components/broadcast/BroadcastCreationForm.tsx]
-        BroadcastCreationForm_tsx_BroadcastCreationForm(BroadcastCreationForm) -- "Submits to" --> api_ts_api
-    end
-
-    subgraph broadcast_frontend_src_components_broadcast_BroadcastManagementList_tsx [src/components/broadcast/BroadcastManagementList.tsx]
-        BroadcastManagementList_tsx_BroadcastManagementList(BroadcastManagementList) -- "Manages" --> api_ts_api
-    end
-
-    subgraph broadcast_frontend_src_components_broadcast_DltManagementPanel_tsx [src/components/broadcast/DltManagementPanel.tsx]
-        DltManagementPanel_tsx_DltManagementPanel(DltManagementPanel) -- "Manages DLT" --> api_ts_api
-    end
-
-    subgraph broadcast_frontend_src_hooks_useUserPanelManager_ts [src/hooks/useUserPanelManager.ts]
-        useUserPanelManager_ts_useUserPanelManager(useUserPanelManager) -- "Manages User State" --> api_ts_api
-    end
-
-    subgraph broadcast_microservice_src_main_java_com_example_controller [broadcast-microservice/src/main/java/com/example/controller]
-        Controller_BroadcastController(BroadcastController) -- "Handles" --> broadcast_microservice_rest_endpoints
-        Controller_BroadcastController -- "Publishes" --> Kafka_Producer(Kafka Producer)
-        Controller_BroadcastController -- "Interacts with" --> Service_BroadcastService(BroadcastService)
-    end
-
-    subgraph broadcast_microservice_src_main_java_com_example_service [broadcast-microservice/src/main/java/com/example/service]
-        Service_BroadcastService(BroadcastService) -- "Manages Business Logic" --> Repository_BroadcastRepository(BroadcastRepository)
-        Service_BroadcastService -- "Sends to" --> Kafka_Producer
-        Service_BroadcastService -- "Uses" --> Redis_Cache(Redis Cache)
-    end
-
-    subgraph broadcast_microservice_src_main_java_com_example_repository [broadcast-microservice/src/main/java/com/example/repository]
-        Repository_BroadcastRepository(BroadcastRepository) -- "Interacts with" --> Postgres_DB(Postgres DB)
-    end
-
-    subgraph broadcast_microservice_src_main_java_com_example_kafka [broadcast-microservice/src/main/java/com/example/kafka]
-        Kafka_Consumer(Kafka Consumer) -- "Consumes from" --> Kafka_Broker(Kafka Broker)
-        Kafka_Consumer -- "Processes" --> Service_BroadcastService
-    end
-
-    subgraph broadcast_microservice_src_main_java_com_example_sse [broadcast-microservice/src/main/java/com/example/sse]
-        SSE_Handler(SSE Handler) -- "Delivers Events" --> broadcast_microservice_sse_endpoint
-        SSE_Handler -- "Uses" --> Service_BroadcastService
-    end
-
-    classDef file fill:#fff,stroke:#333,stroke-width:2px;
-    classDef component fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef hook fill:#ff9,stroke:#333,stroke-width:2px;
-    classDef service fill:#9ff,stroke:#333,stroke-width:2px;
-    classDef backend_component fill:#cfc,stroke:#333,stroke-width:2px;
-
-    class broadcast_frontend_src_App_tsx file;
-    class broadcast_frontend_src_main_tsx file;
-    class broadcast_frontend_src_hooks_useBroadcastManagement_ts hook;
-    class broadcast_frontend_src_hooks_useBroadcastMessages_ts hook;
-    class broadcast_frontend_src_hooks_useSseConnection_ts hook;
-    class broadcast_frontend_src_services_api_ts service;
-    class broadcast_frontend_src_components_broadcast_BroadcastAdminPanel_tsx component;
-    class broadcast_frontend_src_components_broadcast_BroadcastUserPanel_tsx component;
-    class broadcast_frontend_src_components_broadcast_BroadcastCreationForm_tsx component;
-    class broadcast_frontend_src_components_broadcast_BroadcastManagementList_tsx component;
-    class broadcast_frontend_src_components_broadcast_DltManagementPanel_tsx component;
-    class broadcast_frontend_src_hooks_useUserPanelManager_ts hook;
-
-    class Controller_BroadcastController backend_component;
-    class Service_BroadcastService backend_component;
-    class Repository_BroadcastRepository backend_component;
-    class Kafka_Consumer backend_component;
-    class Kafka_Producer backend_component;
-    class SSE_Handler backend_component;
-
-    click broadcast_frontend_src_App_tsx "broadcast-frontend/src/App.tsx"
-    click broadcast_frontend_src_main_tsx "broadcast-frontend/src/main.tsx"
-    click broadcast_frontend_src_hooks_useBroadcastManagement_ts "broadcast-frontend/src/hooks/useBroadcastManagement.ts"
-    click broadcast_frontend_src_hooks_useBroadcastMessages_ts "broadcast-frontend/src/hooks/useBroadcastMessages.ts"
-    click broadcast_frontend_src_hooks_useSseConnection_ts "broadcast-frontend/src/hooks/useSseConnection.ts"
-    click broadcast_frontend_src_services_api_ts "broadcast-frontend/src/services/api.ts"
-    click broadcast_frontend_src_components_broadcast_BroadcastAdminPanel_tsx "broadcast-frontend/src/components/broadcast/BroadcastAdminPanel.tsx"
-    click broadcast_frontend_src_components_broadcast_BroadcastUserPanel_tsx "broadcast-frontend/src/components/broadcast/BroadcastUserPanel.tsx"
-    click broadcast_frontend_src_components_broadcast_BroadcastCreationForm_tsx "broadcast-frontend/src/components/broadcast/BroadcastCreationForm.tsx"
-    click broadcast_frontend_src_components_broadcast_BroadcastManagementList_tsx "broadcast-frontend/src/components/broadcast/BroadcastManagementList.tsx"
-    click broadcast_frontend_src_components_broadcast_DltManagementPanel_tsx "broadcast-frontend/src/components/broadcast/DltManagementPanel.tsx"
-    click broadcast_frontend_src_hooks_useUserPanelManager_ts "broadcast-frontend/src/hooks/useUserPanelManager.ts"
-    click broadcast_microservice_src_main_java_com_example_controller "broadcast-microservice/src/main/java/com/example/controller"
-    click broadcast_microservice_src_main_java_com_example_service "broadcast-microservice/src/main/java/com/example/service"
-    click broadcast_microservice_src_main_java_com_example_repository "broadcast-microservice/src/main/java/com/example/repository"
-    click broadcast_microservice_src_main_java_com_example_kafka "broadcast-microservice/src/main/java/com/example/kafka"
-    click broadcast_microservice_src_main_java_com_example_sse "broadcast-microservice/src/main/java/com/example/sse"
+    %% DLT Path: Failure and Redrive
+    KafkaConsumer -- "A. Processing Fails" --> KafkaConsumer
+    KafkaConsumer -- "B. After Retries, sends to DLT" --> KafkaDLT
+    DltService -- "C. Consumes from DLT" --> KafkaDLT
+    DltService -- "D. Saves to dlt_messages table" --> Postgres
+    UI -- "E. Admin clicks 'Redrive'" --> Nginx
+    Nginx -- "F. POST /api/admin/dlt/redrive" --> DltService
+    DltService -- "G. Resets message status" --> Postgres
+    DltService -- "H. Re-publishes original event" --> KafkaTopic
 ```
