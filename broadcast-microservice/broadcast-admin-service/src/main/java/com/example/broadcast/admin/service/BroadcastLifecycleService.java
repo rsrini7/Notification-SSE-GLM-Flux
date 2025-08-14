@@ -79,7 +79,7 @@ public class BroadcastLifecycleService {
             log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
         }
 
-        return triggerBroadcast(broadcast);
+        return triggerCreateBroadcastEvent(broadcast);
     }
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
@@ -89,7 +89,7 @@ public class BroadcastLifecycleService {
         broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
         broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
         broadcastRepository.update(broadcast);
-        triggerBroadcast(broadcast);
+        triggerCreateBroadcastEvent(broadcast);
     }
 
     @Transactional
@@ -102,7 +102,7 @@ public class BroadcastLifecycleService {
         int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
         log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
 
-        publishLifecycleEvent(broadcast, Constants.EventType.CANCELLED, "Broadcast CANCELLED");
+        triggerCancelOrExpireBroadcastEvent(broadcast, Constants.EventType.CANCELLED, "Broadcast CANCELLED");
         
         cacheService.evictActiveGroupBroadcastsCache();
         
@@ -126,7 +126,7 @@ public class BroadcastLifecycleService {
             int updatedCount = userBroadcastRepository.updateNonFinalStatusesByBroadcastId(broadcastId, Constants.DeliveryStatus.SUPERSEDED.name());
             log.info("Updated {} PENDING or DELIVERED user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
             
-            publishLifecycleEvent(broadcast, Constants.EventType.EXPIRED, "Broadcast EXPIRED");
+            triggerCancelOrExpireBroadcastEvent(broadcast, Constants.EventType.EXPIRED, "Broadcast EXPIRED");
             
             cacheService.evictActiveGroupBroadcastsCache();
 
@@ -139,7 +139,7 @@ public class BroadcastLifecycleService {
         }
     }
 
-    private BroadcastResponse triggerBroadcast(BroadcastMessage broadcast) {
+    private BroadcastResponse triggerCreateBroadcastEvent(BroadcastMessage broadcast) {
 
         String targetType = broadcast.getTargetType();
         int totalTargeted = 0;
@@ -205,7 +205,7 @@ public class BroadcastLifecycleService {
         return totalTargeted;
     }
 
-    private void publishLifecycleEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
+    private void triggerCancelOrExpireBroadcastEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
 
         String topicName = appProperties.getKafka().getTopic().getNameSelected();
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcast.getId());
@@ -226,12 +226,12 @@ public class BroadcastLifecycleService {
         } else if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) || Constants.TargetType.ROLE.name().equals(broadcast.getTargetType())) {
             // NEW LOGIC: If no user records exist, it's a group broadcast. Publish a single group event.
             log.info("Publishing group lifecycle event ({}) for broadcast {}", eventType.name(), broadcast.getId());
-            MessageDeliveryEvent eventPayload = createGroupLifecycleEvent(broadcast, eventType, message);
-            try {
-                String payloadJson = objectMapper.writeValueAsString(eventPayload);
-                outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, payloadJson));
-            } catch (JsonProcessingException e) {
-                log.error("Critical: Failed to serialize group lifecycle event payload for outbox for broadcast {}.", broadcast.getId(), e);
+        MessageDeliveryEvent eventPayload = createGroupLifecycleEvent(broadcast, eventType, message);
+        try {
+            String payloadJson = objectMapper.writeValueAsString(eventPayload);
+            outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, payloadJson));
+        } catch (JsonProcessingException e) {
+            log.error("Critical: Failed to serialize group lifecycle event payload for outbox for broadcast {}.", broadcast.getId(), e);
             }
         }
     }
