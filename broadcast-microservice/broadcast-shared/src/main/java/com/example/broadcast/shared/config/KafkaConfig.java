@@ -149,6 +149,15 @@ public class KafkaConfig {
     }
 
     @Bean
+    public NewTopic actionsBroadcastTopic() {
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameActions())
+                .partitions(3) // Actions are lower volume, so fewer partitions are fine
+                .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
+                .config("retention.ms", "604800000") // 7-day retention
+                .build();
+    }
+
+    @Bean
     public NewTopic selectedUsersDeadLetterTopic() {
         return TopicBuilder.name(appProperties.getKafka().getTopic().getNameSelected() + Constants.DLT_SUFFIX)
                 .partitions(1)
@@ -160,6 +169,15 @@ public class KafkaConfig {
     @Bean
     public NewTopic groupDeadLetterTopic() {
         return TopicBuilder.name(appProperties.getKafka().getTopic().getNameGroup() + Constants.DLT_SUFFIX)
+            .partitions(1)
+            .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
+            .config("retention.ms", "1209600000") // 14 days
+            .build();
+    }
+
+     @Bean
+    public NewTopic actionsDeadLetterTopic() {
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameActions() + Constants.DLT_SUFFIX)
             .partitions(1)
             .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
             .config("retention.ms", "1209600000") // 14 days

@@ -66,7 +66,13 @@ public class KafkaConsumerService {
             throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
         }
 
-        processBroadcastEvent(event, topic, partition, offset, acknowledgment);
+        try {
+            handleBroadcastCreated(event);
+            acknowledgment.acknowledge();
+        } catch (Exception e) {
+            log.error("Failed to process message for selected user. Root cause: {}", e.getMessage());
+            throw new MessageProcessingException("Failed to process message", e, event);
+        }
     }
     
     @KafkaListener(
@@ -102,24 +108,8 @@ public class KafkaConsumerService {
                 acknowledgment.acknowledge();
                 return;
             }
+
             BroadcastMessage broadcast = broadcastOpt.get();
-
-            // CHANGED: Logic for lifecycle events (EXPIRED, CANCELLED) is now more robust
-            if (event.getEventType().equals(EventType.CANCELLED.name()) || event.getEventType().equals(EventType.EXPIRED.name())) {
-                // Determine the full list of targeted users for this group broadcast
-                List<String> allTargetedUsers = determineAllTargetedUsers(broadcast);
-                log.info("Fanning out group lifecycle event {} for broadcast {} to all {} originally targeted users (online or offline).", event.getEventType(), event.getBroadcastId(), allTargetedUsers.size());
-                
-                // Perform cleanup and notify for EVERY targeted user
-                for (String userId : allTargetedUsers) {
-                    MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
-                    handleEvent(userEvent); // This will route to handleBroadcastExpired/Cancelled to clean up the cache
-                }
-                acknowledgment.acknowledge();
-                return; // Exit early
-            }
-
-            // Logic for CREATED events remains the same
             List<String> onlineUsers = cacheService.getOnlineUsers();
             List<String> targetUserIds = determineAllTargetedUsers(broadcast);
             
@@ -146,6 +136,38 @@ public class KafkaConsumerService {
         }
     }
 
+     /**
+     * NEW LISTENER: Dedicated consumer for all action events.
+     */
+    @KafkaListener(
+        topics = "${broadcast.kafka.topic.name.actions:broadcast-actions}",
+        groupId = "${broadcast.kafka.consumer.actions-group-id}",
+        containerFactory = "kafkaListenerContainerFactory"
+    )
+    public void processActionEvent(@Payload MessageDeliveryEvent event, Acknowledgment acknowledgment) {
+        log.debug("Processing ACTION event: {} for broadcast: {}", event.getEventType(), event.getBroadcastId());
+        try {
+            EventType eventType = EventType.valueOf(event.getEventType());
+            switch (eventType) {
+                case READ:
+                    handleMessageRead(event);
+                    break;
+                case CANCELLED:
+                    handleBroadcastCancelled(event);
+                    break;
+                case EXPIRED:
+                    handleBroadcastExpired(event);
+                    break;
+                default:
+                    log.warn("Unhandled event type on actions topic: {}", event.getEventType());
+            }
+            acknowledgment.acknowledge();
+        } catch (Exception e) {
+            log.error("Failed to process action event. Root cause: {}", e.getMessage(), e);
+            throw new MessageProcessingException("Failed to process action event", e, event);
+        }
+    }
+
     /**
      * NEW HELPER METHOD: Centralizes the logic for determining all users targeted by a group broadcast.
      */
@@ -159,53 +181,6 @@ public class KafkaConsumerService {
                 .collect(Collectors.toList());
         }
         return Collections.emptyList();
-    }
-
-    private void processBroadcastEvent(
-            MessageDeliveryEvent event,
-            String topic,
-            String partition,
-            long offset,
-            Acknowledgment acknowledgment) {
-        
-        try {
-            log.debug("Processing Kafka event: {} from topic: {}, partition: {}, offset: {}",
-                    event.getEventId(), topic, partition, offset);
-
-            handleEvent(event);
-            acknowledgment.acknowledge();
-
-        } catch (Exception e) {
-            log.error("Failed to process message from topic {}. Root cause: {}", topic, e.getMessage());
-            throw new MessageProcessingException("Failed to process message", e, event);
-        }
-    }
-
-    private void handleEvent(MessageDeliveryEvent event) {
-        EventType eventType;
-        try {
-            eventType = EventType.valueOf(event.getEventType());
-        } catch (Exception e) {
-            log.warn("Unknown or null event type: {}", event.getEventType());
-            throw new IllegalArgumentException("Invalid event type received", e);
-        }
-
-        switch (eventType) {
-            case CREATED:
-                handleBroadcastCreated(event);
-                break;
-            case READ:
-                handleMessageRead(event);
-                break;
-            case CANCELLED:
-                handleBroadcastCancelled(event);
-                break;
-            case EXPIRED:
-                handleBroadcastExpired(event);
-                break;
-            default:
-                log.warn("Unhandled event type: {}", event.getEventType());
-        }
     }
 
     private void handleBroadcastCreated(MessageDeliveryEvent event) {

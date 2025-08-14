@@ -1,1 +1,1 @@
-mvn spring-boot:run -Dspring-boot.run.profiles=dev-pg
+mvn spring-boot:run "-Dspring-boot.run.profiles=dev-pg"

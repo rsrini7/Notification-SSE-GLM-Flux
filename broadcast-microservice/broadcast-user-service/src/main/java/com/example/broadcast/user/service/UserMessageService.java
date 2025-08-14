@@ -1,6 +1,5 @@
 package com.example.broadcast.user.service;
 
-import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.dto.cache.UserMessageInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
@@ -41,7 +40,6 @@ public class UserMessageService {
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final MessageStatusService messageStatusService;
     private final CacheService cacheService;
-    private final AppProperties appProperties;
     private final UserService userService;
     private final BroadcastMapper broadcastMapper;
 
@@ -177,8 +175,7 @@ public class UserMessageService {
         broadcastStatisticsRepository.incrementReadCount(broadcastId);
         cacheService.removeMessageFromUserCache(userId, broadcastId);
         cacheService.removePendingEvent(userId, broadcastId);
-        String topicName = appProperties.getKafka().getTopic().getNameSelected();
-        messageStatusService.publishReadEvent(broadcastId, userId, topicName);
+        messageStatusService.publishReadEvent(broadcastId, userId);
         
         log.info("Successfully processed 'mark as read' for broadcast {} for user {} and published READ event.", broadcastId, userId);
     }

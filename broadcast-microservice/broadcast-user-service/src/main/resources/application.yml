@@ -44,13 +44,12 @@ spring:
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      # Each consumer instance gets a unique ID for scaling, based on the pod name or a random UUID
       group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
       auto-offset-reset: earliest
       properties:
-        spring.json.trusted.packages: "*"
-        max.poll.records: 500
-        fetch.max.wait.ms: 1000
+        '[spring.json.trusted.packages]': "*"
+        '[max.poll.records]': 500
+        '[fetch.max.wait.ms]': 1000
     listener:
       ack-mode: MANUAL_IMMEDIATE
       concurrency: 3
@@ -82,11 +81,11 @@ management:
 # Logging Configuration
 logging:
   level:
-    com.example.broadcast: DEBUG
-    org.springframework.kafka: WARN
-    org.springframework.web: INFO
-    org.springframework.jdbc: INFO
-    io.github.resilience4j: INFO
+    '[com.example.broadcast]': DEBUG
+    '[org.springframework.kafka]': WARN
+    '[org.springframework.web]': INFO
+    '[org.springframework.jdbc]': INFO
+    '[io.github.resilience4j]': INFO
     '[org.apache.kafka.clients.admin.AdminClientConfig]': WARN
     '[org.apache.kafka.clients.consumer.ConsumerConfig]': WARN
     '[org.apache.kafka.clients.producer.ProducerConfig]': WARN
@@ -121,7 +120,7 @@ broadcast:
   cache:
     user-connections:
       maximum-size: 50000
-      expire-after-write: PT1H
+      expire-after-access: PT1H
     user-messages:
       maximum-size: 100000
       expire-after-write: PT24H
@@ -139,11 +138,13 @@ broadcast:
     topic:
       name-selected: broadcast-events-selected
       name-group: broadcast-events-group
+      name-actions: broadcast-actions
       partitions: 10
       replication-factor: 1
     consumer:
       selected-group-id: "broadcast-selected-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
       group-group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
+      actions-group-id: "broadcast-actions-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
       dlt-group-id: broadcast-dlt-group
     retry:
       max-attempts: 3

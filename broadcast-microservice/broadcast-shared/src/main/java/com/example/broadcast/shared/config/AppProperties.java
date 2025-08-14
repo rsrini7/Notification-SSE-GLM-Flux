@@ -46,7 +46,6 @@ public class AppProperties {
         public static class UserConnections {
             @Positive
             private int maximumSize = 50000;
-            // CHANGED: Using expireAfterAccess for a sliding expiration
             @NotNull
             private Duration expireAfterAccess = Duration.ofMinutes(30);
         }
@@ -88,6 +87,8 @@ public class AppProperties {
             private String nameSelected = "broadcast-events-selected";
             @NotBlank
             private String nameGroup = "broadcast-events-group";
+            @NotBlank
+            private String nameActions = "broadcast-actions";
             @Positive
             private int partitions = 10;
             @Positive
@@ -96,6 +97,12 @@ public class AppProperties {
 
         @Data
         public static class Consumer {
+            @NotBlank
+            private String selectedGroupId = "broadcast-selected-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}";
+            @NotBlank
+            private String groupGroupId = "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}";
+            @NotBlank
+            private String actionsGroupId = "broadcast-actions-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}";
             @NotBlank
             private String dltGroupId = "broadcast-dlt-group";
         }

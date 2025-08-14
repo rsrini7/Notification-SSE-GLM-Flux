@@ -47,17 +47,17 @@ spring:
       acks: all
       retries: 3
       properties:
-        enable.idempotence: true
-        max.in.flight.requests.per.connection: 5
+        '[enable.idempotence]': true
+        '[max.in.flight.requests.per.connection]': 5
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       group-id: ${broadcast.kafka.consumer.dlt-group-id}
       auto-offset-reset: earliest
       properties:
-        spring.json.trusted.packages: "*"
-        max.poll.records: 500
-        fetch.max.wait.ms: 1000
+        '[spring.json.trusted.packages]': "*"
+        '[max.poll.records]': 500
+        '[fetch.max.wait.ms]': 1000
     listener:
       ack-mode: MANUAL_IMMEDIATE
       concurrency: 3
@@ -89,11 +89,11 @@ management:
 # Logging Configuration
 logging:
   level:
-    com.example.broadcast: DEBUG
-    org.springframework.kafka: WARN
-    org.springframework.web: INFO
-    org.springframework.jdbc: INFO
-    io.github.resilience4j: INFO
+    '[com.example.broadcast]': DEBUG
+    '[org.springframework.kafka]': WARN
+    '[org.springframework.web]': INFO
+    '[org.springframework.jdbc]': INFO
+    '[io.github.resilience4j]': INFO
     '[org.apache.kafka.clients.admin.AdminClientConfig]': WARN
     '[org.apache.kafka.clients.consumer.ConsumerConfig]': WARN
     '[org.apache.kafka.clients.producer.ProducerConfig]': WARN
@@ -150,7 +150,7 @@ broadcast:
   cache:
     user-connections:
       maximum-size: 50000
-      expire-after-write: PT1H
+      expire-after-access: PT1H
     user-messages:
       maximum-size: 100000
       expire-after-write: PT24H
@@ -168,6 +168,7 @@ broadcast:
     topic:
       name-selected: broadcast-events-selected
       name-group: broadcast-events-group
+      name-actions: broadcast-actions
       partitions: 10
       replication-factor: 1
     consumer:

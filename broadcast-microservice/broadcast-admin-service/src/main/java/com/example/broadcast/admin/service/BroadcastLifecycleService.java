@@ -101,6 +101,7 @@ public class BroadcastLifecycleService {
 
         int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
         log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
+
         publishLifecycleEvent(broadcast, Constants.EventType.CANCELLED, "Broadcast CANCELLED");
         
         cacheService.evictActiveGroupBroadcastsCache();
@@ -205,7 +206,8 @@ public class BroadcastLifecycleService {
     }
 
     private void publishLifecycleEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
-        String topicName = getTopicName(broadcast.getTargetType());
+
+        String topicName = appProperties.getKafka().getTopic().getNameSelected();
         List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcast.getId());
 
         if (!userBroadcasts.isEmpty()) {
@@ -322,13 +324,6 @@ public class BroadcastLifecycleService {
                 .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .isFireAndForget(request.isFireAndForget())
                 .build();
-    }
-
-    private String getTopicName(String targetType) {
-        if (Constants.TargetType.SELECTED.name().equals(targetType)) {
-            return appProperties.getKafka().getTopic().getNameSelected();
-        }
-        return appProperties.getKafka().getTopic().getNameGroup();
     }
 
     /**

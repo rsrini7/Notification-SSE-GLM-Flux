@@ -4,12 +4,14 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
+
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -24,6 +26,7 @@ public class MessageStatusService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final OutboxEventPublisher outboxEventPublisher;
+    private final AppProperties appProperties;
 
     /**
      * Resets a message's status to PENDING in a new, independent transaction.
@@ -74,9 +77,7 @@ public class MessageStatusService {
      * It now checks if a UserBroadcastMessage record exists before publishing.
      */
     @Transactional
-    public void publishReadEvent(Long broadcastId, String userId, String topicName) {
-        // **CORRECTED LOGIC**: Only publish a READ event if a user-specific record exists.
-        // This prevents errors for group/global broadcasts which are delivered without a DB record.
+    public void publishReadEvent(Long broadcastId, String userId) {
         Optional<UserBroadcastMessage> userMessageOpt = userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcastId);
         
         if (userMessageOpt.isEmpty()) {
@@ -91,7 +92,8 @@ public class MessageStatusService {
                 .eventType(Constants.EventType.READ.name())
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
-                
+
+        String topicName = appProperties.getKafka().getTopic().getNameActions();
         outboxEventPublisher.publish(event, userId, Constants.EventType.READ.name(), topicName);
         log.info("Published READ event for user: {}, broadcast: {}", userId, broadcastId);
     }
