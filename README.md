@@ -23,71 +23,92 @@ The overall system architecture is designed for scalability and real-time perfor
 ### System Design Diagram
 ```mermaid
 graph TD
-    subgraph "User Interface"
-        A[Web Browser] -- "HTTP/HTTPS" --> B(Nginx Reverse Proxy)
+    subgraph "User & Admin UI"
+        AdminUser[Admin User]
+        ReactUI[React Frontend App]
     end
 
-    subgraph "Frontend (React/Vite)"
-        B -- "Proxies to" --> C(broadcast-frontend)
-        C -- "Real-time SSE" --> D(broadcast-microservice)
-        C -- "REST API" --> D
+    subgraph "Admin Service (broadcast-admin-service)"
+        AdminController[Admin API Controller]
+        LifecycleService[Broadcast Lifecycle Service]
+        DltListener[DLT Consumer Service]
+        
+        subgraph "Schedulers (run on one pod)"
+            OutboxPoller["Outbox Polling Service<br/>(every 2s)"]
+            SchedulingService["Scheduled Broadcast Service<br/>(every 1m)"]
+            ExpirationService["Broadcast Expiration Service<br/>(every 1m)"]
+        end
     end
 
-    subgraph "Backend (Java/Spring Boot/Netty)"
-        D(broadcast-microservice) -- "Publishes Events" --> E(Kafka Broker)
-        D -- "Reads/Writes" --> F(Postgres Database)
-        D -- "Caches Data" --> G(Redis Cache)
+    subgraph "User Service (broadcast-user-service)"
+        UserController[User API & SSE Controller]
+        KafkaConsumer[Kafka Message Consumer]
+        SseService[SSE Service & Connection Manager]
     end
 
-    subgraph "Event Streaming"
-        E -- "Consumes/Produces" --> D
-        E -- "DLT" --> H(Dead Letter Topic)
+    subgraph "Shared Infrastructure"
+        Kafka[("Kafka Broker <br/> - broadcast-events-selected <br/> - broadcast-events-group <br/> - ...-dlt")]
+        PostgresDB[("PostgreSQL DB <br/> - broadcast_messages <br/> - user_broadcast_messages <br/> - outbox_events <br/> - dlt_messages")]
+        RedisCache[("Redis Cache <br/> - online-users <br/> - pending-events <br/> - user-msg:<userId>")]
     end
 
-    subgraph "Data Storage"
-        F -- "Stores Broadcasts, User Messages" --> D
-    end
+    %% Styles for clarity
+    style AdminUser fill:#d4edff,stroke:#333
+    style ReactUI fill:#d4edff,stroke:#333
+    style AdminController fill:#fff2cc,stroke:#333
+    style LifecycleService fill:#fff2cc,stroke:#333
+    style DltListener fill:#f8d7da,stroke:#333
+    style OutboxPoller fill:#fff2cc,stroke:#333
+    style SchedulingService fill:#fff2cc,stroke:#333
+    style ExpirationService fill:#fff2cc,stroke:#333
+    style UserController fill:#e2f0d9,stroke:#333
+    style KafkaConsumer fill:#e2f0d9,stroke:#333
+    style SseService fill:#e2f0d9,stroke:#333
+    style Kafka fill:#cce5ff,stroke:#333
+    style PostgresDB fill:#d6d8db,stroke:#333
+    style RedisCache fill:#f5c6cb,stroke:#333
+    
+    %% --- PRIMARY FLOW: IMMEDIATE BROADCAST (Numbered Steps) ---
+    AdminUser -- "1. Creates Broadcast" --> ReactUI
+    ReactUI -- "2. POST /broadcasts" --> AdminController
+    AdminController --> LifecycleService
+    LifecycleService -- "3. DB Transaction" --> PostgresDB
+    OutboxPoller -- "4. Polls & Locks Events" --> PostgresDB
+    OutboxPoller -- "5. Publishes CREATED Event" --> Kafka
+    Kafka -- "6. Delivers Event" --> KafkaConsumer
+    KafkaConsumer -- "7. Checks Redis for User Status" --> OnlineCheck{8. Is User Online?}
 
-    subgraph "Caching"
-        G -- "High-Performance Caching" --> D
-    end
+    OnlineCheck -- "Yes" --> SseService
+    SseService -- "9a. Pushes Message via SSE" --> ReactUI
+    SseService -- "Updates Status to DELIVERED" --> PostgresDB
+    
+    OnlineCheck -- "No" --> RedisCache
+    RedisCache -- "9b. Caches Pending Event in <br/> pending-evt:<userId>" --> EndOfflinePath(( ))
+    style EndOfflinePath fill:#fff,stroke:#fff
 
-    subgraph "Monitoring & Observability"
-        D -- "Metrics, Logs, Traces" --> I(Monitoring System)
-    end
+    %% --- SECONDARY FLOWS (Lettered Steps) ---
 
-    subgraph "Deployment (Kubernetes)"
-        J(Kubernetes Cluster) -- "Deploys" --> D
-        J -- "Manages" --> F
-        J -- "Manages" --> E
-        J -- "Manages" --> G
-    end
+    %% Cancel Flow
+    ReactUI -- "A. DELETE /broadcasts/{id} (Cancel)" --> AdminController
+    AdminController -- "(Updates DB & creates Outbox event)" --> LifecycleService
+    LifecycleService -- "Publishes CANCELLED Event" --> OutboxPoller
+    KafkaConsumer -- "(Removes from Cache & Notifies UI)" --- SseService
+    
+    %% Mark as Read Flow
+    ReactUI -- "B. POST /messages/read" --> UserController
+    UserController -- "(Updates DB & creates Outbox event)" --> PostgresDB
+    OutboxPoller -- "Publishes READ Event" --> Kafka
+    KafkaConsumer -- "(Pushes READ_RECEIPT via SSE)" --> SseService
 
-    A -.-> K(Admin User)
-    K -- "Manages Broadcasts" --> C
-
-    classDef default fill:#fff,stroke:#333,stroke-width:2px;
-    classDef database fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef cache fill:#ff9,stroke:#333,stroke-width:2px;
-    classDef eventstream fill:#9ff,stroke:#333,stroke-width:2px;
-    classDef deployment fill:#9f9,stroke:#333,stroke-width:2px;
-
-    class F database;
-    class G cache;
-    class E eventstream;
-    class J deployment;
-
-    click A "Web Browser"
-    click B "nginx.conf"
-    click C "broadcast-frontend/README.md"
-    click D "broadcast-microservice/README.md"
-    click E "Kafka Broker"
-    click F "Postgres Database"
-    click G "Redis Cache"
-    click H "Dead Letter Topic"
-    click I "Monitoring System"
-    click J "Kubernetes Cluster"
-    click K "Admin User"
+    %% DLT Failure Flow
+    KafkaConsumer -- "C. Message Processing Fails" --> KafkaDLT[DLT Topic]
+    style KafkaDLT fill:#f8d7da,stroke:#333
+    KafkaDLT --> DltListener
+    DltListener -- "(Consumes from DLT & stores in DB)" --> PostgresDB
+    
+    %% Scheduler Flows
+    SchedulingService -- "D. Activates due broadcasts" --> PostgresDB
+    ExpirationService -- "E. Expires old broadcasts" --> PostgresDB
 ```
 
 ## License
