@@ -12,11 +12,9 @@ interface UseSseConnectionOptions {
   onError?: (error: any) => void;
 }
 
-// CHANGED: Renamed from SseConnectionState
 interface SseConnection {
   connected: boolean;
   connecting: boolean;
-  // CHANGED: Renamed from sessionId
   connectionId: string | null;
   error: string | null;
   reconnectAttempt: number;
@@ -38,7 +36,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const [state, setState] = useState<SseConnection>({
     connected: false,
     connecting: false,
-    // CHANGED: Renamed from sessionId
     connectionId: null,
     error: null,
     reconnectAttempt: 0
@@ -48,17 +45,16 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const BASE_RECONNECT_DELAY = 3000;
   const MAX_RECONNECT_DELAY = 300000;
 
-  const reconnectAttemptsRef = useRef(0);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  // CHANGED: Renamed from sessionIdRef
-  const connectionIdRef = useRef<string | null>(null);
+  // --- START OF FIX ---
+  // Use refs to hold the current state and callbacks to avoid stale closures
+  // and make dependency arrays stable.
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const onConnectRef = useRef(onConnect);
   const onDisconnectRef = useRef(onDisconnect);
   const onErrorRef = useRef(onError);
   const onMessageRef = useRef(onMessage);
-  const isForceDisconnectRef = useRef(false);
 
   useEffect(() => {
     onConnectRef.current = onConnect;
@@ -66,8 +62,14 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     onErrorRef.current = onError;
     onMessageRef.current = onMessage;
   }, [onConnect, onDisconnect, onError, onMessage]);
+  // --- END OF FIX ---
 
-  // CHANGED: Renamed from generateSessionId
+  const reconnectAttemptsRef = useRef(0);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectionIdRef = useRef<string | null>(null);
+  const isForceDisconnectRef = useRef(false);
+
   const generateConnectionId = useCallback(() => {
     return `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }, []);
@@ -84,8 +86,32 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
   }, [userId]);
 
+  // --- START OF FIX ---
+  // The 'disconnect' function is now stable and does not depend on 'state'.
+  const disconnect = useCallback((isForceDisconnect = false) => {
+    console.log(`[SSE - ${userId}] Disconnect called. Is force disconnect: ${isForceDisconnect}`);
+    isForceDisconnectRef.current = isForceDisconnect;
+    if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    if (connectionIdRef.current && !isForceDisconnect) {
+      navigator.sendBeacon(`${baseUrl}/sse/disconnect?userId=${userId}&connectionId=${connectionIdRef.current}`);
+    }
+    // Check the ref for the current connection state to avoid stale closures.
+    if (stateRef.current.connected) {
+      onDisconnectRef.current?.();
+    }
+    reconnectAttemptsRef.current = 0;
+    connectionIdRef.current = null;
+    setState({ connected: false, connecting: false, connectionId: null, error: null, reconnectAttempt: 0 });
+  }, [userId, baseUrl]); // Dependency array is now stable.
+
+  // The 'connect' function is now stable and does not depend on 'state'.
   const connect = useCallback(() => {
-    if (eventSourceRef.current || state.connecting) return;
+    // Use the ref to get the current state inside the function.
+    if (eventSourceRef.current || stateRef.current.connecting) return;
 
     reconnectAttemptsRef.current++;
     console.log(`[SSE - ${userId}] Attempting to connect... (Attempt ${reconnectAttemptsRef.current})`);
@@ -93,7 +119,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
 
     const newConnectionId = generateConnectionId();
     connectionIdRef.current = newConnectionId;
-    // CHANGED: URL parameter is now connectionId
     const sseUrl = `${baseUrl}/sse/connect?userId=${userId}&connectionId=${newConnectionId}`;
     
     eventSourceRef.current = new EventSource(sseUrl);
@@ -101,7 +126,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     eventSourceRef.current.onopen = () => {
       console.log(`[SSE - ${userId}] Connection successful. Connection ID: ${newConnectionId}`);
       reconnectAttemptsRef.current = 0;
-      // CHANGED: State field renamed
       setState(prev => ({ ...prev, connected: true, connecting: false, connectionId: newConnectionId, error: null, reconnectAttempt: 0 }));
       onConnectRef.current?.();
     };
@@ -134,28 +158,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         setState(prev => ({ ...prev, error: 'Max reconnection attempts reached.' }));
       }
     };
-  }, [userId, baseUrl, state.connecting, generateConnectionId, handleSseMessage]);
-
-  const disconnect = useCallback((isForceDisconnect = false) => {
-    console.log(`[SSE - ${userId}] Disconnect called. Is force disconnect: ${isForceDisconnect}`);
-    isForceDisconnectRef.current = isForceDisconnect;
-    if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    // CHANGED: Use connectionId in disconnect beacon
-    if (connectionIdRef.current && !isForceDisconnect) {
-      navigator.sendBeacon(`${baseUrl}/sse/disconnect?userId=${userId}&connectionId=${connectionIdRef.current}`);
-    }
-    if (state.connected) {
-      onDisconnectRef.current?.();
-    }
-    reconnectAttemptsRef.current = 0;
-    connectionIdRef.current = null;
-    // CHANGED: State field renamed
-    setState({ connected: false, connecting: false, connectionId: null, error: null, reconnectAttempt: 0 });
-  }, [userId, baseUrl, state.connected]);
+  }, [userId, baseUrl, generateConnectionId, handleSseMessage]); // 'disconnect' is removed as it's stable.
+  // --- END OF FIX ---
 
   const markAsRead = useCallback(async (broadcastId: number) => {
     if (!connectionIdRef.current) {
@@ -182,16 +186,19 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
   }, [userId, baseUrl]);
 
+  // --- START OF FIX ---
+  // Main effect to manage the connection lifecycle.
   useEffect(() => {
     if (autoConnect && userId) {
       connect();
     }
     
+    // The cleanup function will now call the stable version of disconnect.
     return () => {
       disconnect();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoConnect, userId]);
+  }, [autoConnect, userId, connect, disconnect]); // Dependencies 'connect' and 'disconnect' are now stable.
+  // --- END OF FIX ---
 
   return { ...state, connect, disconnect, markAsRead };
 };
