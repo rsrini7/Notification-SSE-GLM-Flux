@@ -1,0 +1,9 @@
+stateDiagram-v2
+    direction LR
+    [*] --> SCHEDULED: Create with future time
+    SCHEDULED --> PREPARING: Pre-computation window starts
+    PREPARING --> READY: User fetch completes
+    READY --> ACTIVE: scheduled_at time arrives
+    ACTIVE --> [*]: Expired or Cancelled
+    
+    [*] --> PREPARING: Create immediate broadcast

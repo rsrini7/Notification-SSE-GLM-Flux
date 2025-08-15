@@ -5,8 +5,8 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.repository.BroadcastRepository;
+import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
-import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.util.Constants;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.Collections;
 
 // "Scatter-Gather" pattern introduced to avoid the "thundering herd" problem.
 //  This class consumed by single "leader" pod using a static group ID.
@@ -34,7 +33,7 @@ import java.util.Collections;
 public class KafkaBroadcastOrchestratorService {
 
     private final BroadcastRepository broadcastRepository;
-    private final UserService userService;
+     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
     private final OutboxEventPublisher outboxEventPublisher;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
@@ -141,16 +140,11 @@ public class KafkaBroadcastOrchestratorService {
     }
 
     private List<String> determineAllTargetedUsers(BroadcastMessage broadcast) {
-        if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
-            return userService.getAllUserIds();
-        } else if (Constants.TargetType.ROLE.name().equals(broadcast.getTargetType())) {
-            return broadcast.getTargetIds().stream()
-                .flatMap(role -> userService.getUserIdsByRole(role).stream())
-                .distinct()
-                .collect(Collectors.toList());
-        }
-        return Collections.emptyList();
+        log.info("Orchestrator fetching pre-computed user list for broadcast ID: {}", broadcast.getId());
+        // This is now a fast, local database query.
+        return userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
     }
+
 
     private OutboxEvent createDeliveryOutboxEvent(BroadcastMessage broadcast, String userId, String topicName) {
         MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()

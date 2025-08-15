@@ -33,7 +33,7 @@ public class BroadcastSchedulingService {
     @SchedulerLock(name = "processScheduledBroadcasts", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     public void processScheduledBroadcasts() {
         log.info("Checking for scheduled broadcasts to process...");
-        List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findAndLockScheduledBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
+        List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findAndLockReadyBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
 
         if (broadcastsToProcess.isEmpty()) {
             log.info("No scheduled broadcasts to process at this time.");

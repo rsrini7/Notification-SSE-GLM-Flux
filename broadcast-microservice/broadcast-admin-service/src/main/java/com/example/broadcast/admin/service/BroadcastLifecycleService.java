@@ -13,6 +13,7 @@ import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
+import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
@@ -42,6 +43,7 @@ public class BroadcastLifecycleService {
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
+    private final UserBroadcastTargetRepository userBroadcastTargetRepository; 
     private final BroadcastTargetingService broadcastTargetingService;
     private final OutboxEventPublisher outboxEventPublisher;
     private final BroadcastMapper broadcastMapper;
@@ -73,7 +75,9 @@ public class BroadcastLifecycleService {
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
 
-        broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
+        // --- NEW FLOW FOR IMMEDIATE BROADCASTS ---
+        log.info("Creating immediate broadcast. Entering PREPARING state.");
+        broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
         broadcast = broadcastRepository.save(broadcast);
 
         if (isFailureTest) {
@@ -81,17 +85,28 @@ public class BroadcastLifecycleService {
             log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
         }
 
-        return triggerCreateBroadcastEvent(broadcast);
+        log.info("Starting synchronous user fetch for immediate broadcast ID: {}", broadcast.getId());
+        List<String> targetUserIds = broadcastTargetingService.determineAllTargetedUsers(broadcast);
+        log.info("Fetch complete for immediate broadcast {}. Found {} users.", broadcast.getId(), targetUserIds.size());
+        userBroadcastTargetRepository.batchInsert(broadcast.getId(), targetUserIds);
+
+        broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
+        broadcastRepository.update(broadcast);
+
+        return triggerCreateBroadcastEventFromPrefetchedUsers(broadcast, targetUserIds);
     }
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public void processScheduledBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
+        
         broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
         broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
         broadcastRepository.update(broadcast);
-        triggerCreateBroadcastEvent(broadcast);
+        
+        List<String> targetUserIds = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcastId);
+        triggerCreateBroadcastEventFromPrefetchedUsers(broadcast, targetUserIds);
     }
 
     @Transactional
@@ -108,6 +123,10 @@ public class BroadcastLifecycleService {
         // Trigger event logic is now handled correctly based on target type.
         triggerCancelOrExpireBroadcastEvent(broadcast, Constants.EventType.CANCELLED, "Broadcast CANCELLED");
         
+        // Clean up the pre-computed user list
+        int deletedCount = userBroadcastTargetRepository.deleteByBroadcastId(id);
+        log.info("Cleaned up {} pre-computed user targets for cancelled broadcast ID: {}", deletedCount, id);
+
         cacheService.evictActiveGroupBroadcastsCache();
         cacheService.evictBroadcastContent(id);
         log.info("Broadcast cancelled: {}. Published cancellation events to outbox and evicted caches.", id);
@@ -127,6 +146,10 @@ public class BroadcastLifecycleService {
             // Trigger event logic is now handled correctly based on target type.
             triggerCancelOrExpireBroadcastEvent(broadcast, Constants.EventType.EXPIRED, "Broadcast EXPIRED");
             
+            // Clean up the pre-computed user list
+            int deletedCount = userBroadcastTargetRepository.deleteByBroadcastId(broadcastId);
+            log.info("Cleaned up {} pre-computed user targets for expired broadcast ID: {}", deletedCount, broadcastId);
+
             cacheService.evictActiveGroupBroadcastsCache();
             cacheService.evictBroadcastContent(broadcastId);
 
@@ -136,7 +159,6 @@ public class BroadcastLifecycleService {
         }
     }
 
-    // NEW HELPER: Centralizes logic for publishing action events.
     private void triggerCancelOrExpireBroadcastEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
         // Case 1: For SELECTED users, we must fan-out user-specific events.
         if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
@@ -172,71 +194,80 @@ public class BroadcastLifecycleService {
         }
     }
 
-    private BroadcastResponse triggerCreateBroadcastEvent(BroadcastMessage broadcast) {
-
-        String targetType = broadcast.getTargetType();
-        int totalTargeted = 0;
-
-        if (Constants.TargetType.SELECTED.name().equals(targetType)) {
-            totalTargeted = fanOutOnWrite(broadcast);
-        } else if (Constants.TargetType.ROLE.name().equals(targetType) || Constants.TargetType.ALL.name().equals(targetType)) {
-            totalTargeted = fanOutOnRead(broadcast);
-            cacheService.evictActiveGroupBroadcastsCache();
+    private BroadcastResponse triggerCreateBroadcastEventFromPrefetchedUsers(BroadcastMessage broadcast, List<String> targetUserIds) {
+         int totalTargeted = targetUserIds.size();
+        if (totalTargeted == 0) {
+            log.warn("Broadcast {} created, but no users were targeted.", broadcast.getId());
+            return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
 
-        if (totalTargeted > 0) {
-            initializeStatistics(broadcast.getId(), totalTargeted);
+        // Initialize statistics for all types
+        initializeStatistics(broadcast.getId(), totalTargeted);
+
+        String targetType = broadcast.getTargetType();
+
+        if (Constants.TargetType.SELECTED.name().equals(targetType)) {
+            // --- STRATEGY 1: FAN-OUT ON WRITE (for SELECTED users) ---
+            // This is for high-touch messages where we need to track individual status.
+            log.info("Using fan-out-on-write strategy for SELECTED broadcast ID: {}", broadcast.getId());
+            fanOutOnWriteFromPrefetchedUsers(broadcast, targetUserIds);
         } else {
-            log.warn("Broadcast {} created, but no users were targeted.", broadcast.getId());
+            // --- STRATEGY 2: KAFKA-BASED FAN-OUT ON READ (for ALL/ROLE users) ---
+            // This avoids writing 400k records to the user_broadcast_messages table.
+            log.info("Using Kafka-based fan-out-on-read for {} broadcast ID: {}", targetType, broadcast.getId());
+            publishSingleOrchestrationEvent(broadcast);
         }
 
         return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
     }
 
-    private int fanOutOnWrite(BroadcastMessage broadcast) { 
-        List<UserBroadcastMessage> userBroadcasts = broadcastTargetingService.createUserBroadcastMessagesForBroadcast(broadcast);
-        int totalTargeted = userBroadcasts.size();
-        if (totalTargeted > 0) {
-            log.info("Fan-out on write for broadcast {} targeting {} users.", broadcast.getId(), totalTargeted);
-            userBroadcastRepository.batchInsert(userBroadcasts);
-
-            String topicName = appProperties.getKafka().getTopic().getNameSelected();
-            List<OutboxEvent> eventsToPublish = new ArrayList<>();
-
-            for (UserBroadcastMessage userMessage : userBroadcasts) {
-                MessageDeliveryEvent eventPayload = createDeliveryEvent(broadcast, userMessage.getUserId());
-                try {
-                    String payloadJson = objectMapper.writeValueAsString(eventPayload);
-                    eventsToPublish.add(createOutboxEvent(eventPayload, topicName, payloadJson));
-                } catch (JsonProcessingException e) {
-                    log.error("Critical: Failed to serialize event payload for outbox. Event for user {} will not be published.", userMessage.getUserId(), e);
-                }
-            }
-            outboxEventPublisher.publishBatch(eventsToPublish);
+    /**
+     * NEW HELPER: Publishes a single event to the orchestration topic.
+     * The leader consumer will read the user list from the broadcast_user_targets table.
+     */
+    private void publishSingleOrchestrationEvent(BroadcastMessage broadcast) {
+        String topicName = appProperties.getKafka().getTopic().getNameGroupOrchestration();
+        MessageDeliveryEvent eventPayload = createGroupDeliveryEvent(broadcast);
+        try {
+            String payloadJson = objectMapper.writeValueAsString(eventPayload);
+            outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, payloadJson));
+            log.info("Published single orchestration event for broadcast {} to topic {}", broadcast.getId(), topicName);
+        } catch (JsonProcessingException e) {
+            log.error("Critical: Failed to serialize group event payload for outbox. Broadcast {} will not be published.", broadcast.getId(), e);
         }
-        return totalTargeted;
     }
 
-    private int fanOutOnRead(BroadcastMessage broadcast) {
+    private void fanOutOnWriteFromPrefetchedUsers(BroadcastMessage broadcast, List<String> targetUserIds) {
+        log.info("Fan-out on write for broadcast {} targeting {} pre-fetched users.", broadcast.getId(), targetUserIds.size());
 
-        log.info("Fan-out on read for broadcast {} targeting {}", broadcast.getId(), broadcast.getTargetType());
-        
-        // This assumes broadcastTargetingService has a method to just get the count efficiently.
-        int totalTargeted = broadcastTargetingService.countTargetUsers(broadcast);
+        // 1. Create the UserBroadcastMessage objects from the user ID strings
+        List<UserBroadcastMessage> userBroadcasts = targetUserIds.stream()
+            .map(userId -> UserBroadcastMessage.builder()
+                .broadcastId(broadcast.getId())
+                .userId(userId)
+                .deliveryStatus(Constants.DeliveryStatus.PENDING.name())
+                .readStatus(Constants.ReadStatus.UNREAD.name())
+                .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .build())
+            .collect(Collectors.toList());
 
-        if (totalTargeted > 0) {
-            //Publish a SINGLE event to the NEW orchestration topic to consume by single consumer group.
-            String topicName = appProperties.getKafka().getTopic().getNameGroupOrchestration();
+        // 2. Batch insert the user-specific records
+        userBroadcastRepository.batchInsert(userBroadcasts);
 
-            MessageDeliveryEvent eventPayload = createGroupDeliveryEvent(broadcast);
+        // 3. Create and publish outbox events
+        String topicName = appProperties.getKafka().getTopic().getNameSelected();
+        List<OutboxEvent> eventsToPublish = new ArrayList<>();
+        for (UserBroadcastMessage userMessage : userBroadcasts) {
+            MessageDeliveryEvent eventPayload = createDeliveryEvent(broadcast, userMessage.getUserId());
             try {
                 String payloadJson = objectMapper.writeValueAsString(eventPayload);
-                outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, payloadJson));
+                eventsToPublish.add(createOutboxEvent(eventPayload, topicName, payloadJson));
             } catch (JsonProcessingException e) {
-                log.error("Critical: Failed to serialize group event payload for outbox. Broadcast {} will not be published.", broadcast.getId(), e);
+                log.error("Critical: Failed to serialize event payload for outbox. Event for user {} will not be published.", userMessage.getUserId(), e);
             }
         }
-        return totalTargeted;
+        outboxEventPublisher.publishBatch(eventsToPublish);
     }
 
     private MessageDeliveryEvent createGroupLifecycleEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
