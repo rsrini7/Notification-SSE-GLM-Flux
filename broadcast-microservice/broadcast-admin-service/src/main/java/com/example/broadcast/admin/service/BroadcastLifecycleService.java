@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Objects;
 import java.util.List;
 import java.util.UUID;
+import java.time.temporal.ChronoUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -52,7 +53,6 @@ public class BroadcastLifecycleService {
     private final CacheService cacheService;
     private final TestingConfigurationService testingConfigurationService;
 
-
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         // Atomically check and consume the "armed" state for the test mode.
@@ -68,6 +68,21 @@ public class BroadcastLifecycleService {
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
 
+        // MODIFIED: Use the configured delay to determine if a broadcast is truly "scheduled"
+        // or if it needs to be treated as "immediate".
+        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
+        long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
+        ZonedDateTime precomputationThreshold = now.plus(fetchDelayMs, ChronoUnit.MILLIS);
+
+        // If the scheduled time is far enough in the future, save it and let the scheduler handle it.
+        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(precomputationThreshold)) {
+            broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
+            broadcast = broadcastRepository.save(broadcast);
+            log.info("Broadcast ID: {} is a true scheduled broadcast. Saving with SCHEDULED status.", broadcast.getId());
+            return broadcastMapper.toBroadcastResponse(broadcast, 0);
+        }
+
+        // If it's scheduled for the future, just save it and let the pre-computation scheduler handle it.
         if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
             broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
             broadcast = broadcastRepository.save(broadcast);
@@ -75,8 +90,9 @@ public class BroadcastLifecycleService {
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
 
-        // --- NEW FLOW FOR IMMEDIATE BROADCASTS ---
-        log.info("Creating immediate broadcast. Entering PREPARING state.");
+        // For IMMEDIATE broadcasts OR broadcasts scheduled too close to now:
+        // 1. Save the broadcast with PREPARING status to get an ID.
+        log.info("Broadcast ID: {} is immediate or scheduled too close. Treating as immediate. Saving with PREPARING status.", broadcast.getId());
         broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
         broadcast = broadcastRepository.save(broadcast);
 
@@ -85,15 +101,12 @@ public class BroadcastLifecycleService {
             log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
         }
 
-        log.info("Starting synchronous user fetch for immediate broadcast ID: {}", broadcast.getId());
-        List<String> targetUserIds = broadcastTargetingService.determineAllTargetedUsers(broadcast);
-        log.info("Fetch complete for immediate broadcast {}. Found {} users.", broadcast.getId(), targetUserIds.size());
-        userBroadcastTargetRepository.batchInsert(broadcast.getId(), targetUserIds);
+        // 2. Trigger the ASYNCHRONOUS pre-computation task.
+        log.info("Triggering async user pre-computation for immediate broadcast ID: {}", broadcast.getId());
+        broadcastTargetingService.precomputeAndStoreTargetUsers(broadcast.getId());
 
-        broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
-        broadcastRepository.update(broadcast);
-
-        return triggerCreateBroadcastEventFromPrefetchedUsers(broadcast, targetUserIds);
+        // 3. Immediately return a 202 Accepted-style response to the user.
+        return broadcastMapper.toBroadcastResponse(broadcast, 0);
     }
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)

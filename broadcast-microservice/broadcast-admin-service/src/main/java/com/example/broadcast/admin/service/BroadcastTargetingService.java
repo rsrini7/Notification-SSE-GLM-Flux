@@ -8,6 +8,7 @@ import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserPreferencesRepository;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
+import com.example.broadcast.shared.exception.UserServiceUnavailableException;
 
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
@@ -142,7 +143,7 @@ public class BroadcastTargetingService {
         return now.isAfter(start) && now.isBefore(end);
     }
 
- /**
+    /**
      * Asynchronously fetches the complete user list for a broadcast, stores it,
      * and updates the broadcast status to READY or FAILED.
      * @param broadcastId The ID of the broadcast to process.
@@ -218,6 +219,6 @@ public class BroadcastTargetingService {
     
     public List<String> fallbackDetermineUsers(BroadcastMessage broadcast, Throwable t) {
         log.error("Circuit breaker opened for userService. Falling back for broadcast ID {}. Error: {}", broadcast.getId(), t.getMessage());
-        throw new RuntimeException("User service is unavailable, cannot determine target users.", t);
+        throw new UserServiceUnavailableException("User service is unavailable, cannot determine target users.", t);
     }
 }
