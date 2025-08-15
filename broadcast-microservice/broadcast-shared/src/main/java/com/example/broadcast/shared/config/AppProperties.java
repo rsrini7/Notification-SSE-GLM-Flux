@@ -21,6 +21,12 @@ public class AppProperties {
     private final Db db = new Db();
     private final Kafka kafka = new Kafka();
     private final Pod pod = new Pod();
+    private final Simulation simulation = new Simulation();
+
+    @Data
+    public static class Simulation {
+        private long userFetchDelayMs = 0; // Default to 0 if not specified
+    }
 
     @Data
     public static class Pod {

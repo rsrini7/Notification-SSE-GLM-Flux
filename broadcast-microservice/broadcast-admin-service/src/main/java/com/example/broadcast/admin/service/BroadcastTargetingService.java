@@ -1,5 +1,6 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.model.UserPreferences;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.scheduling.annotation.Async;
 
+import java.util.concurrent.ThreadLocalRandom;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -36,6 +38,7 @@ public class BroadcastTargetingService {
     private final UserService userService;
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
+    private final AppProperties appProperties;
 
     /**
      * Creates UserBroadcastMessage entities for a 'SELECTED' user broadcast.
@@ -181,6 +184,22 @@ public class BroadcastTargetingService {
     @CircuitBreaker(name = "userService", fallbackMethod = "fallbackDetermineUsers")
     @Bulkhead(name = "userService")
     public List<String> determineAllTargetedUsers(BroadcastMessage broadcast) {
+        
+        // SIMULATION :: User List Preparation
+        long maxDelay = appProperties.getSimulation().getUserFetchDelayMs();
+        if (maxDelay > 0) {
+            long randomDelay = ThreadLocalRandom.current().nextLong(maxDelay + 1); // +1 to make the max inclusive
+            log.info("SIMULATION: Starting a random delay up to {}ms... (Actual: {}ms)", maxDelay, randomDelay);
+            try{
+                Thread.sleep(randomDelay);
+            }catch(InterruptedException e){
+                log.warn("Suppresing Thread Sleep exception {}", e.getMessage());
+            }
+            log.info("SIMULATION: Delay finished.");
+        }else{
+            log.info("SIMULATION: disabld. Simulation delay is 0");
+        }
+        
         String targetType = broadcast.getTargetType();
 
         if (Constants.TargetType.ALL.name().equals(targetType)) {
