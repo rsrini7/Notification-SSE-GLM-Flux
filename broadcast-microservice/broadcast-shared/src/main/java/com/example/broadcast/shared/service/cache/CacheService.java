@@ -18,9 +18,9 @@ public interface CacheService {
     boolean isUserOnline(String userId);
     UserConnectionInfo getUserConnectionInfo(String userId);
     List<String> getOnlineUsers();
-    void cacheUserMessages(String userId, List<UserMessageInfo> messages);
-    List<UserMessageInfo> getCachedUserMessages(String userId);
-    void addMessageToUserCache(String userId, UserMessageInfo message);
+    void cacheUserMessages(String userId, List<PersistentUserMessageInfo> messages);
+    List<PersistentUserMessageInfo> getCachedUserMessages(String userId);
+    void addMessageToUserCache(String userId, PersistentUserMessageInfo message);
     void removeMessageFromUserCache(String userId, Long broadcastId);
     void cachePendingEvent(MessageDeliveryEvent event);
     List<MessageDeliveryEvent> getPendingEvents(String userId);

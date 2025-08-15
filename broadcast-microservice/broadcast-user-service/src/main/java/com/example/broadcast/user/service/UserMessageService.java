@@ -1,7 +1,7 @@
 package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
-import com.example.broadcast.shared.dto.cache.UserMessageInfo;
+import com.example.broadcast.shared.dto.cache.PersistentUserMessageInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
@@ -49,7 +49,7 @@ public class UserMessageService {
     public List<UserBroadcastResponse> getUserMessages(String userId) {
         log.info("Getting messages for user: {}", userId);
 
-        List<UserMessageInfo> cachedMessages = cacheService.getCachedUserMessages(userId);
+        List<PersistentUserMessageInfo> cachedMessages = cacheService.getCachedUserMessages(userId);
         if (cachedMessages != null && !cachedMessages.isEmpty()) {
             log.info("Cache HIT for user messages: {}", userId);
             return cachedMessages.stream()
@@ -63,7 +63,7 @@ public class UserMessageService {
         List<UserBroadcastResponse> dbMessages = userBroadcastRepository.findUserMessagesByUserId(userId);
 
         if (!dbMessages.isEmpty()) {
-            List<UserMessageInfo> messagesToCache = dbMessages.stream()
+            List<PersistentUserMessageInfo> messagesToCache = dbMessages.stream()
                 .map(this::toUserMessageInfo)
                 .collect(Collectors.toList());
             cacheService.cacheUserMessages(userId, messagesToCache);
@@ -180,8 +180,8 @@ public class UserMessageService {
         log.info("Successfully processed 'mark as read' for broadcast {} for user {} and published READ event.", broadcastId, userId);
     }
     
-    private UserMessageInfo toUserMessageInfo(UserBroadcastResponse response) {
-        return new UserMessageInfo(
+    private PersistentUserMessageInfo toUserMessageInfo(UserBroadcastResponse response) {
+        return new PersistentUserMessageInfo(
             response.getId(),
             response.getBroadcastId(),
             response.getDeliveryStatus(),
@@ -190,7 +190,7 @@ public class UserMessageService {
         );
     }
 
-    private Optional<UserBroadcastResponse> enrichUserMessageInfo(UserMessageInfo info) {
+    private Optional<UserBroadcastResponse> enrichUserMessageInfo(PersistentUserMessageInfo info) {
         Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
 
         if (broadcastOpt.isEmpty()) {
