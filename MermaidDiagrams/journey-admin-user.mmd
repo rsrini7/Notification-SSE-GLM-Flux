@@ -1,30 +1,34 @@
 journey
-    title Broadcast System User Journeys
+    title Broadcast System User Journeys (Updated)
     
     section Admin User Journey
       Login: 5: Admin
       Create Broadcast: 5: Admin
-      - Select Target (ALL/ROLE/SELECTED): 5: Admin
-      - Set Content & Priority: 5: Admin
-      - Send Immediately or Schedule: 5: Admin
-      Monitor Broadcasts: 4: Admin
-      - View Delivery Statistics: 5: Admin
+        - Select Target (ALL/ROLE/SELECTED): 5: Admin
+        - Set Content & Priority: 5: Admin
+        - Send Immediately or Schedule: 5: Admin
+      API Responds Immediately (202 Accepted): 5: Admin
+      Monitor Broadcast Status: 4: Admin
+        - View Status change to PREPARING: 5: Admin
+        - View Status change to READY: 5: Admin
+        - View Status change to ACTIVE: 5: Admin
+      Monitor Delivery Statistics: 4: Admin
       Manage DLT: 3: Admin
-      - View Failed Messages: 5: Admin
-      - Redrive or Purge Messages: 4: Admin
+        - View Failed Messages: 5: Admin
+        - Redrive or Purge Messages: 4: Admin
       Logout: 5: Admin
 
     section Regular User Journey
       Login & Connect: 5: User
-      - SSE Connection Established: 5: User
+        - SSE Connection Established: 5: User
       Receive Real-time Message: 5: User
-      - Notification appears in UI Panel: 5: User
+        - Notification appears in UI Panel: 5: User
       Mark Message as Read: 4: User
-      - UI status updates to 'READ': 5: User
+        - UI status updates to 'READ': 5: User
       Offline Experience: 3: User
-      - Messages are cached by backend: 5: User
-      - Receives pending messages upon reconnect: 5: User
+        - Messages are cached in Redis by backend: 5: User
+        - Receives pending messages upon reconnect: 5: User
       Force Disconnect (Fire and Forget): 2: User
-      - Receives 'Force Logoff' message: 5: User
-      - Connection is terminated, UI panel is removed: 5: User
+        - Receives 'Force Logoff' message: 5: User
+        - Connection is terminated, UI panel is removed: 5: User
       Logout: 5: User

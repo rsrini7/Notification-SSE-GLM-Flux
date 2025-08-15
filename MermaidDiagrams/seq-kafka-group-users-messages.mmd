@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant AdminSvc as Admin Service <br/> (LifecycleService)
+    participant KafkaOrchestration as Kafka <br/> (broadcast-group-orchestration)
+    participant Leader as User Service <br/> (Orchestrator)
+    participant DB as DB (broadcast_user_targets)
+    participant KafkaWorkers as Kafka <br/> (broadcast-user-events-group)
+    participant Worker as User Service <br/> (Consumer)
+
+    AdminSvc->>+KafkaOrchestration: 1- Publishes ONE orchestration event
+    KafkaOrchestration-->>-AdminSvc: 
+    
+    KafkaOrchestration->>+Leader: 2- Leader consumer (single pod) receives event
+    Leader->>+DB: 3- Reads pre-computed user list
+    DB-->>-Leader: Returns 400k user IDs
+    
+    loop For each user
+        Leader->>+KafkaWorkers: 4- "Scatters" user-specific CREATED events
+    end
+    KafkaWorkers-->>-Leader: 
+    Leader-->>-KafkaOrchestration: 5- Acknowledges single orchestration event
+    
+    KafkaWorkers->>+Worker: 6- Worker pods consume events in parallel
+    Note over Worker: 7- Delivers message via SSE...
+    Worker-->>-KafkaWorkers: 8- Acknowledges message

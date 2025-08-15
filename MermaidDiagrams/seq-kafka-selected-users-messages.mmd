@@ -1,0 +1,22 @@
+sequenceDiagram
+    participant AdminSvc as Admin Service <br/> (LifecycleService)
+    participant DB as DB (Outbox Table)
+    participant OutboxPoller as Outbox Poller
+    participant Kafka as Kafka <br/> (broadcast-events-selected)
+    participant Worker as User Service <br/> (KafkaConsumerService)
+    participant SseSvc as User Service <br/> (SseService)
+
+    AdminSvc->>+DB: 1- Writes user-specific CREATED events to Outbox
+    DB-->>-AdminSvc: 
+    
+    OutboxPoller->>+DB: 2- Polls for new events
+    DB-->>-OutboxPoller: Returns events
+    
+    OutboxPoller->>+Kafka: 3- Publishes events
+    Kafka-->>-OutboxPoller: 
+    
+    Kafka->>+Worker: 4- Consumes user-specific event
+    Worker->>+SseSvc: 5- handleMessageEvent()
+    SseSvc->>SseSvc: 6- Pushes message via SSE to the specific user
+    SseSvc-->>-Worker: 
+    Worker-->>-Kafka: 7- Acknowledges message

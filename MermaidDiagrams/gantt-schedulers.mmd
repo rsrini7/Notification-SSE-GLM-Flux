@@ -1,0 +1,21 @@
+gantt
+    title Application Schedulers Overview (Updated)
+    dateFormat  HH:mm:ss
+    axisFormat  %M:%S
+
+    section Outbox Polling Service (High Frequency)
+    Poll for Events (repeats every 2s) :crit, 00:00:00, 2s
+    ...                            :crit, 00:00:02, 58s
+
+    section SSE Heartbeat (Pod Local)
+    Send Heartbeats (repeats every 30s) :active, 00:00:30, 2s
+    ...                                 :active, 00:01:00, 2s
+
+    section Cluster-Wide Jobs (Minute Interval)
+    Find Upcoming Broadcasts to Prepare (Precomputation)  :done, 00:01:00, 5s
+    Activate Ready Broadcasts (Scheduling)                :done, 00:01:05, 5s
+    Expire Active Broadcasts (Expiration)                 :done, 00:01:10, 5s
+    Clean Up Stale SSE Connections                        :done, 00:01:15, 5s
+
+    section Cluster-Wide Jobs (Hourly Interval)
+    Purge Finalized User Lists (Cleanup)                  : 00:00:00, 15s

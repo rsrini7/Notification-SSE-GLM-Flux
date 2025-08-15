@@ -1,0 +1,33 @@
+sequenceDiagram
+    participant AdminUI as Admin UI
+    participant AdminSvc as BroadcastLifecycleService
+    participant DB as PostgreSQL DB
+    participant OutboxPoller as Outbox Poller
+    participant KafkaOrchestration as Kafka (Orchestration Topic)
+    participant Orchestrator as KafkaBroadcastOrchestratorService
+    participant KafkaWorkers as Kafka (Worker Topic)
+    participant WorkerConsumer as KafkaConsumerService
+    participant SseSvc as SseService
+
+    AdminUI->>+AdminSvc: 1- DELETE /broadcasts/{id}
+    AdminSvc->>+DB: 2- UPDATE status to 'CANCELLED'
+    AdminSvc->>DB: 3- INSERT single orchestration event into Outbox
+    DB-->>-AdminSvc: 
+    AdminSvc-->>-AdminUI: 4- Returns 200 OK
+
+    OutboxPoller->>+KafkaOrchestration: 5- Publishes CANCELLED orchestration event
+    KafkaOrchestration-->>-OutboxPoller: 
+    
+    KafkaOrchestration->>+Orchestrator: 6- Delivers event
+    Orchestrator->>+DB: 7- SELECT user_id FROM broadcast_user_targets WHERE broadcast_id={id}
+    DB-->>-Orchestrator: 8- Returns full user list (Still exists)
+
+    loop For each user
+        Orchestrator->>+KafkaWorkers: 9- "Scatters" user-specific CANCELLED events
+    end
+    KafkaWorkers-->>-Orchestrator: 
+    Orchestrator-->>KafkaOrchestration: 10- Acknowledges orchestration event
+
+    KafkaWorkers->>+WorkerConsumer: 11- Delivers user-specific event
+    WorkerConsumer->>+SseSvc: 12- handleMessageEvent(type=CANCELLED)
+    SseSvc->>SseSvc: 13- Pushes MESSAGE_REMOVED to user's browser
