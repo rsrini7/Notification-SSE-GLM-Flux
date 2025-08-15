@@ -10,7 +10,7 @@ sequenceDiagram
     Note over ReceiverPod: Performs stateless work.
 
     ReceiverPod->>+GemFire: 2- Puts/Updates an entry in a <br/> 'notifications' GemFire Region <br/> Key: "user-123", Value: { ... }
-    GemFire-->>-ReceiverPod:
+    GemFire-->>-ReceiverPod: Gemfire respond back to receiver pod
 
     Note over GemFire, SsePod: GemFire's eventing system instantly <br/> notifies all registered listeners of the change.
 
@@ -19,4 +19,4 @@ sequenceDiagram
     Note over SsePod: Checks its in-memory SSE connections. <br/> Match found for "user-123"!
     
     SsePod->>+UserUI: 4- Pushes real-time SSE event
-    UserUI-->>-SsePod:
+    UserUI-->>-SsePod: User UI acknowledge to the SsePod

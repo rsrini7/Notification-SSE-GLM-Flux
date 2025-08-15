@@ -11,15 +11,15 @@ sequenceDiagram
     Note over ReceiverPod: Performs stateless work (e.g., cache cleanup)
 
     ReceiverPod->>+Redis: 2- PUBLISH notification to channel <br/> { userId: "user-123", ... }
-    Redis-->>-ReceiverPod:
+    Redis-->>-ReceiverPod: Redis publish to receiver pod
 
     Note over Redis, OtherPods: Redis broadcasts the notification to ALL subscribers
 
     Redis->>+OtherPods: 3- Receives notification
     Note over OtherPods: Checks its in-memory SSE connections. <br/> No match found for "user-123". <br/> Discards message.
-    OtherPods-->>-Redis: 
+    OtherPods-->>-Redis: other pods conencts to redis
     
     Redis->>+SsePod: 3- Receives notification
     Note over SsePod: Checks its in-memory SSE connections. <br/> Match found for "user-123"!
     SsePod->>+UserUI: 4- Pushes real-time SSE event
-    UserUI-->>-SsePod:
+    UserUI-->>-SsePod: user ui connects to sse pod

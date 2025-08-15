@@ -1,0 +1,31 @@
+sequenceDiagram
+    participant Kafka as Kafka Broker
+    participant LeaderPod1 as User Service (Leader Pod 1)
+    participant LeaderPod2 as User Service (Leader Pod 2)
+    participant DB as PostgreSQL DB
+
+    Kafka->>+LeaderPod1: 1- Delivers orchestration event 'O1'
+    
+    LeaderPod1->>+DB: 2- Fetches 100k user list
+    DB-->>-LeaderPod1: ...
+    
+    loop 100,000 times
+        LeaderPod1->>Kafka: 3- Publishes user-specific event
+    end
+    
+    Note over LeaderPod1: 4- POD CRASHES! (after 30k events) <br/> Orchestration event 'O1' is NOT acknowledged.
+
+    LeaderPod1--xKafka: Connection Lost
+
+    Note over Kafka: 5- Consumer group rebalances. <br/> Unacknowledged event 'O1' is redelivered.
+    
+    Kafka->>+LeaderPod2: 6- Redelivers orchestration event 'O1'
+    
+    LeaderPod2->>+DB: 7- Fetches 100k user list again
+    DB-->>-LeaderPod2: ...
+    
+    loop 100,000 times
+        LeaderPod2->>Kafka: 8- Publishes all 100k user-specific events
+    end
+
+    LeaderPod2->>+Kafka: 9- Acknowledges orchestration event 'O1'

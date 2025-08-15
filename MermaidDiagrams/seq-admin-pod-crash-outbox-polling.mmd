@@ -1,0 +1,31 @@
+sequenceDiagram
+    participant OutboxPoller as Outbox Polling Service
+    participant Kafka as Kafka Broker
+    participant UserConsumer as User Service Consumer
+    participant DB as PostgreSQL DB
+
+    OutboxPoller->>+DB: 1- Fetches event 'E1'
+    DB-->>-OutboxPoller: ---
+    OutboxPoller->>+Kafka: 2- Publishes event 'E1'
+    Kafka-->>-OutboxPoller: --- 
+
+    Kafka->>+UserConsumer: 3- Delivers 'E1'
+    UserConsumer->>DB: 4- Processes 'E1' (e.g., sets status to DELIVERED)
+    DB-->>UserConsumer: ---
+    UserConsumer->>+Kafka: 5- Acknowledges 'E1'
+    Kafka-->>-UserConsumer: ---
+
+    Note over OutboxPoller: 6- POD CRASHES! <br/> (before deleting 'E1' from outbox)
+
+    Note right of OutboxPoller: ... Pod Restarts ...
+
+    OutboxPoller->>+DB: 7- Fetches event 'E1' again
+    DB-->>-OutboxPoller: ---
+    OutboxPoller->>+Kafka: 8- Publishes DUPLICATE event 'E1'
+    Kafka-->>-OutboxPoller: ---
+    OutboxPoller->>+DB: 9- Deletes 'E1' from outbox
+    DB-->>-OutboxPoller: ---
+    
+    Kafka->>+UserConsumer: 10. Delivers DUPLICATE 'E1'
+    Note over UserConsumer, DB: 11. Consumer logic is idempotent. <br/> It sees status is already DELIVERED and takes no action.
+    UserConsumer->>+Kafka: 12. Acknowledges duplicate 'E1'
