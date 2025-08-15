@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant LifecycleSvc as BroadcastLifecycleService
+    participant UserMsgSvc as UserMessageService
+    participant RedisCache as Redis Cache Service
+
+    Note over LifecycleSvc, RedisCache: Admin cancels a broadcast...
+    LifecycleSvc->>+RedisCache: 1- evictActiveGroupBroadcastsCache()
+    Note over RedisCache: SCAN and DEL all "active-group-bcast:*" keys
+    RedisCache-->>-LifecycleSvc: ...
+    
+    LifecycleSvc->>+RedisCache: 2- evictBroadcastContent(broadcastId)
+    Note over RedisCache: DEL "broadcast-content:<id>"
+    RedisCache-->>-LifecycleSvc: ...
+
+    Note over UserMsgSvc, RedisCache: User marks a message as read...
+    UserMsgSvc->>+RedisCache: 3- removeMessageFromUserCache(userId, broadcastId)
+    Note over RedisCache: GET "user-msg:<userId>", remove item, then SET the updated list
+    RedisCache-->>-UserMsgSvc: ...

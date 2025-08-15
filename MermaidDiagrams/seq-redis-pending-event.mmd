@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant KafkaConsumer as Kafka Consumer
+    participant RedisCache as Redis Cache Service
+    participant SseSvc as SseService
+    participant UserUI as User UI
+
+    Note over KafkaConsumer, RedisCache: A message arrives for an offline user...
+    KafkaConsumer->>+RedisCache: 1- isUserOnline(userId)?
+    RedisCache-->>-KafkaConsumer: returns false
+    
+    KafkaConsumer->>+RedisCache: 2- cachePendingEvent(event)
+    Note over RedisCache: Appends event to list at "pending-evt:<userId>" (TTL 6h)
+    RedisCache-->>-KafkaConsumer: ...
+
+    Note over KafkaConsumer, SseSvc: ...Time passes, user reconnects...
+
+    UserUI->>+SseSvc: 3- Establishes SSE Connection
+    SseSvc->>+RedisCache: 4- getPendingEvents(userId)
+    RedisCache-->>-SseSvc: Returns list of PendingEventInfo
+    
+    SseSvc->>UserUI: 5- Pushes pending messages via SSE
+    
+    SseSvc->>+RedisCache: 6- clearPendingEvents(userId)
+    Note over RedisCache: DEL "pending-evt:<userId>"
+    RedisCache-->>-SseSvc: ...
