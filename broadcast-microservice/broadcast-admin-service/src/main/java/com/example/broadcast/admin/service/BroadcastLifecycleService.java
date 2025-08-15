@@ -192,7 +192,8 @@ public class BroadcastLifecycleService {
         int totalTargeted = broadcastTargetingService.countTargetUsers(broadcast);
 
         if (totalTargeted > 0) {
-            String topicName = appProperties.getKafka().getTopic().getNameUserGroup();
+            //Publish a SINGLE event to the NEW orchestration topic to consume by single consumer group.
+            String topicName = appProperties.getKafka().getTopic().getNameGroupOrchestration();
 
             MessageDeliveryEvent eventPayload = createGroupDeliveryEvent(broadcast);
             try {

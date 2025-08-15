@@ -80,7 +80,7 @@ public class KafkaConsumerService {
         groupId = "${broadcast.kafka.consumer.group-user-group-id}",
         containerFactory = "kafkaListenerContainerFactory"
     )
-    public void processGroupBroadcastEvent(
+    public void processUserGroupBroadcastEvent(
             @Payload MessageDeliveryEvent event,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
@@ -100,34 +100,12 @@ public class KafkaConsumerService {
                 throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
             }
 
-            log.info("Received group broadcast event for broadcast ID: {}", event.getBroadcastId());
+            log.info("Received user broadcast event from group for broadcast ID: {} user ID: {}", event.getBroadcastId(), event.getUserId());
             
-            Optional<BroadcastMessage> broadcastOpt = broadcastRepository.findById(event.getBroadcastId());
-            if (broadcastOpt.isEmpty()) {
-                log.warn("Broadcast {} was not found. It may have been cancelled or expired. Acknowledging message.", event.getBroadcastId());
-                acknowledgment.acknowledge();
-                return;
-            }
+            handleBroadcastCreated(event);
 
-            BroadcastMessage broadcast = broadcastOpt.get();
-            List<String> onlineUsers = cacheService.getOnlineUsers();
-            List<String> targetUserIds = determineAllTargetedUsers(broadcast);
-            
-            List<String> usersToNotify = targetUserIds.stream()
-                .filter(onlineUsers::contains)
-                .collect(Collectors.toList());
-
-            log.info("Delivering group broadcast {} to {} online users out of {} total targets.", event.getBroadcastId(), usersToNotify.size(), targetUserIds.size());
-            for (String userId : usersToNotify) {
-                MessageDeliveryEvent userEvent = event.toBuilder().userId(userId).build();
-                sseService.deliverGroupBroadcastFromEvent(userEvent);
-            }
-
-            if (!usersToNotify.isEmpty()) {
-                int deliveredCount = usersToNotify.size();
-                broadcastStatisticsRepository.incrementDeliveredCountBy(event.getBroadcastId(), deliveredCount);
-                log.info("Batch updated delivery statistics for broadcast {}: incremented delivered count by {}", event.getBroadcastId(), deliveredCount);
-            }
+            broadcastStatisticsRepository.incrementDeliveredCountBy(event.getBroadcastId(), 1);
+            log.info("Updated delivery statistics for broadcast {}: incremented 1 delivered count for User: {}", event.getBroadcastId(), event.getUserId());
 
             acknowledgment.acknowledge();
         } catch (Exception e) {
@@ -136,16 +114,25 @@ public class KafkaConsumerService {
         }
     }
 
-     /**
-     * NEW LISTENER: Dedicated consumer for all action events.
+    /**
+     * UPDATED: This listener is now the "worker" for user-specific actions.
+     * It listens to the new topic with a DYNAMIC group ID to distribute the work.
      */
     @KafkaListener(
         topics = "${broadcast.kafka.topic.name.user.actions:broadcast-user-actions}",
         groupId = "${broadcast.kafka.consumer.actions-user-group-id}",
         containerFactory = "kafkaListenerContainerFactory"
     )
-    public void processActionEvent(@Payload MessageDeliveryEvent event, Acknowledgment acknowledgment) {
-        log.debug("Processing ACTION event: {} for broadcast: {}", event.getEventType(), event.getBroadcastId());
+    public void processUserActionEvent(@Payload MessageDeliveryEvent event, Acknowledgment acknowledgment) {
+        log.debug("Processing user-specific ACTION event: {} for user {} on broadcast: {}", event.getEventType(), event.getUserId(), event.getBroadcastId());
+
+        // If the event is older than the pod, ignore it.
+        if (event.getTimestamp().isBefore(this.startupTime)) {
+            log.trace("Skipping old message from pod restart. Event ID: {}", event.getEventId());
+            acknowledgment.acknowledge(); // Acknowledge to advance offset
+            return;
+        }
+
         try {
             EventType eventType = EventType.valueOf(event.getEventType());
             switch (eventType) {
@@ -159,28 +146,13 @@ public class KafkaConsumerService {
                     handleBroadcastExpired(event);
                     break;
                 default:
-                    log.warn("Unhandled event type on actions topic: {}", event.getEventType());
+                    log.warn("Unhandled event type on user-actions topic: {}", event.getEventType());
             }
             acknowledgment.acknowledge();
         } catch (Exception e) {
-            log.error("Failed to process action event. Root cause: {}", e.getMessage(), e);
-            throw new MessageProcessingException("Failed to process action event", e, event);
+            log.error("Failed to process user action event. Root cause: {}", e.getMessage(), e);
+            throw new MessageProcessingException("Failed to process user action event", e, event);
         }
-    }
-
-    /**
-     * NEW HELPER METHOD: Centralizes the logic for determining all users targeted by a group broadcast.
-     */
-    private List<String> determineAllTargetedUsers(BroadcastMessage broadcast) {
-        if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
-            return userService.getAllUserIds();
-        } else if (Constants.TargetType.ROLE.name().equals(broadcast.getTargetType())) {
-            return broadcast.getTargetIds().stream()
-                .flatMap(role -> userService.getUserIdsByRole(role).stream())
-                .distinct()
-                .collect(Collectors.toList());
-        }
-        return Collections.emptyList();
     }
 
     private void handleBroadcastCreated(MessageDeliveryEvent event) {
