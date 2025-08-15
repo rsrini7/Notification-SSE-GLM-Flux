@@ -37,6 +37,11 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                 scheduledAt: '',
                 expiresAt: '' // Clear expiresAt initially; it will be set on submit
             }));
+        } else if ((formData.targetType === 'ALL' || formData.targetType === 'ROLE') && formData.scheduleType === 'fireAndForget') {
+             setFormData(prev => ({
+                ...prev,
+                scheduleType: 'immediate' // Reset to default
+             }));
         } else {
             // If the user switches away from Fire and Forget, reset the category and clear the expiry.
             if (formData.category === 'Force Logoff') {
@@ -48,7 +53,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
             }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [formData.scheduleType]);
+    }, [formData.scheduleType, formData.targetType]);
 
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -120,9 +125,9 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                             <Select value={formData.targetType} onValueChange={(value) => setFormData(prev => ({ ...prev, targetType: value }))}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent position="popper" sideOffset={20}>
-                                    <SelectItem value="ALL">All Users</SelectItem>
+                                    <SelectItem value="ALL" disabled={formData.scheduleType === 'fireAndForget'}>All Users</SelectItem>
                                     <SelectItem value="SELECTED">Selected Users</SelectItem>
-                                    <SelectItem value="ROLE">By Role</SelectItem>
+                                    <SelectItem value="ROLE" disabled={formData.scheduleType === 'fireAndForget'}>By Role</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -159,7 +164,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                                 <SelectContent position="popper" sideOffset={20}>
                                     <SelectItem value="immediate">Publish Immediately</SelectItem>
                                     <SelectItem value="scheduled">Schedule for Later</SelectItem>
-                                    <SelectItem value="fireAndForget">Fire and Forget</SelectItem>
+                                    <SelectItem value="fireAndForget" disabled={formData.targetType === 'ALL' || formData.targetType === 'ROLE'}>Fire and Forget</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
