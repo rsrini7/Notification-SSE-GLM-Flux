@@ -192,7 +192,7 @@ public class BroadcastLifecycleService {
         int totalTargeted = broadcastTargetingService.countTargetUsers(broadcast);
 
         if (totalTargeted > 0) {
-            String topicName = appProperties.getKafka().getTopic().getNameGroup();
+            String topicName = appProperties.getKafka().getTopic().getNameUserGroup();
 
             MessageDeliveryEvent eventPayload = createGroupDeliveryEvent(broadcast);
             try {
@@ -226,12 +226,12 @@ public class BroadcastLifecycleService {
         } else if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) || Constants.TargetType.ROLE.name().equals(broadcast.getTargetType())) {
             // NEW LOGIC: If no user records exist, it's a group broadcast. Publish a single group event.
             log.info("Publishing group lifecycle event ({}) for broadcast {}", eventType.name(), broadcast.getId());
-        MessageDeliveryEvent eventPayload = createGroupLifecycleEvent(broadcast, eventType, message);
-        try {
-            String payloadJson = objectMapper.writeValueAsString(eventPayload);
-            outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, payloadJson));
-        } catch (JsonProcessingException e) {
-            log.error("Critical: Failed to serialize group lifecycle event payload for outbox for broadcast {}.", broadcast.getId(), e);
+            MessageDeliveryEvent eventPayload = createGroupLifecycleEvent(broadcast, eventType, message);
+            try {
+                String payloadJson = objectMapper.writeValueAsString(eventPayload);
+                outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, payloadJson));
+            } catch (JsonProcessingException e) {
+                log.error("Critical: Failed to serialize group lifecycle event payload for outbox for broadcast {}.", broadcast.getId(), e);
             }
         }
     }

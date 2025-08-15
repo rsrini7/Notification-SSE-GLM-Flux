@@ -137,14 +137,18 @@ broadcast:
   kafka:
     topic:
       name-selected: broadcast-events-selected
-      name-group: broadcast-events-group
-      name-actions: broadcast-actions
+      name-group-orchestration: broadcast-group-orchestration
+      name-user-group: broadcast-user-events-group
+      name-actions-orchestration: broadcast-actions-orchestration
+      name-user-actions: broadcast-user-actions
       partitions: 10
       replication-factor: 1
     consumer:
       selected-group-id: "broadcast-selected-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
-      group-group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
-      actions-group-id: "broadcast-actions-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
+      group-orchestration-group-id: "broadcast-group-orchestration-group"
+      group-user-group-id: "broadcast-user-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
+      actions-orchestration-group-id: "broadcast-actions-orchestration-group"
+      actions-user-group-id: "broadcast-user-actions-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
       dlt-group-id: broadcast-dlt-group
     retry:
       max-attempts: 3

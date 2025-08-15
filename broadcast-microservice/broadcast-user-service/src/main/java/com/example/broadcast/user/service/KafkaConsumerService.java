@@ -76,8 +76,8 @@ public class KafkaConsumerService {
     }
     
     @KafkaListener(
-        topics = "${broadcast.kafka.topic.name.group:broadcast-events-group}",
-        groupId = "${broadcast.kafka.consumer.group-group-id}",
+        topics = "${broadcast.kafka.topic.name.user.group:broadcast-user-events-group}",
+        groupId = "${broadcast.kafka.consumer.group-user-group-id}",
         containerFactory = "kafkaListenerContainerFactory"
     )
     public void processGroupBroadcastEvent(
@@ -140,8 +140,8 @@ public class KafkaConsumerService {
      * NEW LISTENER: Dedicated consumer for all action events.
      */
     @KafkaListener(
-        topics = "${broadcast.kafka.topic.name.actions:broadcast-actions}",
-        groupId = "${broadcast.kafka.consumer.actions-group-id}",
+        topics = "${broadcast.kafka.topic.name.user.actions:broadcast-user-actions}",
+        groupId = "${broadcast.kafka.consumer.actions-user-group-id}",
         containerFactory = "kafkaListenerContainerFactory"
     )
     public void processActionEvent(@Payload MessageDeliveryEvent event, Acknowledgment acknowledgment) {
