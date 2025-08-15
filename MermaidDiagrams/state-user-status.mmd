@@ -1,0 +1,17 @@
+stateDiagram-v2
+    direction LR
+    [*] --> PENDING: Broadcast is created for a <br/> 'SELECTED' user.
+
+    PENDING --> DELIVERED: User is online and message is <br/> pushed via SSE, OR <br/> an offline user reconnects.
+    
+    DELIVERED --> READ: User clicks "Mark Read" <br/> in the UI.
+    
+    PENDING --> SUPERSEDED: The parent broadcast is <br/> CANCELLED or EXPIRED <br/> before the message is delivered.
+    
+    DELIVERED --> SUPERSEDED: The parent broadcast is <br/> EXPIRED after the message <br/> has already been delivered.
+    
+    PENDING --> FAILED: Kafka consumer fails to process <br/> the message after all retries.
+    
+    READ --> [*]
+    SUPERSEDED --> [*]
+    FAILED --> [*]

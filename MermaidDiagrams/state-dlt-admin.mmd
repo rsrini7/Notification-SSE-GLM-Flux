@@ -1,0 +1,17 @@
+stateDiagram-v2
+    direction TB
+    
+    [*] --> In_DLT: Message processing fails in the <br/> user-service after all retries.
+    
+    state "In DLT (Stored in DB)" as In_DLT {
+        state "Awaiting Action" as Awaiting
+        
+        Awaiting --> Reprocessing: Admin clicks "Redrive"
+        Reprocessing --> Succeeded: Message is successfully re-processed <br/> by the user-service consumer.
+        Reprocessing --> Awaiting: Message fails processing again <br/> and is sent back to the DLT.
+        
+        Awaiting --> Purged: Admin clicks "Purge"
+    }
+
+    Succeeded --> [*]
+    Purged --> [*]
