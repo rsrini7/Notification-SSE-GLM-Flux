@@ -1,0 +1,29 @@
+graph TD
+    subgraph "Admin Service"
+        A[1- Single EXPIRED Event <br/> on 'broadcast-actions' topic]
+    end
+
+    subgraph "User Service (Cluster)"
+        B{"2- Leader Consumer <br/> (One pod from the static group 'broadcast-actions-group' receives the event)"}
+        
+        C[3- Fetches 100k user list <br/> from PostgreSQL]
+        
+        D[4- Publishes 100k user-specific <br/> action events back to Kafka]
+        
+        E[New Topic: 'broadcast-user-actions']
+        
+        F{"5- Worker Consumers <br/> (All pods listen with a dynamic group ID)"}
+        
+        subgraph "Parallel Processing Across All Pods"
+            G1[Pod 1 processes events <br/> for User A, D, G...]
+            G2[Pod 2 processes events <br/> for User B, E, H...]
+            G3[Pod 3 processes events <br/> for User C, F, I...]
+        end
+    end
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G1 & G2 & G3

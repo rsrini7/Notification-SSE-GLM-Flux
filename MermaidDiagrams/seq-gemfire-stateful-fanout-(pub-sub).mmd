@@ -1,0 +1,22 @@
+sequenceDiagram
+    participant Kafka as Kafka Broker
+    participant ReceiverPod as User Service (Receiver Pod)
+    participant GemFire as GemFire Cluster
+    participant SsePod as User Service (SSE Pod)
+    participant UserUI as User UI (Browser)
+
+    Kafka->>+ReceiverPod: 1- Delivers user-specific action <br/> for "user-123"
+
+    Note over ReceiverPod: Performs stateless work.
+
+    ReceiverPod->>+GemFire: 2- Puts/Updates an entry in a <br/> 'notifications' GemFire Region <br/> Key: "user-123", Value: { ... }
+    GemFire-->>-ReceiverPod:
+
+    Note over GemFire, SsePod: GemFire's eventing system instantly <br/> notifies all registered listeners of the change.
+
+    GemFire->>+SsePod: 3- Fires Continuous Query (CQ) Listener <br/> with the change for "user-123"
+    
+    Note over SsePod: Checks its in-memory SSE connections. <br/> Match found for "user-123"!
+    
+    SsePod->>+UserUI: 4- Pushes real-time SSE event
+    UserUI-->>-SsePod:
