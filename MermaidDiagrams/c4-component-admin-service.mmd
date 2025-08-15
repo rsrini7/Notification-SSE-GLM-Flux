@@ -1,0 +1,50 @@
+graph TD
+    subgraph "Container Boundary: Admin Service"
+        direction LR
+
+        subgraph "API Layer"
+            AdminController["<div style='font-weight:bold'>*Admin Controllers*</div><div style='font-size: smaller;'>Spring @RestController</div><div style='font-size: smaller;'>Handles all incoming admin API calls for broadcasts, DLT, and testing.</div>"]
+        end
+
+        subgraph "Service Layer"
+            LifecycleService["<div style='font-weight:bold'>BroadcastLifecycleService</div><div style='font-size: smaller;'>Core business logic for creating, cancelling, and expiring broadcasts.</div>"]
+            QueryService["<div style='font-weight:bold'>BroadcastQueryService</div><div style='font-size: smaller;'>Handles all read-only database queries (CQRS).</div>"]
+            DltApiService["<div style='font-weight:bold'>DltService</div><div style='font-size: smaller;'>Provides API logic for redriving and purging DLT messages.</div>"]
+        end
+        
+        subgraph "Background Processing"
+            Schedulers["<div style='font-weight:bold'>Schedulers</div><div style='font-size: smaller;'>- BroadcastSchedulingService<br/>- BroadcastExpirationService</div>"]
+            OutboxPoller["<div style='font-weight:bold'>OutboxPollingService</div><div style='font-size: smaller;'>Scheduled job that polls the outbox table to send events.</div>"]
+            DltConsumer["<div style='font-weight:bold'>DltKafkaConsumerService</div><div style='font-size: smaller;'>Listens to all DLT topics and saves failed messages.</div>"]
+        end
+
+        subgraph "Data Access & Publishing"
+            Repositories["<div style='font-weight:bold'>Repositories</div><div style='font-size: smaller;'>- BroadcastRepository<br/>- OutboxRepository<br/>- DltRepository</div>"]
+            OutboxPublisher["<div style='font-weight:bold'>OutboxEventPublisher</div><div style='font-size: smaller;'>Writes events to the outbox table as part of a DB transaction.</div>"]
+        end
+    end
+
+    %% External Systems
+    AdminUI[Admin UI]
+    Kafka[Kafka Broker]
+    Postgres[PostgreSQL DB]
+    
+    %% Relationships
+    AdminUI -- "HTTPS" --> AdminController
+    AdminController --> LifecycleService
+    AdminController --> QueryService
+    AdminController --> DltApiService
+
+    LifecycleService --> OutboxPublisher
+    DltApiService --> OutboxPublisher
+    Schedulers --> LifecycleService
+    
+    OutboxPoller --> Repositories
+    OutboxPoller -- "Publishes events to" --> Kafka
+    
+    DltConsumer -- "Consumes from DLTs" --> Kafka
+    DltConsumer --> Repositories
+    
+    OutboxPublisher --> Repositories
+    LifecycleService --> Repositories
+    QueryService --> Repositories

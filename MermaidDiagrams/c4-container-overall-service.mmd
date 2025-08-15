@@ -1,0 +1,36 @@
+graph TD
+    subgraph "System Boundary: Broadcast Messaging System"
+        direction LR
+
+        subgraph "Frontend"
+            WebApp["<div style='font-weight:bold'>Frontend Application</div><div style='font-size: smaller;'>React & Vite</div>"]
+        end
+
+        subgraph "Backend"
+            AdminService["<div style='font-weight:bold'>Admin Service</div><div style='font-size: smaller;'>Java & Spring WebFlux</div>"]
+            UserService["<div style='font-weight:bold'>User Service</div><div style='font-size: smaller;'>Java & Spring WebFlux</div>"]
+        end
+
+        subgraph "Infrastructure"
+            Kafka["<div style='font-weight:bold'>Kafka Broker</div><div style='font-size: smaller;'>Event Streaming</div>"]
+            Postgres["<div style='font-weight:bold'>PostgreSQL Database</div><div style='font-size: smaller;'>Relational Data Store</div>"]
+            Redis["<div style='font-weight:bold'>Redis</div><div style='font-size: smaller;'>Cache & Session Store</div>"]
+        end
+    end
+
+    AdminUser[Admin User]
+    RegularUser[Regular User]
+
+    AdminUser -- "Manages Broadcasts via HTTPS" --> WebApp
+    RegularUser -- "Views Messages via HTTPS & SSE" --> WebApp
+
+    WebApp -- "API Calls (HTTPS)" --> AdminService
+    WebApp -- "API Calls & SSE (HTTPS)" --> UserService
+
+    AdminService -- "Produces Events (TCP)" --> Kafka
+    AdminService -- "Reads/Writes State (JDBC)" --> Postgres
+    AdminService -- "Writes DLT Failure State (TCP)" --> Redis
+
+    UserService -- "Consumes Events (TCP)" --> Kafka
+    UserService -- "Reads/Writes State (JDBC)" --> Postgres
+    UserService -- "Manages Connections & Cache (TCP)" --> Redis
