@@ -36,12 +36,12 @@ public class RedisConfig {
     }
 
     @Bean
-    public RedisTemplate<String, List<UserMessageInfo>> userMessagesRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
-        RedisTemplate<String, List<UserMessageInfo>> template = new RedisTemplate<>();
+    public RedisTemplate<String, List<PersistentUserMessageInfo>> persistentUserMessagesRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
+        RedisTemplate<String, List<PersistentUserMessageInfo>> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
         
-        JavaType type = objectMapper.getTypeFactory().constructCollectionType(List.class, UserMessageInfo.class);
-        Jackson2JsonRedisSerializer<List<UserMessageInfo>> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, type);
+        JavaType type = objectMapper.getTypeFactory().constructCollectionType(List.class, PersistentUserMessageInfo.class);
+        Jackson2JsonRedisSerializer<List<PersistentUserMessageInfo>> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, type);
 
         template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(serializer);

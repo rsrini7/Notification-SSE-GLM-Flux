@@ -26,7 +26,7 @@ public class RedisCacheService implements CacheService {
 
     private final RedisTemplate<String, String> stringRedisTemplate;
     private final RedisTemplate<String, UserConnectionInfo> userConnectionInfoRedisTemplate;
-    private final RedisTemplate<String, List<UserMessageInfo>> userMessagesRedisTemplate;
+    private final RedisTemplate<String, List<PersistentUserMessageInfo>> persistentUserMessagesRedisTemplate;
     private final RedisTemplate<String, List<PendingEventInfo>> pendingEventsRedisTemplate;
     private final RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate;
     private final RedisTemplate<String, List<BroadcastMessage>> activeGroupBroadcastsRedisTemplate;
@@ -89,33 +89,33 @@ public class RedisCacheService implements CacheService {
     }
 
     @Override
-    public void cacheUserMessages(String userId, List<UserMessageInfo> messages) {
-        userMessagesRedisTemplate.opsForValue().set(USER_MESSAGES_KEY_PREFIX + userId, messages, 24, TimeUnit.HOURS);
+    public void cacheUserMessages(String userId, List<PersistentUserMessageInfo> messages) {
+        persistentUserMessagesRedisTemplate.opsForValue().set(USER_MESSAGES_KEY_PREFIX + userId, messages, 24, TimeUnit.HOURS);
     }
 
     @Override
-    public List<UserMessageInfo> getCachedUserMessages(String userId) {
-        return userMessagesRedisTemplate.opsForValue().get(USER_MESSAGES_KEY_PREFIX + userId);
+    public List<PersistentUserMessageInfo> getCachedUserMessages(String userId) {
+        return persistentUserMessagesRedisTemplate.opsForValue().get(USER_MESSAGES_KEY_PREFIX + userId);
     }
 
     @Override
-    public void addMessageToUserCache(String userId, UserMessageInfo message) {
+    public void addMessageToUserCache(String userId, PersistentUserMessageInfo message) {
         String key = USER_MESSAGES_KEY_PREFIX + userId;
-        List<UserMessageInfo> messages = userMessagesRedisTemplate.opsForValue().get(key);
+        List<PersistentUserMessageInfo> messages = persistentUserMessagesRedisTemplate.opsForValue().get(key);
         if (messages == null) {
             messages = new ArrayList<>();
         }
         messages.add(0, message);
-        userMessagesRedisTemplate.opsForValue().set(key, messages, 24, TimeUnit.HOURS);
+        persistentUserMessagesRedisTemplate.opsForValue().set(key, messages, 24, TimeUnit.HOURS);
     }
 
     @Override
     public void removeMessageFromUserCache(String userId, Long broadcastId) {
         String key = USER_MESSAGES_KEY_PREFIX + userId;
-        List<UserMessageInfo> messages = userMessagesRedisTemplate.opsForValue().get(key);
+        List<PersistentUserMessageInfo> messages = persistentUserMessagesRedisTemplate.opsForValue().get(key);
         if (messages != null) {
             messages.removeIf(msg -> msg.getBroadcastId().equals(broadcastId));
-            userMessagesRedisTemplate.opsForValue().set(key, messages, 24, TimeUnit.HOURS);
+            persistentUserMessagesRedisTemplate.opsForValue().set(key, messages, 24, TimeUnit.HOURS);
         }
     }
 

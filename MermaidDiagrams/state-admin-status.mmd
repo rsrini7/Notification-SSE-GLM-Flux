@@ -1,18 +1,22 @@
 stateDiagram-v2
     direction LR
-    [*] --> SCHEDULED: Admin creates broadcast <br/> with future start time
 
-    SCHEDULED --> ACTIVE: Scheduling Service job runs <br/> (scheduled_at time passes)
+    [*] --> SCHEDULED: Admin creates broadcast for distant future
+    [*] --> PREPARING: Admin creates immediate broadcast (or scheduled for near future)
+
+    SCHEDULED --> PREPARING: Pre-computation scheduler runs
+    SCHEDULED --> CANCELLED: Admin cancels
     
-    state ACTIVE {
-        direction LR
-        [*] --> IMMEDIATE: Admin creates broadcast <br/> for immediate delivery
-        IMMEDIATE --> [*]
-    }
+    PREPARING --> READY: Async user fetch succeeds
+    PREPARING --> FAILED: Async user fetch fails
+    PREPARING --> CANCELLED: Admin cancels
     
-    ACTIVE --> EXPIRED: Expiration Service job runs <br/> (expires_at time passes)
-    ACTIVE --> CANCELLED: Admin cancels broadcast via API
-    ACTIVE --> FAILED: DLT event for a group <br/> broadcast is consumed
+    READY --> ACTIVE: Activation scheduler runs (scheduled time arrives)
+    READY --> CANCELLED: Admin cancels
+    
+    ACTIVE --> EXPIRED: Expiration scheduler runs
+    ACTIVE --> CANCELLED: Admin cancels via API
+    ACTIVE --> FAILED: DLT event for group broadcast is consumed
     
     EXPIRED --> [*]
     CANCELLED --> [*]

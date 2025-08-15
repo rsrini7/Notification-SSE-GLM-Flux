@@ -1,0 +1,30 @@
+sequenceDiagram
+    participant UserMsgSvc as UserMessageService
+    participant RedisCache as Redis Cache Service
+    participant DB as Database
+
+    UserMsgSvc->>+RedisCache: 1- getActiveGroupBroadcasts("ALL")
+    alt Cache Hit
+        RedisCache-->>-UserMsgSvc: Returns List of BroadcastMessage
+    else Cache Miss
+        RedisCache-->>UserMsgSvc: 
+        UserMsgSvc->>+DB: 2- findActiveBroadcastsByTargetType("ALL")
+        DB-->>-UserMsgSvc: Returns List from DB
+        UserMsgSvc->>+RedisCache: 3- cacheActiveGroupBroadcasts("ALL", list)
+        RedisCache-->>-UserMsgSvc: 
+    end
+
+    UserMsgSvc->>+RedisCache: 4- getCachedUserMessages(userId)
+    alt Cache Hit
+        RedisCache-->>-UserMsgSvc: Returns List of PersistentUserMessageInfo
+        loop For each message info
+            UserMsgSvc->>+RedisCache: 5a- getBroadcastContent(broadcastId)
+            RedisCache-->>-UserMsgSvc: Returns BroadcastMessage content
+        end
+    else Cache Miss
+        RedisCache-->>UserMsgSvc: 
+        UserMsgSvc->>+DB: 5b- findUserMessagesByUserId(userId)
+        DB-->>-UserMsgSvc: Returns full inbox from DB
+        UserMsgSvc->>+RedisCache: 6b- cacheUserMessages(userId, list)
+        RedisCache-->>-UserMsgSvc: 
+    end

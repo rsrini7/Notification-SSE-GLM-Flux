@@ -1,0 +1,57 @@
+erDiagram
+    BROADCAST_MESSAGES {
+        BIGINT id PK "Primary Key"
+        VARCHAR content
+        VARCHAR status
+        VARCHAR target_type
+    }
+
+    USER_PREFERENCES {
+        VARCHAR user_id UK "Unique Key"
+        BOOLEAN notification_enabled
+    }
+
+    BROADCAST_USER_TARGETS {
+        BIGINT broadcast_id PK, FK "Foreign Key"
+        VARCHAR user_id PK
+    }
+
+    USER_BROADCAST_MESSAGES {
+        BIGINT id PK "Primary Key"
+        BIGINT broadcast_id FK "Foreign Key"
+        VARCHAR user_id
+        VARCHAR delivery_status
+        VARCHAR read_status
+    }
+
+    BROADCAST_STATISTICS {
+        BIGINT id PK "Primary Key"
+        BIGINT broadcast_id UK, FK "Unique, Foreign Key"
+        INT total_targeted
+        INT total_delivered
+        INT total_read
+    }
+
+    OUTBOX_EVENTS {
+        UUID id PK "Primary Key"
+        VARCHAR aggregate_id
+        VARCHAR event_type
+        VARCHAR topic
+    }
+
+    DLT_MESSAGES {
+        VARCHAR id PK "Primary Key"
+        BIGINT broadcast_id
+        VARCHAR original_topic
+    }
+
+    SHEDLOCK {
+        VARCHAR name PK "Primary Key"
+        TIMESTAMP lock_until
+        VARCHAR locked_by
+    }
+
+    BROADCAST_MESSAGES ||--o{ BROADCAST_USER_TARGETS : "has pre-computed targets"
+    BROADCAST_MESSAGES ||--o{ USER_BROADCAST_MESSAGES : "tracks status for"
+    BROADCAST_MESSAGES ||..|| BROADCAST_STATISTICS : "has stats"
+    USER_PREFERENCES |o..o{ USER_BROADCAST_MESSAGES : "influences"

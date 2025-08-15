@@ -141,6 +141,9 @@ h2:
     tcp-port: 9093
     
 broadcast:
+  simulation:
+    user-fetch-delay-ms: 120000
+
   # SSE Configuration
   sse:
     timeout: 300000

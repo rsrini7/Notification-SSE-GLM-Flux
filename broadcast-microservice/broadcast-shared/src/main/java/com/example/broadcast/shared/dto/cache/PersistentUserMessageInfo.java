@@ -6,7 +6,7 @@ import java.time.ZonedDateTime;
 
 @Getter
 @AllArgsConstructor
-public class UserMessageInfo {
+public class PersistentUserMessageInfo {
     // ID of the user_broadcast_messages record
     private final Long messageId; 
 

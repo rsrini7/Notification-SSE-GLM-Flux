@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS user_preferences CASCADE;
 DROP TABLE IF EXISTS dlt_messages CASCADE;
 DROP TABLE IF EXISTS outbox_events CASCADE;
 DROP TABLE IF EXISTS shedlock CASCADE;
+DROP TABLE IF EXISTS broadcast_user_targets CASCADE;
 
 DROP SEQUENCE IF EXISTS broadcast_seq;
 DROP SEQUENCE IF EXISTS user_broadcast_seq;
@@ -47,7 +48,7 @@ CREATE TABLE broadcast_messages (
     expires_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'SCHEDULED', 'EXPIRED', 'CANCELLED', 'FAILED')),
+    status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'SCHEDULED', 'PREPARING', 'READY', 'EXPIRED', 'CANCELLED', 'FAILED')),
     is_fire_and_forget BOOLEAN DEFAULT false
 );
 
@@ -155,3 +156,10 @@ CREATE TABLE shedlock (
     locked_by VARCHAR(255) NOT NULL
 );
 
+CREATE TABLE broadcast_user_targets (
+    broadcast_id BIGINT NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
+    PRIMARY KEY (broadcast_id, user_id),
+    FOREIGN KEY (broadcast_id) REFERENCES broadcast_messages(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_but_broadcast_id ON broadcast_user_targets (broadcast_id);

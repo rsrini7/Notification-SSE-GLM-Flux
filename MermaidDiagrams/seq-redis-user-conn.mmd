@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant UserUI as User UI
+    participant SseSvc as SseService
+    participant RedisCache as Redis Cache Service
+
+    UserUI->>+SseSvc: 1- Establishes SSE Connection
+    SseSvc->>+RedisCache: 2- registerUserConnection(userId)
+    Note over RedisCache: SET "user-conn:<userId>" with UserConnectionInfo (TTL 30m)
+    Note over RedisCache: SADD "online-users" "<userId>"
+    RedisCache-->>-SseSvc: 
+    SseSvc-->>-UserUI: Connection Active
+
+    Note over UserUI, SseSvc: ...Time passes, user disconnects...
+
+    UserUI->>+SseSvc: 3- Disconnects
+    SseSvc->>+RedisCache: 4- unregisterUserConnection(userId)
+    Note over RedisCache: DEL "user-conn:<userId>"
+    Note over RedisCache: SREM "online-users" "<userId>"
+    RedisCache-->>-SseSvc: 
+    SseSvc-->>-UserUI: Connection Closed

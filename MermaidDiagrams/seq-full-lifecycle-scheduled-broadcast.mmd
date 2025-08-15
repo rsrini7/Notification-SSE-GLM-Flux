@@ -1,0 +1,33 @@
+sequenceDiagram
+    participant PrecompScheduler as BroadcastPrecomputationService
+    participant TargetingSvc as BroadcastTargetingService (Async)
+    participant DB as PostgreSQL DB
+    participant ActivationScheduler as BroadcastSchedulingService
+    participant AdminSvc as BroadcastLifecycleService
+
+    Note over PrecompScheduler, DB: A broadcast exists with status='SCHEDULED'
+    
+    loop Every 1 Minute
+        PrecompScheduler->>+DB: 1- Find broadcasts in pre-fetch window
+        DB-->>-PrecompScheduler: Returns due broadcast
+    end
+    
+    PrecompScheduler->>+DB: 2- UPDATE broadcast_message SET status='PREPARING'
+    DB-->>-PrecompScheduler: 
+    PrecompScheduler-)+TargetingSvc: 3- precomputeAndStoreTargetUsers() [Async Call]
+
+    Note over TargetingSvc: 4- Long-running user fetch...
+    TargetingSvc->>+DB: 5- INSERT user list & UPDATE status to 'READY'
+    DB-->>-TargetingSvc: 6- Success
+    
+    Note over DB, ActivationScheduler: ...Time passes until scheduled_at arrives...
+
+    loop Every 1 Minute
+        ActivationScheduler->>+DB: 7- Find READY broadcasts where scheduled_at <= now()
+        DB-->>-ActivationScheduler: Returns the broadcast
+    end
+    
+    ActivationScheduler->>+AdminSvc: 8- processReadyBroadcast()
+    AdminSvc->>+DB: 9- UPDATE broadcast_message SET status='ACTIVE'
+    DB-->>-AdminSvc: 
+    Note over AdminSvc: 10- Fan-out to Kafka via Outbox begins...

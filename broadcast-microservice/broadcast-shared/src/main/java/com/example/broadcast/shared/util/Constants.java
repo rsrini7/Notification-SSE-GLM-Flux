@@ -8,6 +8,8 @@ public final class Constants {
     public static final String DLT_SUFFIX = "-dlt";
 
     public enum BroadcastStatus {
+        PREPARING,
+        READY,
         ACTIVE,
         SCHEDULED,
         EXPIRED,

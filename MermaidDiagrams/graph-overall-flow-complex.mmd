@@ -1,0 +1,72 @@
+graph TD
+    subgraph "User Interface"
+        AdminUser[Admin User]
+        UI[React Frontend App]
+    end
+
+    subgraph "Backend: Admin Service"
+        direction LR
+        AdminAPI["API Layer<br/>(BroadcastAdminController)"]
+        
+        subgraph "Business Logic"
+            LifecycleSvc[BroadcastLifecycleService]
+            TargetingSvc["TargetingService <br/> (Async User Fetch)"]
+        end
+
+        subgraph "Schedulers (ShedLock)"
+            PrecompScheduler["Precomputation Scheduler <br/> (SCHEDULED -> PREPARING)"]
+            ActivationScheduler["Activation Scheduler <br/> (READY -> ACTIVE)"]
+            CleanupScheduler["Cleanup Scheduler <br/> (Deletes old targets)"]
+            OutboxPoller[Outbox Poller]
+        end
+    end
+    
+    subgraph "Backend: User Service"
+        direction LR
+        UserAPI["API & SSE Layer<br/>(SseController)"]
+        subgraph "Kafka Consumers"
+            OrchestratorConsumer["Orchestrator Consumer (Leader)"]
+            WorkerConsumer[Worker Consumer]
+        end
+        SseService[SseService]
+    end
+
+    subgraph "Infrastructure"
+        Kafka[Kafka Broker]
+        Postgres[PostgreSQL DB<br/>- broadcast_messages<br/>- broadcast_user_targets<br/>- outbox_events]
+        Redis[Redis Cache<br/>- online-users<br/>- pending-events]
+    end
+
+    %% UI to Admin Service Interactions
+    AdminUser -- Creates/Cancels Broadcasts --> UI
+    UI -- HTTPS API Calls --> AdminAPI
+    AdminAPI --> LifecycleSvc
+
+    %% Scheduler and Pre-computation Flow
+    PrecompScheduler -- Finds upcoming broadcasts --> Postgres
+    PrecompScheduler -- Triggers Preparation --> TargetingSvc
+    TargetingSvc -- Stores user list --> Postgres
+
+    %% Activation Flow
+    ActivationScheduler -- Finds READY broadcasts --> Postgres
+    ActivationScheduler -- Triggers Activation --> LifecycleSvc
+    LifecycleSvc -- Writes to Outbox --> Postgres
+    OutboxPoller -- Reads from Outbox --> Postgres
+    OutboxPoller -- Publishes Events --> Kafka
+
+    %% Scatter-Gather and Delivery Flow
+    Kafka -- Single Orchestration Event --> OrchestratorConsumer
+    OrchestratorConsumer -- Reads pre-computed user list --> Postgres
+    OrchestratorConsumer -- "Scatters" User-Specific Events --> Kafka
+    Kafka -- User-Specific Events --> WorkerConsumer
+    WorkerConsumer --> SseService
+    
+    %% SSE and User Interaction
+    SseService -- Pushes to client --> UI
+    SseService -- Checks/Updates online status --> Redis
+    UI -- SSE Connect / Mark Read --> UserAPI
+    UserAPI --> SseService
+    
+    %% Cleanup Flow
+    CleanupScheduler -- Finds finalized broadcasts --> Postgres
+    CleanupScheduler -- Deletes from broadcast_user_targets --> Postgres

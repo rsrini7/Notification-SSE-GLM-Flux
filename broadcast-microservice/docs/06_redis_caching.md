@@ -45,12 +45,12 @@ public class RedisConfig {
     }
 
     @Bean
-    public RedisTemplate<String, List<UserMessageInfo>> userMessagesRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
-        RedisTemplate<String, List<UserMessageInfo>> template = new RedisTemplate<>();
+    public RedisTemplate<String, List<PersistentUserMessageInfo>> persistentUserMessagesRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
+        RedisTemplate<String, List<PersistentUserMessageInfo>> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
         
-        JavaType type = objectMapper.getTypeFactory().constructCollectionType(List.class, UserMessageInfo.class);
-        Jackson2JsonRedisSerializer<List<UserMessageInfo>> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, type);
+        JavaType type = objectMapper.getTypeFactory().constructCollectionType(List.class, PersistentUserMessageInfo.class);
+        Jackson2JsonRedisSerializer<List<PersistentUserMessageInfo>> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, type);
 
         template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(serializer);
@@ -75,7 +75,7 @@ public class RedisConfig {
 public class RedisCacheService implements CacheService {
 
     private final RedisTemplate<String, UserConnectionInfo> userConnectionInfoRedisTemplate;
-    private final RedisTemplate<String, List<UserMessageInfo>> userMessagesRedisTemplate;
+    private final RedisTemplate<String, List<PersistentUserMessageInfo>> persistentUserMessagesRedisTemplate;
     private final RedisTemplate<String, List<PendingEventInfo>> pendingEventsRedisTemplate;
     private final RedisTemplate<String, UserConnectionInfo> userConnectionRedisTemplate;
     private final RedisTemplate<String, BroadcastStatsInfo> broadcastStatsRedisTemplate;
@@ -100,9 +100,9 @@ public class RedisCacheService implements CacheService {
     }
 
     @Override
-    public void cacheUserMessages(String userId, List<UserMessageInfo> messages) {
+    public void cacheUserMessages(String userId, List<PersistentUserMessageInfo> messages) {
         // TTL of 24 hours for user messages
-        userMessagesRedisTemplate.opsForValue().set(USER_MESSAGES_KEY_PREFIX + userId, messages, 24, TimeUnit.HOURS);
+        persistentUserMessagesRedisTemplate.opsForValue().set(USER_MESSAGES_KEY_PREFIX + userId, messages, 24, TimeUnit.HOURS);
     }
 
     @Override
