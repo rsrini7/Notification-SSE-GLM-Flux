@@ -1,0 +1,39 @@
+sequenceDiagram
+    participant User as User
+    participant PodB as User Service Pod
+    participant SharedCache as Shared Cache
+    participant Orchestrator as Orchestrator (Leader)
+    participant KafkaOrch as Kafka (Orchestration Topic)
+    participant KafkaPodB as Kafka (Pod B's Topic)
+    participant DB as Database
+
+    Note over Orchestrator, SharedCache: Flow 1: Handling an Offline User
+    Orchestrator->>+SharedCache: 1- GET "connection:offline-user"
+    SharedCache-->>-Orchestrator: returns null
+    Orchestrator->>+SharedCache: 2- SET "pending-evt:offline-user" with message
+    SharedCache-->>-Orchestrator: 
+    
+    Note over User, PodB: ...Later, the offline user connects...
+    User->>+PodB: 3- Establishes SSE Connection
+    PodB->>+SharedCache: 4- GET "pending-evt:offline-user"
+    SharedCache-->>-PodB: Returns pending message
+    PodB->>User: 5- Delivers pending message via SSE
+    PodB->>+SharedCache: 6- DEL "pending-evt:offline-user"
+    SharedCache-->>-PodB: 
+
+    Note over User, DB: Flow 2: User Marks a Message as Read
+    User->>+PodB: 7- POST /api/user/messages/read
+    PodB->>+DB: 8- Update DB and write READ event to Outbox
+    DB-->>-PodB: 
+    Note over PodB, KafkaOrch: (Outbox Poller publishes the event)
+    PodB->>+KafkaOrch: 9- Publishes READ event
+    KafkaOrch-->>-PodB: 
+
+    KafkaOrch->>+Orchestrator: 10- Leader consumes READ event
+    Orchestrator->>+SharedCache: 11- GET "connection:user"
+    SharedCache-->>-Orchestrator: returns "pod-b"
+    Orchestrator->>+KafkaPodB: 12- Publishes targeted READ event to Pod B's topic
+    KafkaPodB-->>-Orchestrator: 
+    
+    KafkaPodB->>+PodB: 13- Pod B consumes event
+    PodB->>User: 14- Pushes READ_RECEIPT via SSE
