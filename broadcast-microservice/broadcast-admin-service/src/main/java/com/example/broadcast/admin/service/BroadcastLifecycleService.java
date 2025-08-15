@@ -29,8 +29,10 @@ import org.springframework.transaction.annotation.Propagation;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -99,16 +101,15 @@ public class BroadcastLifecycleService {
         broadcast.setStatus(Constants.BroadcastStatus.CANCELLED.name());
         broadcastRepository.update(broadcast);
 
+        // This database update for pending users is correct.
         int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
         log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
 
+        // Trigger event logic is now handled correctly based on target type.
         triggerCancelOrExpireBroadcastEvent(broadcast, Constants.EventType.CANCELLED, "Broadcast CANCELLED");
         
         cacheService.evictActiveGroupBroadcastsCache();
-        
-        // CHANGED: Evict the specific broadcast from the content cache.
         cacheService.evictBroadcastContent(id);
-        
         log.info("Broadcast cancelled: {}. Published cancellation events to outbox and evicted caches.", id);
     }
 
@@ -120,22 +121,54 @@ public class BroadcastLifecycleService {
             broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
             broadcastRepository.update(broadcast);
             
-            
-            // CHANGED: Use the new repository method to update both PENDING and DELIVERED messages to SUPERSEDED.
-            // This makes the state consistent for all users, including those who already received a "Fire and Forget" message.
             int updatedCount = userBroadcastRepository.updateNonFinalStatusesByBroadcastId(broadcastId, Constants.DeliveryStatus.SUPERSEDED.name());
             log.info("Updated {} PENDING or DELIVERED user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
             
+            // Trigger event logic is now handled correctly based on target type.
             triggerCancelOrExpireBroadcastEvent(broadcast, Constants.EventType.EXPIRED, "Broadcast EXPIRED");
             
             cacheService.evictActiveGroupBroadcastsCache();
-
-            // CHANGED: Evict the specific broadcast from the content cache.
             cacheService.evictBroadcastContent(broadcastId);
 
             log.info("Broadcast expired: {}. Published expiration events to outbox and evicted caches.", broadcastId);
         } else {
             log.info("Broadcast {} was already in a non-active state ({}). No expiration action needed.", broadcastId, broadcast.getStatus());
+        }
+    }
+
+    // NEW HELPER: Centralizes logic for publishing action events.
+    private void triggerCancelOrExpireBroadcastEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
+        // Case 1: For SELECTED users, we must fan-out user-specific events.
+        if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
+            List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcast.getId());
+            if (!userBroadcasts.isEmpty()) {
+                String topicName = appProperties.getKafka().getTopic().getNameUserActions(); // Topic for workers
+                log.info("Publishing {} user-specific lifecycle events ({}) for SELECTED broadcast {} to topic {}", userBroadcasts.size(), eventType.name(), broadcast.getId(), topicName);
+
+                List<OutboxEvent> eventsToPublish = userBroadcasts.stream().map(userMessage -> {
+                    MessageDeliveryEvent eventPayload = createLifecycleEvent(broadcast, userMessage.getUserId(), eventType, message);
+                    try {
+                        String payloadJson = objectMapper.writeValueAsString(eventPayload);
+                        return createOutboxEvent(eventPayload, topicName, payloadJson);
+                    } catch (JsonProcessingException e) {
+                        log.error("Failed to serialize action event for user {}: {}", userMessage.getUserId(), e.getMessage());
+                        return null;
+                    }
+                }).filter(Objects::nonNull).collect(Collectors.toList());
+                outboxEventPublisher.publishBatch(eventsToPublish);
+            }
+        // Case 2: For GROUP users, publish a single orchestration event.
+        } else {
+            String topicName = appProperties.getKafka().getTopic().getNameActionsOrchestration(); // Topic for the leader
+            log.info("Publishing single group lifecycle event ({}) for GROUP broadcast {} to topic {}", eventType.name(), broadcast.getId(), topicName);
+            
+            MessageDeliveryEvent eventPayload = createGroupLifecycleEvent(broadcast, eventType, message);
+            try {
+                String payloadJson = objectMapper.writeValueAsString(eventPayload);
+                outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, payloadJson));
+            } catch (JsonProcessingException e) {
+                log.error("Critical: Failed to serialize group lifecycle event for outbox for broadcast {}.", broadcast.getId(), e);
+            }
         }
     }
 
@@ -204,37 +237,6 @@ public class BroadcastLifecycleService {
             }
         }
         return totalTargeted;
-    }
-
-    private void triggerCancelOrExpireBroadcastEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
-
-        String topicName = appProperties.getKafka().getTopic().getNameSelected();
-        List<UserBroadcastMessage> userBroadcasts = userBroadcastRepository.findByBroadcastId(broadcast.getId());
-
-        if (!userBroadcasts.isEmpty()) {
-            // This is the existing logic for SELECTED users, which is correct.
-            List<OutboxEvent> eventsToPublish = new ArrayList<>();
-            for (UserBroadcastMessage userMessage : userBroadcasts) {
-                MessageDeliveryEvent eventPayload = createLifecycleEvent(broadcast, userMessage.getUserId(), eventType, message);
-                try {
-                    String payloadJson = objectMapper.writeValueAsString(eventPayload);
-                    eventsToPublish.add(createOutboxEvent(eventPayload, topicName, payloadJson));
-                } catch (JsonProcessingException e) {
-                    log.error("Critical: Failed to serialize lifecycle event payload for outbox. Event for user {} will not be published.", userMessage.getUserId(), e);
-                }
-            }
-            outboxEventPublisher.publishBatch(eventsToPublish);
-        } else if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType()) || Constants.TargetType.ROLE.name().equals(broadcast.getTargetType())) {
-            // NEW LOGIC: If no user records exist, it's a group broadcast. Publish a single group event.
-            log.info("Publishing group lifecycle event ({}) for broadcast {}", eventType.name(), broadcast.getId());
-            MessageDeliveryEvent eventPayload = createGroupLifecycleEvent(broadcast, eventType, message);
-            try {
-                String payloadJson = objectMapper.writeValueAsString(eventPayload);
-                outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, payloadJson));
-            } catch (JsonProcessingException e) {
-                log.error("Critical: Failed to serialize group lifecycle event payload for outbox for broadcast {}.", broadcast.getId(), e);
-            }
-        }
     }
 
     private MessageDeliveryEvent createGroupLifecycleEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
