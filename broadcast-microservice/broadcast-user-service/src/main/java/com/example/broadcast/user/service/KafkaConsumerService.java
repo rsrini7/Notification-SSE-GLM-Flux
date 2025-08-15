@@ -2,12 +2,8 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.exception.MessageProcessingException;
-import com.example.broadcast.shared.model.BroadcastMessage;
-import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
-import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.service.cache.CacheService;
-import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.EventType;
 import com.example.broadcast.shared.service.TestingConfigurationService;
 import lombok.RequiredArgsConstructor;
@@ -19,10 +15,6 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
 import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
 
@@ -34,11 +26,8 @@ public class KafkaConsumerService {
     // Add this field to record the service's startup time
     private final ZonedDateTime startupTime = ZonedDateTime.now(ZoneOffset.UTC);
 
-
     private final SseService sseService;
     private final CacheService cacheService;
-    private final UserService userService;
-    private final BroadcastRepository broadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final TestingConfigurationService testingConfigurationService;
 

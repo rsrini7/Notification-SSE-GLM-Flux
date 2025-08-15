@@ -25,6 +25,9 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.Collections;
 
+// "Scatter-Gather" pattern introduced to avoid the "thundering herd" problem.
+//  This class consumed by single "leader" pod using a static group ID.
+//  This leader publish user-specific tasks to a new user ( "worker" consumer kept in KafkaConsumerService.java)
 @Service
 @Slf4j
 @RequiredArgsConstructor
