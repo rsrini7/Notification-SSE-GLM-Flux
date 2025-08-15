@@ -107,12 +107,11 @@ resilience4j:
 
 
 # --- CUSTOM PROPERTIES ---
-h2:
-  console:
-    web-port: 8084 # Admin H2 Console on port 8084
-    tcp-port: 9094
 
 broadcast:
+  h2-console:
+    web-port: "8085" # Admin H2 Console on port 8085
+    tcp-port: "9095"
   sse:
     timeout: 300000
     heartbeat-interval: 30000

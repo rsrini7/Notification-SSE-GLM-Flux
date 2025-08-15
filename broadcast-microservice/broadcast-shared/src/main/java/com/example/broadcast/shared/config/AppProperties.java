@@ -22,6 +22,13 @@ public class AppProperties {
     private final Kafka kafka = new Kafka();
     private final Pod pod = new Pod();
     private final Simulation simulation = new Simulation();
+    private final H2Console h2Console = new H2Console();
+
+    @Data
+    public static class H2Console{
+        private String webPort = "8084";
+        private String tcpPort = "9094";
+    }
 
     @Data
     public static class Simulation {
