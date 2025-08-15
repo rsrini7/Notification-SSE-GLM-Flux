@@ -2,6 +2,7 @@
 
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.util.Constants; // NEW IMPORT
@@ -12,9 +13,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -24,14 +25,21 @@ public class BroadcastPrecomputationService {
 
     private final BroadcastRepository broadcastRepository;
     private final BroadcastTargetingService broadcastTargetingService;
+    private final AppProperties appProperties;
 
-    private static final Duration PREFETCH_WINDOW = Duration.ofMinutes(30);
+    private static final long BUFFER_MILLISECONDS = 120_000L;
 
     @Scheduled(fixedRate = 60000)
     @SchedulerLock(name = "precomputeScheduledBroadcasts", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     @Transactional
     public void findAndPrepareBroadcasts() {
-        ZonedDateTime prefetchCutoff = ZonedDateTime.now(ZoneOffset.UTC).plus(PREFETCH_WINDOW);
+         // 1. Get the configured maximum fetch delay.
+        long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
+        
+        // 2. Calculate the total window needed: the delay + a 2-minute buffer.
+        long totalWindowMs = fetchDelayMs + BUFFER_MILLISECONDS;
+        ZonedDateTime prefetchCutoff = ZonedDateTime.now(ZoneOffset.UTC).plus(totalWindowMs, ChronoUnit.MILLIS);
+
         List<BroadcastMessage> broadcastsToPrepare = broadcastRepository.findScheduledBroadcastsWithinWindow(prefetchCutoff);
 
         if (broadcastsToPrepare.isEmpty()) {
