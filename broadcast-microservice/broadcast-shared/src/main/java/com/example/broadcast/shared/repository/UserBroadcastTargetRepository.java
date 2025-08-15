@@ -63,4 +63,5 @@ public class UserBroadcastTargetRepository {
         String sql = "DELETE FROM broadcast_user_targets WHERE broadcast_id = ?";
         return jdbcTemplate.update(sql, broadcastId);
     }
+    
 }

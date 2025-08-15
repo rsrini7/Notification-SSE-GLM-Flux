@@ -122,15 +122,13 @@ public class BroadcastLifecycleService {
         broadcastRepository.update(broadcast);
 
         // This database update for pending users is correct.
-        int updatedCount = userBroadcastRepository.updatePendingStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
-        log.info("Updated {} pending user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
+        int updatedCount = userBroadcastRepository.updateNonFinalStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
+        log.info("Updated {} PENDING or DELIVERED user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
 
         // Trigger event logic is now handled correctly based on target type.
         triggerCancelOrExpireBroadcastEvent(broadcast, Constants.EventType.CANCELLED, "Broadcast CANCELLED");
         
-        // Clean up the pre-computed user list
-        int deletedCount = userBroadcastTargetRepository.deleteByBroadcastId(id);
-        log.info("Cleaned up {} pre-computed user targets for cancelled broadcast ID: {}", deletedCount, id);
+        // REMOVED: The premature cleanup call is now gone.
 
         cacheService.evictActiveGroupBroadcastsCache();
         cacheService.evictBroadcastContent(id);
@@ -151,9 +149,7 @@ public class BroadcastLifecycleService {
             // Trigger event logic is now handled correctly based on target type.
             triggerCancelOrExpireBroadcastEvent(broadcast, Constants.EventType.EXPIRED, "Broadcast EXPIRED");
             
-            // Clean up the pre-computed user list
-            int deletedCount = userBroadcastTargetRepository.deleteByBroadcastId(broadcastId);
-            log.info("Cleaned up {} pre-computed user targets for expired broadcast ID: {}", deletedCount, broadcastId);
+            // REMOVED: The premature cleanup call is now gone.
 
             cacheService.evictActiveGroupBroadcastsCache();
             cacheService.evictBroadcastContent(broadcastId);

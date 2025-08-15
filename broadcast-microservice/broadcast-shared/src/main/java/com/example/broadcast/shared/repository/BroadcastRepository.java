@@ -254,5 +254,11 @@ public class BroadcastRepository {
             """;
         return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime(), limit);
     }
+
+    public List<BroadcastMessage> findFinalizedBroadcastsForCleanup(ZonedDateTime cutoff) {
+        String sql = "SELECT * FROM broadcast_messages WHERE status IN ('CANCELLED', 'EXPIRED') AND updated_at < ?";
+        return jdbcTemplate.query(sql, broadcastRowMapper, cutoff.toOffsetDateTime());
+    }
+
     
 }
