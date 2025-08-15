@@ -10,6 +10,8 @@ server:
     key-store-password: "password"
     key-alias: "netty"
 spring:
+  profiles:
+    default: admin-only
   application:
     name: broadcast-admin-service # Admin service name
   threads:
@@ -73,7 +75,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,circuitbreakers,bulkheads,ratelimiters,redis-cache-stats
+        include: health,info,env,metrics,prometheus,circuitbreakers,bulkheads,ratelimiters,redis-cache-stats
   endpoint:
     health:
       show-details: always
@@ -134,13 +136,12 @@ resilience4j:
         maxWaitDuration: 10ms
 
 # --- CUSTOM PROPERTIES ---
-
-h2:
-  console:
-    web-port: 8083 # Admin H2 Console on port 8083
-    tcp-port: 9093
-    
+   
 broadcast:
+  h2-console:
+    web-port: "8084" # Admin H2 Console on port 8084
+    tcp-port: "9094"
+
   simulation:
     user-fetch-delay-ms: 120000
 
