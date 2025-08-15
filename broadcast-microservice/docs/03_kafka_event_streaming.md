@@ -64,16 +64,16 @@ Let's walk through how Kafka is used in the message delivery process:
 ```mermaid
 sequenceDiagram
     participant Admin
-    participant BroadcastService
+    participant BroadcastAdminService
     participant KafkaProducer
     participant KafkaBroker
     participant KafkaConsumer
     participant SseService
     participant Client
 
-    Admin->>BroadcastService: Create broadcast
-    BroadcastService->>BroadcastService: Save to database
-    BroadcastService->>KafkaProducer: Publish MessageDeliveryEvent
+    Admin->>BroadcastAdminService: Create broadcast
+    BroadcastAdminService->>BroadcastAdminService: Save to database
+    BroadcastAdminService->>KafkaProducer: Publish MessageDeliveryEvent
     KafkaProducer->>KafkaBroker: Send to appropriate topic
     
     Note over KafkaBroker: Message distributed to partitions

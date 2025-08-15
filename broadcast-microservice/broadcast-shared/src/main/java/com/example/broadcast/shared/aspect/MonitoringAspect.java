@@ -17,7 +17,7 @@ public class MonitoringAspect {
     private final MonitoringConfig.BroadcastMetricsCollector metricsCollector;
 
     @Around("execution(* com.example.broadcast.admin.service.BroadcastLifecycleService.*(..))")
-    public Object monitorBroadcastService(ProceedingJoinPoint joinPoint) throws Throwable {
+    public Object monitorBroadcastAdminService(ProceedingJoinPoint joinPoint) throws Throwable {
         String methodName = joinPoint.getSignature().getName();
         long startTime = System.currentTimeMillis();
         
@@ -26,14 +26,14 @@ public class MonitoringAspect {
             long duration = System.currentTimeMillis() - startTime;
             metricsCollector.recordTimer("broadcast.service.latency", duration, "method", methodName, "status", "success");
             metricsCollector.incrementCounter("broadcast.service.calls", "method", methodName, "status", "success");
-            log.debug("BroadcastService.{} completed successfully in {}ms", methodName, duration);
+            log.debug("BroadcastAdminService.{} completed successfully in {}ms", methodName, duration);
             return result;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             metricsCollector.recordTimer("broadcast.service.latency", duration, "method", methodName, "status", "error");
             metricsCollector.incrementCounter("broadcast.service.calls", "method", methodName, "status", "error");
             metricsCollector.incrementCounter("broadcast.errors", "type", "service", "method", methodName);
-            log.error("BroadcastService.{} failed after {}ms: {}", methodName, duration, e.getMessage());
+            log.error("BroadcastAdminService.{} failed after {}ms: {}", methodName, duration, e.getMessage());
             throw e;
         }
     }

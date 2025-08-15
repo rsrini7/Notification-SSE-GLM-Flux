@@ -16,12 +16,12 @@ graph TD
 
     subgraph "Frontend"
         B -- "Proxies to" --> C(broadcast-frontend)
-        C -- "Real-time SSE" --> D(broadcast-microservice)
+        C -- "Real-time SSE" --> D(broadcast-user-service)
         C -- "REST API" --> D
     end
 
     subgraph "Backend Core"
-        D(broadcast-microservice) -- "Publishes Events" --> E(Kafka Broker)
+        D(broadcast-admin-service) -- "Publishes Events" --> E(Kafka Broker)
         D -- "Reads/Writes" --> F(Postgres/H2 Database)
         D -- "Caches Data" --> G(Redis Cache)
     end

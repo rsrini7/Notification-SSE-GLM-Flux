@@ -25,7 +25,7 @@ The caching strategy uses a combination of time-based expiration (TTL) and event
 <details>
 <summary>Redis Configuration</summary>
 
-- **<mcsymbol name="RedisConfig" filename="RedisConfig.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\src\main\java\com\example\broadcast\shared\config\RedisConfig.java" startline="13" type="class"></mcsymbol>**: This class configures various `RedisTemplate` beans for different data types, setting up serializers for keys and values. TTLs for cached data are managed directly within the `CacheService` implementation.
+- **<mcsymbol name="RedisConfig" filename="RedisConfig.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\broadcast-shared\src\main\java\com\example\broadcast\shared\config\RedisConfig.java" startline="13" type="class"></mcsymbol>**: This class configures various `RedisTemplate` beans for different data types, setting up serializers for keys and values. TTLs for cached data are managed directly within the `CacheService` implementation.
 
 ```java
 // Excerpt from RedisConfig.java
@@ -65,7 +65,7 @@ public class RedisConfig {
 <details>
 <summary>Cache Service Implementation</summary>
 
-`CacheService` is an interface, and <mcsymbol name="RedisCacheService" filename="RedisCacheService.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\src\main\java\com\example\broadcast\shared\service\cache\RedisCacheService.java" startline="20" type="class"></mcsymbol> is its concrete implementation, handling various caching operations with Redis. It manages user connection information, user messages, pending events, broadcast statistics, and active broadcasts, with TTLs applied directly within the service.
+`CacheService` is an interface, and <mcsymbol name="RedisCacheService" filename="RedisCacheService.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\broadcast-shared\src\main\java\com\example\broadcast\shared\service\cache\RedisCacheService.java" startline="20" type="class"></mcsymbol> is its concrete implementation, handling various caching operations with Redis. It manages user connection information, user messages, pending events, broadcast statistics, and active broadcasts, with TTLs applied directly within the service.
 
 ```java
 // Excerpt from RedisCacheService.java

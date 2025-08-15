@@ -104,7 +104,7 @@ spec:
       #           - key: app
       #             operator: In
       #             values:
-      #             - broadcast-microservice
+      #             - broadcast-admin-service
       #         topologyKey: kubernetes.io/hostname
       # tolerations:
       # - key: "broadcast-node"

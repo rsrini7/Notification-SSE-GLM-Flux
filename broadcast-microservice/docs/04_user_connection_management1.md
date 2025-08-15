@@ -7,7 +7,7 @@ The Broadcast Microservice manages user connections for Server-Sent Events (SSE)
 
 ### 1. SseConnectionManager
 
-<mcsymbol name="SseConnectionManager" filename="SseConnectionManager.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\src\main\java\com\example\broadcast\user\service\SseConnectionManager.java" startline="37" type="class"></mcsymbol> is the core component responsible for managing the low-level technical aspects of SSE connections. It maintains in-memory state for connections on the current pod and handles the lifecycle of SSE streams.
+<mcsymbol name="SseConnectionManager" filename="SseConnectionManager.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\broadcast-user-service\src\main\java\com\example\broadcast\user\service\SseConnectionManager.java" startline="37" type="class"></mcsymbol> is the core component responsible for managing the low-level technical aspects of SSE connections. It maintains in-memory state for connections on the current pod and handles the lifecycle of SSE streams.
 
 **Responsibilities:**
 - Creating and storing in-memory sinks for each client connection.
@@ -18,18 +18,18 @@ The Broadcast Microservice manages user connections for Server-Sent Events (SSE)
 
 ### 2. DistributedConnectionManager
 
-<mcsymbol name="DistributedConnectionManager" filename="DistributedConnectionManager.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\src\main\java\com\example\broadcast\user\service\DistributedConnectionManager.java" startline="11" type="class"></mcsymbol> is an interface that abstracts the underlying connection storage mechanism. It provides methods for registering, removing, updating heartbeats, and querying connection information in a distributed environment.
+<mcsymbol name="DistributedConnectionManager" filename="DistributedConnectionManager.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\broadcast-user-service\src\main\java\com\example\broadcast\user\service\DistributedConnectionManager.java" startline="11" type="class"></mcsymbol> is an interface that abstracts the underlying connection storage mechanism. It provides methods for registering, removing, updating heartbeats, and querying connection information in a distributed environment.
 
 **Implementations:**
-- <mcsymbol name="RedisConnectionManager" filename="RedisConnectionManager.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\src\main\java\com\example\broadcast\user\service\RedisConnectionManager.java" startline="14" type="class"></mcsymbol>: Manages connections using Redis as the distributed store. 
+- <mcsymbol name="RedisConnectionManager" filename="RedisConnectionManager.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\broadcast-user-service\src\main\java\com\example\broadcast\user\service\RedisConnectionManager.java" startline="14" type="class"></mcsymbol>: Manages connections using Redis as the distributed store. 
 
 ### 3. SseController
 
-<mcsymbol name="SseController" filename="SseController.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\src\main\java\com\example\broadcast\user\controller\SseController.java" startline="20" type="class"></mcsymbol> handles incoming HTTP requests for SSE connections, disconnections, and connection statistics.
+<mcsymbol name="SseController" filename="SseController.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\broadcast-user-service\src\main\java\com\example\broadcast\user\controller\SseController.java" startline="20" type="class"></mcsymbol> handles incoming HTTP requests for SSE connections, disconnections, and connection statistics.
 
 ### 4. SseService
 
-<mcsymbol name="SseService" filename="SseService.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\src\main\java\com\example\broadcast\user\service\SseService.java" startline="20" type="class"></mcsymbol> acts as an orchestrator, coordinating between <mcsymbol name="SseConnectionManager" filename="SseConnectionManager.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\src\main\java\com\example\broadcast\user\service\SseConnectionManager.java" startline="37" type="class"></mcsymbol> and other services for message delivery and connection management.
+<mcsymbol name="SseService" filename="SseService.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\broadcast-user-service\src\main\java\com\example\broadcast\user\service\SseService.java" startline="20" type="class"></mcsymbol> acts as an orchestrator, coordinating between <mcsymbol name="SseConnectionManager" filename="SseConnectionManager.java" path="c:\Users\Srini\ws\Notification-SSE-GLM-Flux\broadcast-microservice\broadcast-user-service\src\main\java\com\example\broadcast\user\service\SseConnectionManager.java" startline="37" type="class"></mcsymbol> and other services for message delivery and connection management.
 
 ### 5. UserConnectionCleanupService
 

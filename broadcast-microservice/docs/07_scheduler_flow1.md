@@ -136,7 +136,7 @@ sequenceDiagram
 ```
 
 1. **Message Scheduling**: An administrator uses the Admin UI to create a broadcast message and sets a `scheduledTime`.
-2. **Database Persistence**: The `BroadcastService` saves this message to the database with a `SCHEDULED` status.
+2. **Database Persistence**: The `BroadcastAdminService` saves this message to the database with a `SCHEDULED` status.
 3. **Scheduled Scan**: The `BroadcastSchedulerService` runs periodically (e.g., every minute) and queries the database for all messages with `SCHEDULED` status whose `scheduledTime` is in the past or present.
 4. **Status Update & Publish**: For each found message, the scheduler first updates its status to `IN_PROGRESS` in the database, then publishes the message to the `broadcast_messages` Kafka topic. After successful publishing, the status is updated to `SENT`.
 5. **Kafka Consumption**: Kafka consumers pick up these messages and proceed with the delivery process (e.g., via SSE).

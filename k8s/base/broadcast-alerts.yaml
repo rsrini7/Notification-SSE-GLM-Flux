@@ -1,23 +1,34 @@
 groups:
-- name: broadcast-microservice
+- name: broadcast-admin-service
   rules:
-  - alert: BroadcastServiceDown
-    expr: up{job="broadcast-microservice"} == 0
+  - alert: BroadcastAdminServiceDown
+    expr: up{job="broadcast-admin-service"} == 0
     for: 1m
     labels:
       severity: critical
     annotations:
-      summary: "Broadcast service is down"
-      description: "Broadcast service has been down for more than 1 minute"
+      summary: "Broadcast admin service is down"
+      description: "Broadcast admin service has been down for more than 1 minute"
+  
+  - name: broadcast-user-service
+  rules:
+  - alert: BroadcastUserServiceDown
+    expr: up{job="broadcast-user-service"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Broadcast user service is down"
+      description: "Broadcast user service has been down for more than 1 minute"
   
   - alert: HighMemoryUsage
-    expr: (container_memory_usage_bytes{container="broadcast-microservice"} / container_spec_memory_limit_bytes{container="broadcast-microservice"}) * 100 > 90
+    expr: (container_memory_usage_bytes{container="broadcast-admin-service"} / container_spec_memory_limit_bytes{container="broadcast-admin-service"}) * 100 > 90
     for: 5m
     labels:
       severity: warning
     annotations:
       summary: "High memory usage detected"
-      description: "Broadcast service memory usage is above 90% for 5 minutes"
+      description: "Broadcast admin service memory usage is above 90% for 5 minutes"
   
   - alert: HighCPUUsage
     expr: (rate(container_cpu_usage_seconds_total{container="broadcast-microservice"}[5m]) * 100) > 80
@@ -26,7 +37,7 @@ groups:
       severity: warning
     annotations:
       summary: "High CPU usage detected"
-      description: "Broadcast service CPU usage is above 80% for 5 minutes"
+      description: "Broadcast admin service CPU usage is above 80% for 5 minutes"
   
   - alert: HighSSEConnections
     expr: sse_connections > 25000
@@ -65,10 +76,10 @@ groups:
       description: "Message delivery failure rate is above 5% for 2 minutes"
   
   - alert: PodRestarts
-    expr: changes(kube_pod_container_status_restarts_total{container="broadcast-microservice"}[15m]) > 2
+    expr: changes(kube_pod_container_status_restarts_total{container="broadcast-admin-service"}[15m]) > 2
     for: 1m
     labels:
       severity: warning
     annotations:
       summary: "Pod restarts detected"
-      description: "Broadcast service pods have restarted more than 2 times in 15 minutes"
+      description: "Broadcast admin service pods have restarted more than 2 times in 15 minutes"

@@ -96,17 +96,17 @@ Let's walk through how the database schema supports the message lifecycle:
 ```mermaid
 sequenceDiagram
     participant Admin
-    participant BroadcastService
+    participant BroadcastAdminService
     participant Database
     participant Kafka
     participant SSE
     participant User
 
-    Admin->>BroadcastService: Create broadcast
-    BroadcastService->>Database: Insert into broadcast_messages
-    BroadcastService->>Database: Insert into user_broadcast_messages for each recipient
-    BroadcastService->>Database: Initialize broadcast_statistics
-    BroadcastService->>Kafka: Publish events
+    Admin->>BroadcastAdminService: Create broadcast
+    BroadcastAdminService->>Database: Insert into broadcast_messages
+    BroadcastAdminService->>Database: Insert into user_broadcast_messages for each recipient
+    BroadcastAdminService->>Database: Initialize broadcast_statistics
+    BroadcastAdminService->>Kafka: Publish events
     
     Note over Database: Message stored with ACTIVE status
     
@@ -123,10 +123,10 @@ sequenceDiagram
     
     Note over Database: Periodic job updates statistics
     
-    BroadcastService->>Database: Query for expired messages
-    Database->>BroadcastService: Return expired messages
-    BroadcastService->>Database: Update status to EXPIRED
-    BroadcastService->>Kafka: Publish expiration events
+    BroadcastAdminService->>Database: Query for expired messages
+    Database->>BroadcastAdminService: Return expired messages
+    BroadcastAdminService->>Database: Update status to EXPIRED
+    BroadcastAdminService->>Kafka: Publish expiration events
 ```
 
 1. When a broadcast is created, it's stored in the `broadcast_messages` table with its metadata
