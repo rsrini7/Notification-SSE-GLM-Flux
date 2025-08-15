@@ -4,6 +4,7 @@ package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
+import com.example.broadcast.shared.util.Constants; // NEW IMPORT
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -33,9 +34,18 @@ public class BroadcastPrecomputationService {
         ZonedDateTime prefetchCutoff = ZonedDateTime.now(ZoneOffset.UTC).plus(PREFETCH_WINDOW);
         List<BroadcastMessage> broadcastsToPrepare = broadcastRepository.findScheduledBroadcastsWithinWindow(prefetchCutoff);
 
+        if (broadcastsToPrepare.isEmpty()) {
+            return;
+        }
+
+        log.info("Found {} scheduled broadcasts to begin pre-computation.", broadcastsToPrepare.size());
         for (BroadcastMessage broadcast : broadcastsToPrepare) {
-            log.info("Starting pre-computation for scheduled broadcast ID: {}", broadcast.getId());
-            // This call is asynchronous, so the scheduler can continue its work immediately
+            // --- THIS IS THE CRITICAL FIX ---
+            // 1. Claim the broadcast immediately by updating its status within this synchronous transaction.
+            broadcastRepository.updateStatus(broadcast.getId(), Constants.BroadcastStatus.PREPARING.name());
+            log.info("Claimed broadcast ID: {} by setting status to PREPARING.", broadcast.getId());
+
+            // 2. Now, safely call the asynchronous method to do the long-running work.
             broadcastTargetingService.precomputeAndStoreTargetUsers(broadcast.getId());
         }
     }

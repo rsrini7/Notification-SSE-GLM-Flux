@@ -247,7 +247,7 @@ public class BroadcastRepository {
     public List<BroadcastMessage> findAndLockReadyBroadcastsToProcess(ZonedDateTime now, int limit) {
         String sql = """
             SELECT * FROM broadcast_messages
-            WHERE status = 'READY' AND scheduled_at <= ?
+            WHERE status = 'READY' AND (scheduled_at IS NULL OR scheduled_at <= ?)
             ORDER BY scheduled_at
             LIMIT ?
             FOR UPDATE SKIP LOCKED

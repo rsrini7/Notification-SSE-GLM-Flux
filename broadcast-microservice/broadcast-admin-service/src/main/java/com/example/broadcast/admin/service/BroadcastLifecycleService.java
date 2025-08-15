@@ -82,14 +82,6 @@ public class BroadcastLifecycleService {
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
 
-        // If it's scheduled for the future, just save it and let the pre-computation scheduler handle it.
-        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
-            broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
-            broadcast = broadcastRepository.save(broadcast);
-            log.info("Broadcast with ID: {} is scheduled for: {}", broadcast.getId(), broadcast.getScheduledAt());
-            return broadcastMapper.toBroadcastResponse(broadcast, 0);
-        }
-
         // For IMMEDIATE broadcasts OR broadcasts scheduled too close to now:
         // 1. Save the broadcast with PREPARING status to get an ID.
         log.info("Broadcast ID: {} is immediate or scheduled too close. Treating as immediate. Saving with PREPARING status.", broadcast.getId());
