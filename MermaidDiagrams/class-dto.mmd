@@ -1,0 +1,120 @@
+classDiagram
+    direction TB
+
+    namespace model {
+        class BroadcastMessage {
+            <<Entity>>
+            +Long id
+            +String content
+            +String status
+            +String targetType
+        }
+        class UserBroadcastMessage {
+            <<Entity>>
+            +Long id
+            +Long broadcastId
+            +String userId
+            +String readStatus
+        }
+        class BroadcastStatistics {
+            <<Entity>>
+            +Long broadcastId
+            +Integer totalTargeted
+            +Integer totalDelivered
+        }
+        class UserPreferences {
+            <<Entity>>
+            +String userId
+            +boolean notificationEnabled
+        }
+        class OutboxEvent {
+            <<Entity>>
+            +UUID id
+            +String eventType
+            +String payload
+        }
+    }
+
+    namespace dto.admin {
+        class BroadcastRequest {
+            +String content
+            +String targetType
+        }
+        class BroadcastResponse {
+            +Long id
+            +String content
+            +String status
+        }
+        class DltMessage {
+            +Long broadcastId
+            +String exceptionMessage
+            +String originalMessagePayload
+        }
+        class RedriveAllResult {
+            +int successCount
+            +int failureCount
+            +List~RedriveFailureDetail~ failures
+        }
+        class RedriveFailureDetail {
+            +String dltMessageId
+            +String reason
+        }
+    }
+
+    namespace dto.user {
+        class UserBroadcastResponse {
+            +Long broadcastId
+            +String userId
+            +String content
+            +String readStatus
+        }
+        class MessageReadRequest {
+            +String userId
+            +Long broadcastId
+        }
+    }
+
+    namespace dto.cache {
+        class UserConnectionInfo {
+            +String userId
+            +String connectionId
+            +String podId
+        }
+        class PendingEventInfo {
+            +String eventId
+            +Long broadcastId
+            +String message
+        }
+        class PersistentUserMessageInfo {
+            +Long messageId
+            +Long broadcastId
+            +String readStatus
+        }
+    }
+    
+    namespace dto {
+         class MessageDeliveryEvent {
+            <<Kafka Payload>>
+            +String eventId
+            +Long broadcastId
+            +String userId
+            +String eventType
+        }
+        class ErrorResponse {
+           +int status
+           +String error
+           +String message
+        }
+    }
+
+    %% Relationships
+    dto.admin.BroadcastRequest ..> model.BroadcastMessage : (creates)
+    dto.admin.BroadcastResponse ..> model.BroadcastMessage : (is a view of)
+    dto.user.UserBroadcastResponse ..> model.UserBroadcastMessage : (represents status of)
+    dto.user.UserBroadcastResponse ..> model.BroadcastMessage : (includes content from)
+    dto.admin.DltMessage ..> dto.MessageDeliveryEvent : (stores original payload of)
+    model.OutboxEvent ..> dto.MessageDeliveryEvent : (stores payload of)
+    dto.cache.PersistentUserMessageInfo ..> model.UserBroadcastMessage : (is a cached summary of)
+    dto.admin.RedriveAllResult "1" *-- "0..*" dto.admin.RedriveFailureDetail : contains
+    
+    dto.MessageDeliveryEvent --|> dto.cache.PendingEventInfo : (is stored as)
