@@ -1,0 +1,29 @@
+sequenceDiagram
+    participant AdminUI as React UI
+    participant Nginx as Nginx Proxy
+    participant AdminPod as Admin Service Pod
+    participant DB as PostgreSQL DB
+
+    AdminUI->>+Nginx: 1- POST /api/admin/broadcasts
+    Nginx->>+AdminPod: 2- Proxies Request
+
+    Note over AdminPod, DB: 3- @Transactional method begins
+    AdminPod->>DB: BEGIN TRANSACTION
+    AdminPod->>DB: INSERT broadcast_message...
+    
+    loop 100,000 Times
+        AdminPod->>DB: INSERT outbox_event...
+    end
+
+    Note over AdminPod: 4- POD CRASHES!
+    
+    DB--xAdminPod: Connection Lost
+    Nginx--xAdminPod: Connection Lost
+
+    Note over DB: 5- Transaction was not committed
+    DB->>DB: ROLLBACK TRANSACTION
+    
+    Nginx-->>+AdminUI: 6- Returns 502 Bad Gateway Error
+    
+    AdminUI->>AdminUI: 7- Catches error, shows "Failed" toast
+    Note over AdminUI: Admin user is prompted to retry the safe operation.

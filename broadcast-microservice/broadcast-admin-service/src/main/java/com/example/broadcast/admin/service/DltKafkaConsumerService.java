@@ -38,8 +38,10 @@ public class DltKafkaConsumerService {
     @KafkaListener(
             topics = {
                 "${broadcast.kafka.topic.name.selected:broadcast-events-selected}" + Constants.DLT_SUFFIX,
-                "${broadcast.kafka.topic.name.group:broadcast-events-group}" + Constants.DLT_SUFFIX,
-                "${broadcast.kafka.topic.name.actions:broadcast-actions}" + Constants.DLT_SUFFIX
+                "${broadcast.kafka.topic.name.group.orchestration:broadcast-group-orchestration}" + Constants.DLT_SUFFIX,
+                "${broadcast.kafka.topic.name.user.group:broadcast-user-events-group}" + Constants.DLT_SUFFIX,
+                "${broadcast.kafka.topic.name.actions.orchestration:broadcast-actions-orchestration}" + Constants.DLT_SUFFIX,
+                "${broadcast.kafka.topic.name.user.actions:broadcast-user-actions}" + Constants.DLT_SUFFIX
             },
             groupId = "${broadcast.kafka.consumer-dlt-group-id:broadcast-dlt-group}",
             containerFactory = "kafkaListenerContainerFactory"

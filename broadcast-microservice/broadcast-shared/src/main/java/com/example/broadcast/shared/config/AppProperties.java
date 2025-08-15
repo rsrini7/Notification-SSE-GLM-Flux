@@ -86,9 +86,13 @@ public class AppProperties {
             @NotBlank
             private String nameSelected = "broadcast-events-selected";
             @NotBlank
-            private String nameGroup = "broadcast-events-group";
+            private String nameGroupOrchestration = "broadcast-group-orchestration";
             @NotBlank
-            private String nameActions = "broadcast-actions";
+            private String nameUserGroup = "broadcast-user-events-group";
+            @NotBlank
+            private String nameActionsOrchestration = "broadcast-actions-orchestration";
+            @NotBlank
+            private String nameUserActions = "broadcast-user-actions";
             @Positive
             private int partitions = 10;
             @Positive
@@ -100,9 +104,13 @@ public class AppProperties {
             @NotBlank
             private String selectedGroupId = "broadcast-selected-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}";
             @NotBlank
-            private String groupGroupId = "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}";
+            private String groupOrchestrationGroupId = "broadcast-group-orchestration-group";
             @NotBlank
-            private String actionsGroupId = "broadcast-actions-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}";
+            private String groupUserGroupId = "broadcast-user-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}";
+            @NotBlank
+            private String actionsOrchestrationGroupId = "broadcast-orchestration-actions-group";
+            @NotBlank
+            private String actionsUserGroupId = "broadcast-user-actions-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}";
             @NotBlank
             private String dltGroupId = "broadcast-dlt-group";
         }

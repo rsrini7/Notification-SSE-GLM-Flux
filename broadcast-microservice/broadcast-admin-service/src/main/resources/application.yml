@@ -167,8 +167,10 @@ broadcast:
   kafka:
     topic:
       name-selected: broadcast-events-selected
-      name-group: broadcast-events-group
-      name-actions: broadcast-actions
+      name-group-orchestration: broadcast-group-orchestration
+      name-user-group: broadcast-user-events-group
+      name-actions-orchestration: broadcast-actions-orchestration
+      name-user-actions: broadcast-user-actions
       partitions: 10
       replication-factor: 1
     consumer:

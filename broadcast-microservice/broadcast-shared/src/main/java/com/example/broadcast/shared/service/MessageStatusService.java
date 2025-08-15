@@ -93,7 +93,7 @@ public class MessageStatusService {
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
 
-        String topicName = appProperties.getKafka().getTopic().getNameActions();
+        String topicName = appProperties.getKafka().getTopic().getNameUserActions();
         outboxEventPublisher.publish(event, userId, Constants.EventType.READ.name(), topicName);
         log.info("Published READ event for user: {}, broadcast: {}", userId, broadcastId);
     }
