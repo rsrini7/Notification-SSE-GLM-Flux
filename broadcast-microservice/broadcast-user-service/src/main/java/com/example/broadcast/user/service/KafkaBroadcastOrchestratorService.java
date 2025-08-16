@@ -1,4 +1,4 @@
-// file: broadcast-microservice/broadcast-user-service/src/main/java/com/example/broadcast/user/service/KafkaBroadcastOrchestratorService.java
+// FINAL CORRECTED FILE
 package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.config.AppProperties;
@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -41,11 +42,11 @@ public class KafkaBroadcastOrchestratorService {
         containerFactory = "kafkaListenerContainerFactory"
     )
     @Transactional
-    public void orchestrateBroadcastEvents(MessageDeliveryEvent event, 
+    public void orchestrateBroadcastEvents(MessageDeliveryEvent event,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
-            @Header(KafkaHeaders.OFFSET) long offset
-            ,Acknowledgment acknowledgment) {
+            @Header(KafkaHeaders.OFFSET) long offset,
+            Acknowledgment acknowledgment) {
 
         log.info("Orchestration event received for type '{}' on broadcast ID: {}. [Topic: {}, Partition: {}, Offset: {}]", event.getEventType(), event.getBroadcastId(), topic, partition, offset);
 
@@ -55,19 +56,20 @@ public class KafkaBroadcastOrchestratorService {
             log.info("Scattering {} user-specific '{}' events to worker topics", allTargetedUsers.size(), event.getEventType());
             
             String topicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
-            String clusterName = appProperties.getClusterName();
 
             List<OutboxEvent> eventsToPublish = allTargetedUsers.stream()
                 .map(userId -> {
-                    UserConnectionInfo connectionInfo = cacheService.getUserConnectionInfo(userId);
-                    if (connectionInfo != null && connectionInfo.getPodId() != null) {
-                        log.debug("User Connection Info : {} Event: {}", connectionInfo, event);
-                        // This user is ONLINE. Route the event to their specific pod's topic.
-                        String topicName = clusterName + "-" + topicPrefix + connectionInfo.getPodId();
+                    Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
+
+                    if (!userConnections.isEmpty()) {
+                        UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
+                        
+                        // CORRECTED LOGIC: Use the clusterName FROM the connectionInfo object
+                        // to ensure correct cross-cluster routing.
+                        String topicName = connectionInfo.getClusterName() + "-" + topicPrefix + connectionInfo.getPodId();
+                        
                         return createWorkerOutboxEvent(event, userId, topicName);
                     } else {
-                        // --- THIS IS THE FIX ---
-                        // This user is OFFLINE. Cache a pending event for them.
                         log.debug("User {} is offline. Caching pending event for broadcast {}.", userId, event.getBroadcastId());
                         cacheService.cachePendingEvent(event.toBuilder().userId(userId).build());
                         return null;

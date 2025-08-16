@@ -13,6 +13,7 @@ public class UserConnectionInfo {
     private final String userId;
     private final String connectionId;
     private final String podId;
+    private final String clusterName;
     private final ZonedDateTime connectedAt;
     private final ZonedDateTime lastActivityAt;
 }

@@ -1,3 +1,4 @@
+// CORRECTED FILE
 package com.example.broadcast.shared.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
@@ -7,16 +8,25 @@ import com.example.broadcast.shared.model.BroadcastMessage;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public interface CacheService {
 
-    // CHANGED: Renamed sessionId to connectionId in method signatures
-    void registerUserConnection(String userId, String connectionId, String podId);
-    void unregisterUserConnection(String userId, String connectionId);
+    // --- UNIFIED CONNECTION MANAGEMENT METHODS ---
+    // CORRECTED SIGNATURE: Added clusterName parameter
+    void registerUserConnection(String userId, String connectionId, String podId, String clusterName);
 
-    void updateUserActivity(String userId);
+    void unregisterUserConnection(String userId, String connectionId);
+    Map<String, UserConnectionInfo> getConnectionsForUser(String userId);
     boolean isUserOnline(String userId);
-    UserConnectionInfo getUserConnectionInfo(String userId);
+    void updateHeartbeats(Set<String> connectionIds);
+    Set<String> getStaleConnectionIds(long thresholdTimestamp);
+    Optional<UserConnectionInfo> getConnectionDetails(String connectionId);
+    void removeConnections(Set<String> connectionIds);
+    long getTotalActiveUsers();
+    long getPodActiveUsers(String podId);
+
+    // --- EXISTING CACHE METHODS ---
     List<String> getOnlineUsers();
     void cacheUserMessages(String userId, List<PersistentUserMessageInfo> messages);
     List<PersistentUserMessageInfo> getCachedUserMessages(String userId);

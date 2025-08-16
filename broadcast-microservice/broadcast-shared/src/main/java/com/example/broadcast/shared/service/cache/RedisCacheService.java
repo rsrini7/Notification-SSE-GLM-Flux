@@ -1,18 +1,23 @@
+// CORRECTED FILE
 package com.example.broadcast.shared.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.*;
 import com.example.broadcast.shared.model.BroadcastMessage;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
 
 import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -23,53 +28,149 @@ import java.util.stream.Collectors;
 public class RedisCacheService implements CacheService {
 
     private final RedisConnectionFactory redisConnectionFactory;
-
     private final RedisTemplate<String, String> stringRedisTemplate;
-    private final RedisTemplate<String, UserConnectionInfo> userConnectionInfoRedisTemplate;
+    private final RedisTemplate<String, Object> genericRedisTemplate;
     private final RedisTemplate<String, List<PersistentUserMessageInfo>> persistentUserMessagesRedisTemplate;
     private final RedisTemplate<String, List<PendingEventInfo>> pendingEventsRedisTemplate;
     private final RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate;
     private final RedisTemplate<String, List<BroadcastMessage>> activeGroupBroadcastsRedisTemplate;
+    private final ObjectMapper objectMapper;
 
     private static final String USER_CONNECTION_KEY_PREFIX = "user-conn:";
+    private static final String CONN_TO_USER_KEY_PREFIX = "conn-to-user:";
+    private static final String POD_CONNECTIONS_KEY_PREFIX = "pod-connections:";
+    private static final String HEARTBEAT_KEY = "active-connections-by-heartbeat";
     private static final String ONLINE_USERS_KEY = "online-users";
     private static final String USER_MESSAGES_KEY_PREFIX = "user-msg:";
     private static final String PENDING_EVENTS_KEY_PREFIX = "pending-evt:";
     private static final String BROADCAST_CONTENT_KEY_PREFIX = "broadcast-content:";
     private static final String ACTIVE_GROUP_BROADCASTS_KEY_PREFIX = "active-group-bcast:";
 
-    @Override
-    public void registerUserConnection(String userId, String connectionId, String podId) {
-        // MERGED: A single object is now created and stored.
-        UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, connectionId, podId, ZonedDateTime.now(), ZonedDateTime.now());
-        String userKey = USER_CONNECTION_KEY_PREFIX + userId;
-        // The TTL is now handled by the DistributedConnectionManager's configuration
-        userConnectionInfoRedisTemplate.opsForValue().set(userKey, connectionInfo, 30, TimeUnit.MINUTES);
-        stringRedisTemplate.opsForSet().add(ONLINE_USERS_KEY, userId);
-        // REMOVED: Logic for creating and storing a separate UserSessionInfo is gone.
-        log.debug("User connection registered in Redis: {} on pod {}", userId, podId);
-    }
+    private static final long CONNECTION_TTL_MINUTES = 30;
 
+    @Override
+    public void registerUserConnection(String userId, String connectionId, String podId, String clusterName) { // CORRECTED SIGNATURE
+        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
+        // CORRECTED LOGIC: Pass clusterName to the constructor
+        UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, connectionId, podId, clusterName, now, now);
+
+        String userKey = USER_CONNECTION_KEY_PREFIX + userId;
+        String reverseLookupKey = CONN_TO_USER_KEY_PREFIX + connectionId;
+        String podConnectionsKey = POD_CONNECTIONS_KEY_PREFIX + podId;
+
+        try {
+            String infoJson = objectMapper.writeValueAsString(connectionInfo);
+            genericRedisTemplate.opsForHash().put(userKey, connectionId, infoJson);
+            genericRedisTemplate.expire(userKey, CONNECTION_TTL_MINUTES, TimeUnit.MINUTES);
+            stringRedisTemplate.opsForValue().set(reverseLookupKey, userId, CONNECTION_TTL_MINUTES, TimeUnit.MINUTES);
+            stringRedisTemplate.opsForZSet().add(HEARTBEAT_KEY, connectionId, now.toEpochSecond());
+            stringRedisTemplate.opsForSet().add(ONLINE_USERS_KEY, userId);
+            stringRedisTemplate.opsForSet().add(podConnectionsKey, connectionId);
+            log.debug("User connection registered in Redis: userId={}, connectionId={}", userId, connectionId);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize UserConnectionInfo for userId {}", userId, e);
+        }
+    }
+    
+    // ... The rest of the file is unchanged from the previous version ...
     @Override
     public void unregisterUserConnection(String userId, String connectionId) {
-        userConnectionInfoRedisTemplate.delete(USER_CONNECTION_KEY_PREFIX + userId);
-        stringRedisTemplate.opsForSet().remove(ONLINE_USERS_KEY, userId);
-        // REMOVED: Logic for deleting a separate UserSessionInfo is gone.
-        log.debug("User connection unregistered from Redis: {}", userId);
+        Optional<UserConnectionInfo> details = getConnectionDetails(connectionId);
+        String userKey = USER_CONNECTION_KEY_PREFIX + userId;
+        String reverseLookupKey = CONN_TO_USER_KEY_PREFIX + connectionId;
+        genericRedisTemplate.opsForHash().delete(userKey, connectionId);
+        stringRedisTemplate.delete(reverseLookupKey);
+        stringRedisTemplate.opsForZSet().remove(HEARTBEAT_KEY, connectionId);
+        details.ifPresent(info -> stringRedisTemplate.opsForSet().remove(POD_CONNECTIONS_KEY_PREFIX + info.getPodId(), connectionId));
+        Long remainingConnections = genericRedisTemplate.opsForHash().size(userKey);
+        if (remainingConnections == null || remainingConnections == 0) {
+            stringRedisTemplate.opsForSet().remove(ONLINE_USERS_KEY, userId);
+        }
+        log.debug("User connection unregistered from Redis: userId={}, connectionId={}", userId, connectionId);
     }
 
     @Override
-    public void updateUserActivity(String userId) {
+    public long getTotalActiveUsers() {
+        Long count = stringRedisTemplate.opsForZSet().zCard(HEARTBEAT_KEY);
+        return count != null ? count : 0;
+    }
+
+    @Override
+    public long getPodActiveUsers(String podId) {
+        Long count = stringRedisTemplate.opsForSet().size(POD_CONNECTIONS_KEY_PREFIX + podId);
+        return count != null ? count : 0;
+    }
+
+    @Override
+    public Map<String, UserConnectionInfo> getConnectionsForUser(String userId) {
         String userKey = USER_CONNECTION_KEY_PREFIX + userId;
-        UserConnectionInfo connectionInfo = userConnectionInfoRedisTemplate.opsForValue().get(userKey);
-        if (connectionInfo != null) {
-            UserConnectionInfo updatedInfo = new UserConnectionInfo(
-                    connectionInfo.getUserId(), connectionInfo.getConnectionId(), connectionInfo.getPodId(),
-                    connectionInfo.getConnectedAt(), ZonedDateTime.now()
-            );
-            // MERGED: Updating this one key now refreshes the sliding TTL automatically.
-            userConnectionInfoRedisTemplate.opsForValue().set(userKey, updatedInfo, 30, TimeUnit.MINUTES);
-            // REMOVED: Logic for updating a separate UserSessionInfo is gone.
+        HashOperations<String, String, String> hashOps = genericRedisTemplate.opsForHash();
+        Map<String, String> entries = hashOps.entries(userKey);
+
+        return entries.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> {
+                    try {
+                        return objectMapper.readValue(entry.getValue(), UserConnectionInfo.class);
+                    } catch (JsonProcessingException e) {
+                        log.error("Failed to deserialize UserConnectionInfo for userId {} connId {}", userId, entry.getKey(), e);
+                        return null;
+                    }
+                }))
+                .entrySet().stream()
+                .filter(entry -> entry.getValue() != null)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
+    public void updateHeartbeats(Set<String> connectionIds) {
+        long nowEpoch = ZonedDateTime.now(ZoneOffset.UTC).toEpochSecond();
+        for (String connectionId : connectionIds) {
+            stringRedisTemplate.opsForZSet().add(HEARTBEAT_KEY, connectionId, nowEpoch);
+            stringRedisTemplate.expire(CONN_TO_USER_KEY_PREFIX + connectionId, CONNECTION_TTL_MINUTES, TimeUnit.MINUTES);
+            String userId = stringRedisTemplate.opsForValue().get(CONN_TO_USER_KEY_PREFIX + connectionId);
+            if (userId != null) {
+                genericRedisTemplate.expire(USER_CONNECTION_KEY_PREFIX + userId, CONNECTION_TTL_MINUTES, TimeUnit.MINUTES);
+            }
+        }
+    }
+
+    @Override
+    public Set<String> getStaleConnectionIds(long thresholdTimestamp) {
+        Set<String> staleIds = stringRedisTemplate.opsForZSet().rangeByScore(HEARTBEAT_KEY, 0, thresholdTimestamp);
+        return staleIds != null ? staleIds : Collections.emptySet();
+    }
+
+    @Override
+    public Optional<UserConnectionInfo> getConnectionDetails(String connectionId) {
+        String userId = stringRedisTemplate.opsForValue().get(CONN_TO_USER_KEY_PREFIX + connectionId);
+        if (userId == null) {
+            return Optional.empty();
+        }
+        String userKey = USER_CONNECTION_KEY_PREFIX + userId;
+        String infoJson = (String) genericRedisTemplate.opsForHash().get(userKey, connectionId);
+
+        if (infoJson == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(objectMapper.readValue(infoJson, UserConnectionInfo.class));
+        } catch (JsonProcessingException e) {
+            log.error("Failed to deserialize UserConnectionInfo for connId {}", connectionId, e);
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public void removeConnections(Set<String> connectionIds) {
+        if (connectionIds == null || connectionIds.isEmpty()) return;
+
+        for (String connectionId : connectionIds) {
+            String userId = stringRedisTemplate.opsForValue().get(CONN_TO_USER_KEY_PREFIX + connectionId);
+            if (userId != null) {
+                unregisterUserConnection(userId, connectionId);
+            } else {
+                stringRedisTemplate.opsForZSet().remove(HEARTBEAT_KEY, connectionId);
+            }
         }
     }
 
@@ -79,13 +180,9 @@ public class RedisCacheService implements CacheService {
     }
 
     @Override
-    public UserConnectionInfo getUserConnectionInfo(String userId) {
-        return userConnectionInfoRedisTemplate.opsForValue().get(USER_CONNECTION_KEY_PREFIX + userId);
-    }
-
-    @Override
     public List<String> getOnlineUsers() {
-        return new ArrayList<>(Objects.requireNonNull(stringRedisTemplate.opsForSet().members(ONLINE_USERS_KEY)));
+        Set<String> members = stringRedisTemplate.opsForSet().members(ONLINE_USERS_KEY);
+        return members != null ? new ArrayList<>(members) : Collections.emptyList();
     }
 
     @Override
@@ -130,14 +227,14 @@ public class RedisCacheService implements CacheService {
         pendingEvents.add(pendingEvent);
         pendingEventsRedisTemplate.opsForValue().set(key, pendingEvents, 6, TimeUnit.HOURS);
     }
-    
+
     @Override
     public List<MessageDeliveryEvent> getPendingEvents(String userId) {
         List<PendingEventInfo> pendingEvents = pendingEventsRedisTemplate.opsForValue().get(PENDING_EVENTS_KEY_PREFIX + userId);
         if (pendingEvents == null) return List.of();
 
         return pendingEvents.stream()
-                .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null,false))
+                .map(p -> new MessageDeliveryEvent(p.getEventId(), p.getBroadcastId(), userId, p.getEventType(), null, p.getTimestamp(), p.getMessage(), null, false))
                 .collect(Collectors.toList());
     }
 
@@ -168,12 +265,11 @@ public class RedisCacheService implements CacheService {
             }
             stats.put("totalKeys", connection.serverCommands().dbSize());
             Map<String, Long> keyCounts = new LinkedHashMap<>();
-            keyCounts.put("userConnections", countKeysByPattern(connection, USER_CONNECTION_KEY_PREFIX + "*"));
+            keyCounts.put("userConnectionHashes", countKeysByPattern(connection, USER_CONNECTION_KEY_PREFIX + "*"));
             keyCounts.put("userMessages", countKeysByPattern(connection, USER_MESSAGES_KEY_PREFIX + "*"));
             keyCounts.put("pendingEvents", countKeysByPattern(connection, PENDING_EVENTS_KEY_PREFIX + "*"));
             keyCounts.put("broadcastContent", countKeysByPattern(connection, BROADCAST_CONTENT_KEY_PREFIX + "*"));
-            keyCounts.put("onlineUsersSetSize", connection.setCommands().sCard(ONLINE_USERS_KEY.getBytes()));
-
+            keyCounts.put("onlineUsersSetSize", Optional.ofNullable(connection.setCommands().sCard(ONLINE_USERS_KEY.getBytes())).orElse(0L));
             stats.put("keyCountsByPrefix", keyCounts);
         } catch (Exception e) {
             log.error("Failed to get Redis cache stats", e);
@@ -235,8 +331,12 @@ public class RedisCacheService implements CacheService {
         try (RedisConnection connection = redisConnectionFactory.getConnection()) {
             ScanOptions options = ScanOptions.scanOptions().match(ACTIVE_GROUP_BROADCASTS_KEY_PREFIX + "*").count(100).build();
             try (Cursor<byte[]> cursor = connection.keyCommands().scan(options)) {
+                List<byte[]> keysToDelete = new ArrayList<>();
                 while (cursor.hasNext()) {
-                    connection.keyCommands().del(cursor.next());
+                    keysToDelete.add(cursor.next());
+                }
+                if (!keysToDelete.isEmpty()) {
+                    connection.keyCommands().del(keysToDelete.toArray(new byte[0][]));
                 }
             }
         } catch (Exception e) {

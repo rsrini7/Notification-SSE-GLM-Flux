@@ -1,7 +1,7 @@
 package com.example.broadcast.user.controller;
 
 import com.example.broadcast.shared.config.AppProperties;
-import com.example.broadcast.user.service.DistributedConnectionManager; // CHANGED
+import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.user.service.SseService;
 import com.example.broadcast.user.service.UserMessageService;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
@@ -28,7 +28,7 @@ public class SseController {
 
     private final SseService sseService;
     private final UserMessageService userMessageService;
-    private final DistributedConnectionManager connectionManager; // CHANGED
+    private final CacheService cacheService;
     private final AppProperties appProperties;
 
     @GetMapping(value = "/connect", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -75,8 +75,8 @@ public class SseController {
     @GetMapping("/stats")
     public ResponseEntity<java.util.Map<String, Object>> getStats() {
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
-        stats.put("totalActiveUsers", connectionManager.getTotalActiveUsers()); // CHANGED
-        stats.put("podActiveUsers", connectionManager.getPodActiveUsers(appProperties.getPod().getId())); // CHANGED
+        stats.put("totalActiveUsers", cacheService.getTotalActiveUsers()); 
+        stats.put("podActiveUsers", cacheService.getPodActiveUsers(appProperties.getPod().getId()));
         stats.put("sseConnectedUsers", sseService.getConnectedUserCount());
         stats.put("podId", appProperties.getPod().getId());
         stats.put("timestamp", ZonedDateTime.now());

@@ -1,3 +1,4 @@
+// UPDATED FILE
 package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.config.AppProperties;
@@ -22,27 +23,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Manages the low-level technical aspects of Server-Sent Event (SSE) connections.
- * This class is the single source of truth for in-memory connection state on this pod.
- * Its responsibilities include:
- * - Creating and storing in-memory sinks for each client connection.
- * - Tracking active user-to-connection mappings.
- * - Persisting connection state.
- * - Sending periodic heartbeats to keep connections alive.
- * - Cleaning up stale or disconnected connections from memory and the distributed store.
- */
-// CHANGED: Terminology updated from "session" to "connection"
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class SseConnectionManager {
 
-    private final Map<String, Sinks.Many<ServerSentEvent<String>>> userSinks = new ConcurrentHashMap<>();
-    private final Map<String, Set<String>> userConnectionMap = new ConcurrentHashMap<>();
+    private final Map<String, Sinks.Many<ServerSentEvent<String>>> connectionSinks = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> userToConnectionIdsMap = new ConcurrentHashMap<>();
     private final Map<String, String> connectionIdToUserIdMap = new ConcurrentHashMap<>();
 
-    private final DistributedConnectionManager connectionManager;
     private final CacheService cacheService;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
@@ -61,90 +50,62 @@ public class SseConnectionManager {
         }
     }
 
-    /**
-     * Creates an in-memory sink and a corresponding Flux stream for a new client connection.
-     * This method also handles the cleanup logic for when the connection is terminated.
-     *
-     * @param userId       The ID of the connecting user.
-     * @param connectionId The unique ID for this specific connection.
-     * @return A Flux of ServerSentEvent that the client can subscribe to.
-     */
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
         log.debug("Creating SSE event stream for user: {}, connection: {}", userId, connectionId);
         Sinks.Many<ServerSentEvent<String>> sink = Sinks.many().multicast().onBackpressureBuffer();
-        userSinks.put(connectionId, sink);
-        userConnectionMap.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(connectionId);
+        connectionSinks.put(connectionId, sink);
+        userToConnectionIdsMap.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(connectionId);
         connectionIdToUserIdMap.put(connectionId, userId);
+
         return sink.asFlux()
                 .doOnCancel(() -> removeEventStream(userId, connectionId))
                 .doOnError(throwable -> removeEventStream(userId, connectionId))
                 .doOnTerminate(() -> removeEventStream(userId, connectionId));
     }
 
-    /**
-     * Persists the user's connection to the distributed store and registers it in the cache.
-     *
-     * @param userId       The user's ID.
-     * @param connectionId The connection's unique ID.
-     */
     public void registerConnection(String userId, String connectionId) {
+        // CHANGED: Get both cluster and pod names to store the complete address.
         String podName = appProperties.getPod().getId();
         String clusterName = appProperties.getClusterName();
-        String globalPodId = clusterName + "-" + podName;
-
-        connectionManager.registerConnection(userId, connectionId, globalPodId);
-        cacheService.registerUserConnection(userId, connectionId, globalPodId);
-        log.info("User connection saved for user: {}, connection: {}, globalPodId: {}", userId, connectionId, globalPodId);
+        cacheService.registerUserConnection(userId, connectionId, podName, clusterName);
+        log.info("User connection registered for user: {}, connection: {}, cluster: {}, pod: {}", userId, connectionId, clusterName, podName);
     }
-
-    /**
-     * Removes a user's connection from in-memory maps and updates its status
-     * in the distributed store and cache to INACTIVE.
-     *
-     * @param userId       The user's ID.
-     * @param connectionId The connection's unique ID.
-     */
+    
+    // ... The rest of the SseConnectionManager file remains unchanged ...
     public void removeEventStream(String userId, String connectionId) {
-        Sinks.Many<ServerSentEvent<String>> sink = userSinks.remove(connectionId);
+        Sinks.Many<ServerSentEvent<String>> sink = connectionSinks.remove(connectionId);
         if (sink != null) {
             sink.tryEmitComplete();
-            Set<String> connections = userConnectionMap.get(userId);
+            Set<String> connections = userToConnectionIdsMap.get(userId);
             if (connections != null) {
                 connections.remove(connectionId);
                 if (connections.isEmpty()) {
-                    userConnectionMap.remove(userId);
+                    userToConnectionIdsMap.remove(userId);
                 }
             }
             connectionIdToUserIdMap.remove(connectionId);
-            connectionManager.removeConnection(userId, connectionId, appProperties.getPod().getId());
             cacheService.unregisterUserConnection(userId, connectionId);
             log.info("Cleanly disconnected connection {} for user {}", connectionId, userId);
         }
     }
 
-    /**
-     * Scheduled job to find and mark stale connections as INACTIVE across the cluster.
-     * It also cleans up any corresponding in-memory sinks on the current pod.
-     */
     @Scheduled(fixedRate = 60000)
     @SchedulerLock(name = "cleanupStaleSseConnections", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     public void cleanupStaleConnections() {
         try {
             long staleThresholdSeconds = (appProperties.getSse().getHeartbeatInterval() / 1000) * 3;
             long thresholdTimestamp = ZonedDateTime.now().minusSeconds(staleThresholdSeconds).toEpochSecond();
-            Set<String> staleConnectionIds = connectionManager.getStaleConnectionIds(thresholdTimestamp);
+            Set<String> staleConnectionIds = cacheService.getStaleConnectionIds(thresholdTimestamp);
             if (staleConnectionIds.isEmpty()) return;
             log.warn("Found {} total stale connections cluster-wide to clean up.", staleConnectionIds.size());
             for (String connectionId : staleConnectionIds) {
-                connectionManager.getConnectionDetails(connectionId).ifPresent(details -> {
-                    if (appProperties.getPod().getId().equals(details.getPodId())) {
-                        removeEventStream(details.getUserId(), connectionId);
-                    } else {
-                        cacheService.unregisterUserConnection(details.getUserId(), connectionId);
-                    }
-                });
+                String userId = connectionIdToUserIdMap.get(connectionId);
+                if (userId != null) {
+                    log.warn("Cleaning up stale in-memory connection {} for user {}", connectionId, userId);
+                    removeEventStream(userId, connectionId);
+                }
             }
-            connectionManager.removeConnections(staleConnectionIds);
+            cacheService.removeConnections(staleConnectionIds);
         } catch (Exception e) {
             log.error("Error during stale connection cleanup task: {}", e.getMessage(), e);
         }
@@ -154,19 +115,16 @@ public class SseConnectionManager {
         serverHeartbeatSubscription = Flux.interval(Duration.ofMillis(appProperties.getSse().getHeartbeatInterval()), Schedulers.parallel())
             .doOnNext(tick -> {
                 try {
-                    Set<String> connectionIdsOnThisPod = userSinks.keySet();
+                    Set<String> connectionIdsOnThisPod = connectionSinks.keySet();
                     if (connectionIdsOnThisPod.isEmpty()) return;
-
-                    connectionManager.updateHeartbeats(appProperties.getPod().getId(), connectionIdsOnThisPod);
-
+                    cacheService.updateHeartbeats(connectionIdsOnThisPod);
                     String payload = objectMapper.writeValueAsString(Map.of("timestamp", ZonedDateTime.now()));
                     ServerSentEvent<String> heartbeatEvent = ServerSentEvent.<String>builder()
                         .event("HEARTBEAT").data(payload).build();
-
                     for (String connectionId : connectionIdsOnThisPod) {
-                        String userId = connectionIdToUserIdMap.get(connectionId);
-                        if (userId != null) {
-                            sendEvent(userId, heartbeatEvent);
+                        Sinks.Many<ServerSentEvent<String>> sink = connectionSinks.get(connectionId);
+                        if (sink != null) {
+                            sink.tryEmitNext(heartbeatEvent);
                         }
                     }
                 } catch (Exception e) {
@@ -176,18 +134,11 @@ public class SseConnectionManager {
             .subscribe();
     }
 
-    /**
-     * Pushes an event to all active connections for a given user.
-     * If emitting an event fails, it triggers an asynchronous cleanup of the failed connection.
-     *
-     * @param userId The ID of the user to send the event to.
-     * @param event  The ServerSentEvent to send.
-     */
     public void sendEvent(String userId, ServerSentEvent<String> event) {
-        Set<String> connectionIds = userConnectionMap.get(userId);
+        Set<String> connectionIds = userToConnectionIdsMap.get(userId);
         if (connectionIds != null && !connectionIds.isEmpty()) {
-            for (String connectionId : connectionIds) {
-                Sinks.Many<ServerSentEvent<String>> sink = userSinks.get(connectionId);
+            for (String connectionId : Set.copyOf(connectionIds)) {
+                Sinks.Many<ServerSentEvent<String>> sink = connectionSinks.get(connectionId);
                 if (sink != null) {
                     Sinks.EmitResult result = sink.tryEmitNext(event);
                     if (result.isFailure()) {
@@ -204,25 +155,11 @@ public class SseConnectionManager {
     }
 
     public int getConnectedUserCount() {
-        return userSinks.size();
+        return connectionSinks.size();
     }
 
     public boolean isUserConnected(String userId) {
-        Set<String> connections = userConnectionMap.get(userId);
+        Set<String> connections = userToConnectionIdsMap.get(userId);
         return connections != null && !connections.isEmpty();
-    }
-
-    /**
-     * Retrieves the first available connection ID for a given user.
-     * This is used for server-initiated actions like force logoff.
-     * @param userId The user's ID.
-     * @return An active connection ID for the user, or null if none is found.
-     */
-    public String getConnectionIdForUser(String userId) {
-        Set<String> connections = userConnectionMap.get(userId);
-        if (connections != null && !connections.isEmpty()) {
-            return connections.iterator().next();
-        }
-        return null;
     }
 }
