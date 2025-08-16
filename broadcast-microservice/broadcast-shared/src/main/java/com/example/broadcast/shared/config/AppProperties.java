@@ -41,6 +41,7 @@ public class AppProperties {
 
     @Data
     public static class Pod {
+        @Value("${pod.name:${POD_NAME:pod-local}}")
         @NotBlank
         private String id = "pod-local";
     }

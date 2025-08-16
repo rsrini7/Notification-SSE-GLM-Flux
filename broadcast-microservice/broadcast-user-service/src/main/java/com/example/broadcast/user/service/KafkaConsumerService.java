@@ -24,7 +24,7 @@ public class KafkaConsumerService {
     private final TestingConfigurationService testingConfigurationService;
 
     @KafkaListener(
-        topics = "#{'${CLUSTER_NAME}' + '-' + '${broadcast.kafka.topic.name-worker-prefix}' + '${POD_NAME}'}",
+        topics = "#{'${CLUSTER_NAME:local}' + '-' + '${broadcast.kafka.topic.name-worker-prefix}' + '${POD_NAME:docker-pod-0}'}",
         groupId = "${broadcast.kafka.consumer.group-worker}",
         containerFactory = "kafkaListenerContainerFactory"
     )

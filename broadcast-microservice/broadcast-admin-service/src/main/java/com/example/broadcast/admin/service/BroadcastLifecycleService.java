@@ -83,7 +83,7 @@ public class BroadcastLifecycleService {
 
         // For IMMEDIATE broadcasts OR broadcasts scheduled too close to now:
         // 1. Save the broadcast with PREPARING status to get an ID.
-        log.info("Broadcast ID: {} is immediate or scheduled too close. Treating as immediate. Saving with PREPARING status.", broadcast.getId());
+        log.info("Broadcast is immediate or scheduled too close. Treating as immediate. Saving with PREPARING status.");
         broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
         broadcast = broadcastRepository.save(broadcast);
         
