@@ -1,1 +1,1 @@
-mvn clean package && java -jar "-Duser.timezone=Asia/Kolkata -Dspring.profiles.active=dev-pg" target/broadcast-user-service-1.0.0.jar
+mvn clean package && java "-Duser.timezone=Asia/Kolkata" "-DPOD_NAME=user-local" "-DCLUSTER_NAME=local" "-Dspring.profiles.active=dev-pg" -jar target/broadcast-user-service-1.0.0.jar

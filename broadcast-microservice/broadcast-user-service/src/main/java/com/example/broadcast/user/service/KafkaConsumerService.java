@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.exception.MessageProcessingException;
 import com.example.broadcast.shared.service.cache.CacheService;
@@ -22,9 +23,10 @@ public class KafkaConsumerService {
     private final SseService sseService;
     private final CacheService cacheService;
     private final TestingConfigurationService testingConfigurationService;
+    private final AppProperties appProperties;
 
     @KafkaListener(
-        topics = "#{'${broadcast.kafka.topic.name-worker-prefix}'.replaceFirst('^cluster-.*?-', T(com.example.broadcast.shared.config.AppProperties).getClusterName() + '-') + systemEnvironment['POD_NAME'].replaceFirst('.*?-', '')}",
+        topics = "#{'${broadcast.kafka.topic.name-worker-prefix}' + @appProperties.getClusterName() + '-' + systemEnvironment['POD_NAME']}",
         groupId = "${broadcast.kafka.consumer.group-worker}",
         containerFactory = "kafkaListenerContainerFactory"
     )
