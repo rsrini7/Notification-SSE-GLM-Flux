@@ -57,14 +57,14 @@ public class KafkaBroadcastOrchestratorService {
                 .map(userId -> {
                     UserConnectionInfo connectionInfo = cacheService.getUserConnectionInfo(userId);
                     if (connectionInfo != null && connectionInfo.getPodId() != null) {
-                        log.debug("User Connection Info : {}", connectionInfo);
+                        log.debug("User Connection Info : {} Event: {}", connectionInfo, event);
                         // This user is ONLINE. Route the event to their specific pod's topic.
                         String topicName = appProperties.getKafka().getTopic().getNameWorkerPrefix() + connectionInfo.getPodId();
                         return createWorkerOutboxEvent(event, userId, topicName);
                     } else {
                         // --- THIS IS THE FIX ---
                         // This user is OFFLINE. Cache a pending event for them.
-                        log.trace("User {} is offline. Caching pending event for broadcast {}.", userId, event.getBroadcastId());
+                        log.debug("User {} is offline. Caching pending event for broadcast {}.", userId, event.getBroadcastId());
                         cacheService.cachePendingEvent(event.toBuilder().userId(userId).build());
                         return null;
                     }
