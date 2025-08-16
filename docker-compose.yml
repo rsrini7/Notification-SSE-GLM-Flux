@@ -44,6 +44,8 @@ services:
       - ./create-kafka-topics.sh:/tmp/create-kafka-topics.sh
     environment:
       - KAFKA_BROKER_ADDRESS=kafka-dev:29092
+      - CLUSTER_NAME=local
+      - POD_NAME_PREFIX=docker-pod-
     command: ["sh", "-c", "echo 'Waiting 5s for dev Kafka...' && sleep 5 && /tmp/create-kafka-topics.sh"]
     networks:
       - broadcast-net
@@ -104,6 +106,8 @@ services:
       - ./create-kafka-topics.sh:/tmp/create-kafka-topics.sh
     environment:
       - KAFKA_BROKER_ADDRESS=kafka-prod:29093
+      - CLUSTER_NAME=local
+      - POD_NAME_PREFIX=docker-pod-      
     command: ["sh", "-c", "echo 'Waiting 5s for prod Kafka...' && sleep 5 && /tmp/create-kafka-topics.sh"]
     networks:
       - broadcast-net
@@ -168,6 +172,7 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-user-service.log
+      - CLUSTER_NAME=local
       - POD_NAME=docker-pod-${COMPOSE_REPLICA_NUMBER:-0}
     volumes:
       - ./logs/user:/var/log/app
