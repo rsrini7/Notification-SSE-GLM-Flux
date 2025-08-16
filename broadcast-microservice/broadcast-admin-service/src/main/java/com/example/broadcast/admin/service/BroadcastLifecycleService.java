@@ -79,6 +79,7 @@ public class BroadcastLifecycleService {
                 // User is online, get podId from the first available connection.
                 UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
                 String topicName = connectionInfo.getClusterName() + "-" + topicPrefix + connectionInfo.getPodId();
+                log.info("Broadcast Lifecycle sending message to the topic: {}", topicName);
                 eventsToPublish.add(createOutboxEvent(eventPayload, topicName, userId));
             } else {
                 // User is offline, cache a pending event.

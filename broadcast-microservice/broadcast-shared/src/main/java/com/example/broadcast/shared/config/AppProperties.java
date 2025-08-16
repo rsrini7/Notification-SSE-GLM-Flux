@@ -43,7 +43,7 @@ public class AppProperties {
     public static class Pod {
         @Value("${pod.name:${POD_NAME:pod-local}}")
         @NotBlank
-        private String id = "pod-local";
+        private String id;
     }
 
     @Data

@@ -6,4 +6,5 @@ export POD_NAME=docker-pod-0
 export CLUSTER_NAME=local
 
 echo Run the application
-java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" -jar target/broadcast-user-service-1.0.0.jar
+# The fix is to pass pod.name and cluster.name as -D system properties
+java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" "-Dpod.name=${POD_NAME}" "-Dcluster.name=${CLUSTER_NAME}" -jar target/broadcast-user-service-1.0.0.jar

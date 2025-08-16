@@ -10,6 +10,6 @@ $env:POD_NAME = "docker-pod-0"
 $env:CLUSTER_NAME = "local"
 
 # Run the application
-# Note: In PowerShell, quotes around the -D arguments are not needed.
-Write-Host "Starting user-service with POD_NAME=$($env:POD_NAME) and CLUSTER_NAME=$($env:CLUSTER_NAME)..."
-java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" -jar target/broadcast-user-service-1.0.0.jar
+# The fix is to pass pod.name and cluster.name as -D system properties
+Write-Host "Starting user-service with pod.name=$($env:POD_NAME) and cluster.name=$($env:CLUSTER_NAME)..."
+java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" "-Dpod.name=$($env:POD_NAME)" "-Dcluster.name=$($env:CLUSTER_NAME)" -jar target/broadcast-user-service-1.0.0.jar
