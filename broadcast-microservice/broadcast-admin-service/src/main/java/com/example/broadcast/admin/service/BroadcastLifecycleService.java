@@ -192,6 +192,7 @@ public class BroadcastLifecycleService {
     private void publishEventsToWorkerTopics(BroadcastMessage broadcast, List<String> userIds, Constants.EventType eventType, String message) {
         List<OutboxEvent> eventsToPublish = new ArrayList<>();
         String topicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
+        String clusterName = appProperties.getClusterName();
 
         if (eventType == Constants.EventType.CREATED) {
             List<UserBroadcastMessage> userBroadcasts = userIds.stream()
@@ -208,8 +209,9 @@ public class BroadcastLifecycleService {
         for (String userId : userIds) {
             MessageDeliveryEvent eventPayload = createLifecycleEvent(broadcast, userId, eventType, message);
             UserConnectionInfo connectionInfo = cacheService.getUserConnectionInfo(userId);
+            log.debug("User Connection Info : {}", connectionInfo);
             if (connectionInfo != null && connectionInfo.getPodId() != null) {
-                String topicName = topicPrefix + connectionInfo.getPodId();
+                String topicName = clusterName + "-" + topicPrefix + connectionInfo.getPodId();
                 eventsToPublish.add(createOutboxEvent(eventPayload, topicName, userId));
             } else {
                 cacheService.cachePendingEvent(eventPayload);

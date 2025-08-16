@@ -53,13 +53,17 @@ public class KafkaBroadcastOrchestratorService {
 
         if (!allTargetedUsers.isEmpty()) {
             log.info("Scattering {} user-specific '{}' events to worker topics", allTargetedUsers.size(), event.getEventType());
+            
+            String topicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
+            String clusterName = appProperties.getClusterName();
+
             List<OutboxEvent> eventsToPublish = allTargetedUsers.stream()
                 .map(userId -> {
                     UserConnectionInfo connectionInfo = cacheService.getUserConnectionInfo(userId);
                     if (connectionInfo != null && connectionInfo.getPodId() != null) {
                         log.debug("User Connection Info : {} Event: {}", connectionInfo, event);
                         // This user is ONLINE. Route the event to their specific pod's topic.
-                        String topicName = appProperties.getKafka().getTopic().getNameWorkerPrefix() + connectionInfo.getPodId();
+                        String topicName = clusterName + "-" + topicPrefix + connectionInfo.getPodId();
                         return createWorkerOutboxEvent(event, userId, topicName);
                     } else {
                         // --- THIS IS THE FIX ---
