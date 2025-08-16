@@ -19,6 +19,7 @@ services:
     profiles:
       - dev
     <<: *nginx_base
+    container_name: nginx-dev
     volumes:
       - ./broadcast-frontend/localhost.pem:/etc/nginx/certs/localhost.pem
       - ./broadcast-frontend/localhost-key.pem:/etc/nginx/certs/localhost-key.pem
@@ -39,11 +40,11 @@ services:
     depends_on:
       - kafka-dev
     volumes:
-      # Mount the local script into the container
+      - kafka_data_dev_setup:/var/lib/kafka/data
       - ./create-kafka-topics.sh:/tmp/create-kafka-topics.sh
     environment:
-      - KAFKA_BROKER_ADDRESS=kafka-dev:9092
-    command: ["sh", "-c", "echo 'Waiting 10s for dev Kafka...' && sleep 10 && /tmp/create-kafka-topics.sh"]
+      - KAFKA_BROKER_ADDRESS=kafka-dev:29092
+    command: ["sh", "-c", "echo 'Waiting 5s for dev Kafka...' && sleep 5 && /tmp/create-kafka-topics.sh"]
     networks:
       - broadcast-net
   
@@ -58,9 +59,10 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-dev:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: false
     volumes:
       - kafka_data_dev:/var/lib/kafka/data
     depends_on:
@@ -75,7 +77,9 @@ services:
     profiles:
       - prod
     <<: *nginx_base
+    container_name: nginx-prod
     volumes:
+      - kafka_data_prod_setup:/var/lib/kafka/data
       - ./broadcast-frontend/localhost.pem:/etc/nginx/certs/tls.crt
       - ./broadcast-frontend/localhost-key.pem:/etc/nginx/certs/tls.key
     environment:
@@ -88,7 +92,7 @@ services:
       user-service:
         condition: service_started
 
-# NEW: A short-lived service to create Kafka topics.
+  # A short-lived service to create Kafka topics.
   kafka-prod-setup:
     profiles:
       - prod
@@ -97,9 +101,10 @@ services:
     depends_on:
       - kafka-prod
     volumes:
-      # Mount the local script into the container
       - ./create-kafka-topics.sh:/tmp/create-kafka-topics.sh
-    command: ["sh", "-c", "echo 'Waiting 10s for dev Kafka...' && sleep 10 && /tmp/create-kafka-topics.sh"]
+    environment:
+      - KAFKA_BROKER_ADDRESS=kafka-prod:29093
+    command: ["sh", "-c", "echo 'Waiting 5s for prod Kafka...' && sleep 5 && /tmp/create-kafka-topics.sh"]
     networks:
       - broadcast-net
 
@@ -110,13 +115,14 @@ services:
     image: confluentinc/cp-kafka:7.3.0
     container_name: kafka-broker-prod
     ports:
-      - "9092:9092"
+      - "9093:9093"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-prod:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-prod:29093,PLAINTEXT_HOST://localhost:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: false
     volumes:
       - kafka_data_prod:/var/lib/kafka/data
     depends_on:
@@ -134,14 +140,12 @@ services:
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - SPRING_DATA_REDIS_HOST=redis
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:9092
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-admin-service.log
     volumes:
       - ./logs/admin:/var/log/app
     depends_on:
       kafka-prod-setup:
-        condition: service_completed_successfully
-      kafka-prod:
         condition: service_completed_successfully
       postgres:
         condition: service_started
@@ -149,26 +153,24 @@ services:
         condition: service_started
     networks:
       - broadcast-net
-      
+
   user-service:
     profiles:
       - prod
     image: broadcast-user-service:1.0.0
-    ports:
-      - "8082:8082"
+    deploy:
+      replicas: 3
     environment:
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - SPRING_DATA_REDIS_HOST=redis
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:9092
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-user-service.log
       - POD_NAME=docker-pod-${COMPOSE_REPLICA_NUMBER:-0}
     volumes:
       - ./logs/user:/var/log/app
     depends_on:
       kafka-prod-setup:
-        condition: service_completed_successfully
-      kafka-prod:
         condition: service_completed_successfully
       postgres:
         condition: service_started
@@ -180,10 +182,11 @@ services:
       - broadcast-net
 
   # ===================================================================
-  #  COMMON INFRASTRUCTURE SERVICES (always run)
+  #  COMMON INFRASTRUCTURE SERVICES
   # ===================================================================
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.0
+    container_name: zookeeper
     ports:
       - "2181:2181"
     environment:
@@ -197,6 +200,7 @@ services:
 
   postgres:
     image: postgres:15
+    container_name: postgres_db
     ports:
       - "5432:5432"
     environment:
@@ -211,6 +215,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: redis_cache
     ports:
       - "6379:6379"
     volumes:
@@ -224,4 +229,6 @@ volumes:
   zookeeper_data:
   zookeeper_log:
   kafka_data_dev:
+  kafka_data_dev_setup:
   kafka_data_prod:
+  kafka_data_prod_setup:
