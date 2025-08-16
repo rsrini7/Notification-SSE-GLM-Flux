@@ -4,20 +4,19 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+// import org.springframework.boot.context.properties.ConfigurationProperties;
+// import org.springframework.context.annotation.Configuration;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Duration;
 
-@Configuration
-@ConfigurationProperties(prefix = "broadcast")
+// @Configuration
+// @ConfigurationProperties(prefix = "broadcast")
 @Data
 @Validated
 public class AppProperties {
 
-    @Value("${cluster.name:${CLUSTER_NAME:default}}")
     private String clusterName;
 
     private final Sse sse = new Sse();
