@@ -10,6 +10,8 @@
 -- The CASCADE option automatically removes dependent objects like indexes and constraints.
 -- =================================================================
 
+ALTER DATABASE broadcastdb SET timezone = 'UTC';
+
 DROP TABLE IF EXISTS user_broadcast_messages CASCADE;
 DROP TABLE IF EXISTS broadcast_statistics CASCADE;
 DROP TABLE IF EXISTS broadcast_messages CASCADE;

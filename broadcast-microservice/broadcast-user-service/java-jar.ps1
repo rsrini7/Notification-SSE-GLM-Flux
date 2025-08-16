@@ -12,4 +12,4 @@ $env:CLUSTER_NAME = "local"
 # Run the application
 # Note: In PowerShell, quotes around the -D arguments are not needed.
 Write-Host "Starting user-service with POD_NAME=$($env:POD_NAME) and CLUSTER_NAME=$($env:CLUSTER_NAME)..."
-java "-Duser.timezone=Asia/Kolkata" "-Dspring.profiles.active=dev-pg" -jar target/broadcast-user-service-1.0.0.jar
+java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" -jar target/broadcast-user-service-1.0.0.jar

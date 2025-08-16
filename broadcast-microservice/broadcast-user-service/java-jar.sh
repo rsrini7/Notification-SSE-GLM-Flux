@@ -6,4 +6,4 @@ export POD_NAME=docker-pod-0
 export CLUSTER_NAME=local
 
 echo Run the application
-java "-Duser.timezone=Asia/Kolkata" "-Dspring.profiles.active=dev-pg" -jar target/broadcast-user-service-1.0.0.jar
+java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" -jar target/broadcast-user-service-1.0.0.jar

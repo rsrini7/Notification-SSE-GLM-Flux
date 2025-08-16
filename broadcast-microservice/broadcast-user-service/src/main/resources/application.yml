@@ -154,7 +154,15 @@ spring:
     activate:
       on-profile: "dev-pg"
   datasource:
-    url: jdbc:postgresql://localhost:5432/broadcastdb
+    url: jdbc:postgresql://localhost:5432/broadcastdb?serverTimezone=UTC
     driver-class-name: org.postgresql.Driver # Explicitly set the PostgreSQL driver
     username: user
     password: password
+    hikari:
+      max-lifetime: 1800000 # 30 minutes
+      maximum-pool-size: 50 # Set an explicit max size
+      data-source-properties:
+        serverTimezone: UTC
+  sql:
+    init:
+      mode: never    
