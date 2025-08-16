@@ -233,6 +233,7 @@ public class BroadcastLifecycleService {
                 .totalDelivered(0)
                 .totalRead(0)
                 .totalFailed(0)
+                .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
         broadcastStatisticsRepository.save(stats);
     }
