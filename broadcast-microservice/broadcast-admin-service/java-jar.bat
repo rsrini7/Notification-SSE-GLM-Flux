@@ -1,2 +1,2 @@
 del logs\*
-mvn clean package && java -jar "-Dspring.profiles.active=dev-pg" target/broadcast-admin-service-1.0.0.jar
+mvn clean package && java -jar "-Duser.timezone=Asia/Kolkata -Dspring.profiles.active=dev-pg" target/broadcast-admin-service-1.0.0.jar

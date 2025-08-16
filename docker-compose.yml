@@ -137,6 +137,7 @@ services:
     ports:
       - "8081:8081"
     environment:
+      - JAVA_OPTS=-Duser.timezone=Asia/Kolkata -Xms512m -Xmx1g
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - SPRING_DATA_REDIS_HOST=redis
@@ -161,6 +162,7 @@ services:
     deploy:
       replicas: 3
     environment:
+      - JAVA_OPTS=-Duser.timezone=Asia/Kolkata -Xms512m -Xmx1g    
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - SPRING_DATA_REDIS_HOST=redis
@@ -207,6 +209,7 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: broadcastdb
+      TZ: Asia/Kolkata
     volumes:
       - postgres_data:/var/lib/postgresql/data
     command: ["-c", "max_connections=300"]
