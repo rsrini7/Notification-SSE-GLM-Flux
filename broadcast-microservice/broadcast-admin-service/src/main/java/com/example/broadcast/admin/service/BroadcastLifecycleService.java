@@ -78,7 +78,7 @@ public class BroadcastLifecycleService {
             if (!userConnections.isEmpty()) {
                 // User is online, get podId from the first available connection.
                 UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
-                String topicName = connectionInfo.getClusterName() + "-" + topicPrefix + connectionInfo.getPodId();
+                String topicName = connectionInfo.getClusterName() + "-" + topicPrefix + "-" + connectionInfo.getPodId();
                 log.info("Broadcast Lifecycle sending message to the topic: {}", topicName);
                 eventsToPublish.add(createOutboxEvent(eventPayload, topicName, userId));
             } else {
@@ -132,18 +132,35 @@ public class BroadcastLifecycleService {
         return broadcastMapper.toBroadcastResponse(broadcast, 0);
     }
 
-    @Transactional(noRollbackFor = UserServiceUnavailableException.class)
-    public void processReadyBroadcast(Long broadcastId) {
-        BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
-                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
+     public void triggerFanOut(BroadcastMessage broadcast, List<String> targetUserIds) {
+        if (targetUserIds.isEmpty()) {
+            log.warn("Broadcast {} activated, but no users were targeted.", broadcast.getId());
+            return;
+        }
+
+        initializeStatistics(broadcast.getId(), targetUserIds.size());
         
-        broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
-        broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
-        broadcastRepository.update(broadcast);
-        
-        List<String> targetUserIds = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcastId);
-        triggerCreateBroadcastEventFromPrefetchedUsers(broadcast, targetUserIds);
+        log.info("Fanning out {} events for broadcast ID: {} directly from the admin service.", targetUserIds.size(), broadcast.getId());
+        publishEventsToWorkerTopics(broadcast, targetUserIds, Constants.EventType.CREATED, broadcast.getContent());
     }
+    
+    // NEW Public method to get the user list
+    public List<String> getTargetUserIds(Long broadcastId) {
+        return userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcastId);
+    }
+
+    // @Transactional(noRollbackFor = UserServiceUnavailableException.class)
+    // public void processReadyBroadcast(Long broadcastId) {
+    //     BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
+    //             .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
+        
+    //     broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
+    //     broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
+    //     broadcastRepository.update(broadcast);
+        
+    //     List<String> targetUserIds = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcastId);
+    //     triggerCreateBroadcastEventFromPrefetchedUsers(broadcast, targetUserIds);
+    // }
 
     @Transactional
     public void cancelBroadcast(Long id) {
@@ -297,4 +314,6 @@ public class BroadcastLifecycleService {
         cacheService.evictActiveGroupBroadcastsCache();
         log.warn("Marked entire BroadcastMessage {} as FAILED in a new transaction and evicted cache.", broadcastId);
     }
+
+
 }

@@ -154,7 +154,7 @@ public class KafkaConfig {
     public NewTopic workerEventsDeadLetterTopic() {
         // All pod-specific topics will use this single DLT.
         // The original topic is preserved in the DLT message headers.
-        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameWorkerPrefix() + "dlt")
+        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameWorkerPrefix() + Constants.DLT_SUFFIX)
             .partitions(1)
             .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
             .config("retention.ms", "1209600000") // 14 days

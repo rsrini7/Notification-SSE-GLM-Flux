@@ -66,7 +66,8 @@ public class KafkaBroadcastOrchestratorService {
                         
                         // CORRECTED LOGIC: Use the clusterName FROM the connectionInfo object
                         // to ensure correct cross-cluster routing.
-                        String topicName = connectionInfo.getClusterName() + "-" + topicPrefix + connectionInfo.getPodId();
+                        String topicName = connectionInfo.getClusterName() + "-" + topicPrefix+ "-" + connectionInfo.getPodId();
+                        log.info("orchestrateBroadcastEvents TopicName: {}",topicName);
                         
                         return createWorkerOutboxEvent(event, userId, topicName);
                     } else {

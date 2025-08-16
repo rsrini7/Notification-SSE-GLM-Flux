@@ -1,5 +1,4 @@
-// file: broadcast-microservice/broadcast-admin-service/src/main/java/com/example/broadcast/admin/service/BroadcastSchedulingService.java
-
+// UPDATED FILE
 package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.exception.UserServiceUnavailableException;
@@ -22,22 +21,16 @@ import java.util.List;
 public class BroadcastSchedulingService {
 
     private final BroadcastRepository broadcastRepository;
+    // We now need the BroadcastLifecycleService to reuse its fan-out method
     private final BroadcastLifecycleService broadcastLifecycleService;
 
     private static final int BATCH_LIMIT = 100;
 
-    /**
-     * Periodically processes broadcasts that are in the READY state and are due for activation.
-     * The SchedulerLock ensures this only runs on one pod at a time.
-     */
-    @Scheduled(fixedRate = 60000) // Run every minute
+    @Scheduled(fixedRate = 60000)
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     @SchedulerLock(name = "processScheduledBroadcasts", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     public void processScheduledBroadcasts() {
-        // MODIFIED: Log message now reflects that it's looking for READY broadcasts.
         log.info("Checking for READY broadcasts to activate...");
-        
-        // MODIFIED: This now calls the repository method that finds READY broadcasts.
         List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findAndLockReadyBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
 
         if (broadcastsToProcess.isEmpty()) {
@@ -48,8 +41,21 @@ public class BroadcastSchedulingService {
         log.info("Found and locked {} ready broadcasts to activate.", broadcastsToProcess.size());
         for (BroadcastMessage broadcast : broadcastsToProcess) {
             try {
-                // MODIFIED: Calls the renamed method in the lifecycle service.
-                broadcastLifecycleService.processReadyBroadcast(broadcast.getId());
+                // *** THIS IS THE FIX ***
+                // Instead of calling a separate method, we'll bring the activation and fan-out logic directly here.
+                log.info("Activating and fanning out scheduled broadcast ID: {}", broadcast.getId());
+
+                // 1. Set status to ACTIVE
+                broadcast.setStatus("ACTIVE");
+                broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
+                broadcastRepository.update(broadcast);
+
+                // 2. Get the pre-computed list of users
+                List<String> targetUserIds = broadcastLifecycleService.getTargetUserIds(broadcast.getId());
+
+                // 3. Call the fan-out method from BroadcastLifecycleService, which now works for all types
+                broadcastLifecycleService.triggerFanOut(broadcast, targetUserIds);
+
             } catch (Exception e) {
                 log.error("Error activating scheduled broadcast with ID: {}", broadcast.getId(), e);
             }

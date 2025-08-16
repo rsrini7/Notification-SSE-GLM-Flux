@@ -143,7 +143,7 @@ broadcast:
     tcp-port: "9094"
 
   simulation:
-    user-fetch-delay-ms: 0  #120000
+    user-fetch-delay-ms: 5000
 
   # SSE Configuration
   sse:
@@ -171,7 +171,7 @@ broadcast:
   kafka:
     topic:
       name-orchestration: broadcast-orchestration
-      name-worker-prefix: broadcast-events-
+      name-worker-prefix: broadcast-events
       partitions: 1
       replication-factor: 1
     consumer:
