@@ -1,7 +1,6 @@
 package com.example.broadcast.shared.config;
 
 import org.h2.tools.Server;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.EventListener;
 

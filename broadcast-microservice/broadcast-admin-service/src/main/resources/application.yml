@@ -170,15 +170,12 @@ broadcast:
   # Kafka Configuration
   kafka:
     topic:
-      name-selected: broadcast-events-selected
-      name-group-orchestration: broadcast-group-orchestration
-      name-user-group: broadcast-user-events-group
-      name-actions-orchestration: broadcast-actions-orchestration
-      name-user-actions: broadcast-user-actions
-      partitions: 10
+      name-orchestration: broadcast-orchestration
+      name-worker-prefix: broadcast-events-
+      partitions: 1
       replication-factor: 1
     consumer:
-      dlt-group-id: broadcast-dlt-group # Group ID for the DLT listener
+      group-dlt: "broadcast-dlt-group"
 
 ---
 # PostgreSQL-specific profile

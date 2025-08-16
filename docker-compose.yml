@@ -21,6 +21,25 @@ services:
       - ADMIN_BACKEND_URL=https://host.docker.internal:8081
       - USER_BACKEND_URL=https://host.docker.internal:8082
 
+  
+  # Short-lived service to create Kafka topics.
+  kafka-dev-setup:
+    profiles:
+      - dev
+    image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      - kafka-dev
+    volumes:
+      # Mount the local script into the container
+      - ./create-kafka-topics.sh:/tmp/create-kafka-topics.sh
+    command: >
+      sh -c "
+        echo 'Waiting for 10 seconds for Kafka broker to start...' &&
+        sleep 10 &&
+        chmod +x /tmp/create-kafka-topics.sh &&
+        /tmp/create-kafka-topics.sh
+      "
+  
   # Kafka service for the 'dev' profile
   kafka-dev:
     profiles:
@@ -58,6 +77,24 @@ services:
         condition: service_started
       user-service:
         condition: service_started
+
+# NEW: A short-lived service to create Kafka topics.
+  kafka-prod-setup:
+    profiles:
+      - prod
+    image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      - kafka-prod
+    volumes:
+      # Mount the local script into the container
+      - ./create-kafka-topics.sh:/tmp/create-kafka-topics.sh
+    command: >
+      sh -c "
+        echo 'Waiting for 10 seconds for Kafka broker to start...' &&
+        sleep 10 &&
+        chmod +x /tmp/create-kafka-topics.sh &&
+        /tmp/create-kafka-topics.sh
+      "
 
   # Kafka service for the 'prod' profile
   kafka-prod:

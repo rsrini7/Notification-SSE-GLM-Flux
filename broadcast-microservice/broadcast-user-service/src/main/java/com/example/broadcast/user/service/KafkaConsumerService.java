@@ -2,10 +2,9 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.exception.MessageProcessingException;
-import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.service.cache.CacheService;
-import com.example.broadcast.shared.util.Constants.EventType;
 import com.example.broadcast.shared.service.TestingConfigurationService;
+import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -15,116 +14,41 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
-import java.time.ZonedDateTime;
-import java.time.ZoneOffset;
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class KafkaConsumerService {
 
-    // Add this field to record the service's startup time
-    private final ZonedDateTime startupTime = ZonedDateTime.now(ZoneOffset.UTC);
-
     private final SseService sseService;
     private final CacheService cacheService;
-    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final TestingConfigurationService testingConfigurationService;
 
     @KafkaListener(
-            topics = "${broadcast.kafka.topic.name.selected:broadcast-events-selected}",
-            groupId = "${broadcast.kafka.consumer.selected-group-id}",
-            containerFactory = "kafkaListenerContainerFactory"
+        topics = "#{'${broadcast.kafka.topic.name-worker-prefix}'.replaceFirst('^cluster-.*?-', T(com.example.broadcast.shared.config.AppProperties).getClusterName() + '-') + systemEnvironment['POD_NAME'].replaceFirst('.*?-', '')}",
+        groupId = "${broadcast.kafka.consumer.group-worker}",
+        containerFactory = "kafkaListenerContainerFactory"
     )
-    public void processSelectedUsersBroadcastEvent(
-            @Payload MessageDeliveryEvent event,
+    public void processWorkerEvent(  @Payload MessageDeliveryEvent event,
+            Acknowledgment acknowledgment,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
-            @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
-            @Header(KafkaHeaders.OFFSET) long offset,
-            Acknowledgment acknowledgment) {
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
+            @Header(KafkaHeaders.OFFSET) long offset) {
         
-        // If the event is older than the pod, ignore it.
-        if (event.getTimestamp().isBefore(this.startupTime)) {
-            log.trace("Skipping old message from pod restart. Event ID: {}", event.getEventId());
-            acknowledgment.acknowledge(); // Acknowledge to advance offset
-            return;
-        }
+        // Log statement now includes full message coordinates.
+        log.debug("Worker received event. [Topic: {}, Partition: {}, Offset: {}] Payload: {}", 
+                  topic, partition, offset, event);
 
         if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
-            log.warn("DLT TEST MODE [SELECTED]: Simulating failure for broadcast ID: {}", event.getBroadcastId());
+            log.warn("DLT TEST MODE: Simulating failure for broadcast ID: {}", event.getBroadcastId());
             throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
         }
 
         try {
-            handleBroadcastCreated(event);
-            acknowledgment.acknowledge();
-        } catch (Exception e) {
-            log.error("Failed to process message for selected user. Root cause: {}", e.getMessage());
-            throw new MessageProcessingException("Failed to process message", e, event);
-        }
-    }
-    
-    @KafkaListener(
-        topics = "${broadcast.kafka.topic.name.user.group:broadcast-user-events-group}",
-        groupId = "${broadcast.kafka.consumer.group-user-group-id}",
-        containerFactory = "kafkaListenerContainerFactory"
-    )
-    public void processUserGroupBroadcastEvent(
-            @Payload MessageDeliveryEvent event,
-            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
-            @Header(KafkaHeaders.RECEIVED_PARTITION) String partition,
-            @Header(KafkaHeaders.OFFSET) long offset,
-            Acknowledgment acknowledgment) {
-
-        // If the event is older than the pod, ignore it.
-        if (event.getTimestamp().isBefore(this.startupTime)) {
-            log.trace("Skipping old message from pod restart. Event ID: {}", event.getEventId());
-            acknowledgment.acknowledge(); // Acknowledge to advance offset
-            return;
-        }
-
-        try {
-            if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
-                log.warn("DLT TEST MODE [GROUP]: Simulating failure for broadcast ID: {}", event.getBroadcastId());
-                throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
-            }
-
-            log.info("Received user broadcast event from group for broadcast ID: {} user ID: {}", event.getBroadcastId(), event.getUserId());
-            
-            handleBroadcastCreated(event);
-
-            broadcastStatisticsRepository.incrementDeliveredCountBy(event.getBroadcastId(), 1);
-            log.info("Updated delivery statistics for broadcast {}: incremented 1 delivered count for User: {}", event.getBroadcastId(), event.getUserId());
-
-            acknowledgment.acknowledge();
-        } catch (Exception e) {
-            log.error("Failed to process group message from topic {}. Root cause: {}", topic, e.getMessage(), e);
-            throw new MessageProcessingException("Failed to process group message", e, event);
-        }
-    }
-
-    /**
-     * UPDATED: This listener is now the "worker" for user-specific actions.
-     * It listens to the new topic with a DYNAMIC group ID to distribute the work.
-     */
-    @KafkaListener(
-        topics = "${broadcast.kafka.topic.name.user.actions:broadcast-user-actions}",
-        groupId = "${broadcast.kafka.consumer.actions-user-group-id}",
-        containerFactory = "kafkaListenerContainerFactory"
-    )
-    public void processUserActionEvent(@Payload MessageDeliveryEvent event, Acknowledgment acknowledgment) {
-        log.debug("Processing user-specific ACTION event: {} for user {} on broadcast: {}", event.getEventType(), event.getUserId(), event.getBroadcastId());
-
-        // If the event is older than the pod, ignore it.
-        if (event.getTimestamp().isBefore(this.startupTime)) {
-            log.trace("Skipping old message from pod restart. Event ID: {}", event.getEventId());
-            acknowledgment.acknowledge(); // Acknowledge to advance offset
-            return;
-        }
-
-        try {
-            EventType eventType = EventType.valueOf(event.getEventType());
-            switch (eventType) {
+            // Use a switch to handle all possible event types
+            switch (Constants.EventType.valueOf(event.getEventType())) {
+                case CREATED:
+                    handleBroadcastCreated(event);
+                    break;
                 case READ:
                     handleMessageRead(event);
                     break;
@@ -135,12 +59,12 @@ public class KafkaConsumerService {
                     handleBroadcastExpired(event);
                     break;
                 default:
-                    log.warn("Unhandled event type on user-actions topic: {}", event.getEventType());
+                    log.warn("Unhandled event type on worker topic: {}", event.getEventType());
             }
             acknowledgment.acknowledge();
         } catch (Exception e) {
-            log.error("Failed to process user action event. Root cause: {}", e.getMessage(), e);
-            throw new MessageProcessingException("Failed to process user action event", e, event);
+            log.error("Failed to process worker event. Root cause: {}", e.getMessage(), e);
+            throw new MessageProcessingException("Failed to process worker event", e, event);
         }
     }
 

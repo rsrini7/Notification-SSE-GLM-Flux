@@ -7,6 +7,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Duration;
 
@@ -15,6 +16,9 @@ import java.time.Duration;
 @Data
 @Validated
 public class AppProperties {
+
+    @Value("${cluster.name:${CLUSTER_NAME:default}}")
+    private String clusterName;
 
     private final Sse sse = new Sse();
     private final Cache cache = new Cache();
@@ -97,17 +101,11 @@ public class AppProperties {
         @Data
         public static class Topic {
             @NotBlank
-            private String nameSelected = "broadcast-events-selected";
+            private String nameOrchestration = "broadcast-orchestration";
             @NotBlank
-            private String nameGroupOrchestration = "broadcast-group-orchestration";
-            @NotBlank
-            private String nameUserGroup = "broadcast-user-events-group";
-            @NotBlank
-            private String nameActionsOrchestration = "broadcast-actions-orchestration";
-            @NotBlank
-            private String nameUserActions = "broadcast-user-actions";
+            private String nameWorkerPrefix = "broadcast-events-"; // Prefix for pod-specific topics
             @Positive
-            private int partitions = 10;
+            private int partitions = 1;
             @Positive
             private short replicationFactor = 1;
         }
@@ -115,17 +113,11 @@ public class AppProperties {
         @Data
         public static class Consumer {
             @NotBlank
-            private String selectedGroupId = "broadcast-selected-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}";
+            private String groupOrchestration = "broadcast-orchestration-group"; // Static group for the leader
             @NotBlank
-            private String groupOrchestrationGroupId = "broadcast-group-orchestration-group";
+            private String groupWorker = "broadcast-worker-group"; // Static group for workers
             @NotBlank
-            private String groupUserGroupId = "broadcast-user-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}";
-            @NotBlank
-            private String actionsOrchestrationGroupId = "broadcast-orchestration-actions-group";
-            @NotBlank
-            private String actionsUserGroupId = "broadcast-user-actions-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}";
-            @NotBlank
-            private String dltGroupId = "broadcast-dlt-group";
+            private String groupDlt = "broadcast-dlt-group";
         }
 
         @Data

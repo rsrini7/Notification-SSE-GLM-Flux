@@ -88,9 +88,13 @@ public class SseConnectionManager {
      * @param connectionId The connection's unique ID.
      */
     public void registerConnection(String userId, String connectionId) {
-        connectionManager.registerConnection(userId, connectionId, appProperties.getPod().getId());
-        cacheService.registerUserConnection(userId, connectionId, appProperties.getPod().getId());
-        log.info("User connection saved for user: {}, connection: {}", userId, connectionId);
+        String podName = appProperties.getPod().getId();
+        String clusterName = appProperties.getClusterName();
+        String globalPodId = clusterName + "-" + podName;
+
+        connectionManager.registerConnection(userId, connectionId, globalPodId);
+        cacheService.registerUserConnection(userId, connectionId, globalPodId);
+        log.info("User connection saved for user: {}, connection: {}, globalPodId: {}", userId, connectionId, globalPodId);
     }
 
     /**

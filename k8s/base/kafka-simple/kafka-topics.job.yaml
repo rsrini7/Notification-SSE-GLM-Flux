@@ -1,0 +1,26 @@
+# file: k8s/base/kafka-topics-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-kafka-topics-job
+  namespace: broadcast-system
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: topic-creator
+        # Use a standard Kafka image that has the client tools
+        image: confluentinc/cp-kafka:7.3.0
+        # The command to run is the script itself
+        command: ["/bin/bash", "/scripts/create-kafka-topics.sh"]
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: scripts
+        configMap:
+          # Mount the ConfigMap containing the script
+          name: kafka-topics-script
+          # Make the script executable
+          defaultMode: 0755

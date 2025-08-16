@@ -1,17 +1,17 @@
+// file: broadcast-microservice/broadcast-shared/src/main/java/com/example/broadcast/shared/service/MessageStatusService.java
 package com.example.broadcast.shared.service;
 
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
-import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
-
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -29,10 +29,7 @@ public class MessageStatusService {
     private final AppProperties appProperties;
 
     /**
-     * Resets a message's status to PENDING in a new, independent transaction.
-     * This is critical for the DLT redrive process to ensure the state is committed
-     * before the message is re-queued in Kafka.
-     * @param userBroadcastMessageId The ID of the message to reset.
+     * Resets a message's status to PENDING in a new, independent transaction for DLT redrives.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void resetMessageForRedrive(Long userBroadcastMessageId) {
@@ -40,6 +37,9 @@ public class MessageStatusService {
         log.info("Reset UserBroadcastMessage (ID: {}) to PENDING for redrive in a new transaction.", userBroadcastMessageId);
     }
 
+    /**
+     * Updates a message to DELIVERED and increments the central statistics counter.
+     */
     @Transactional
     public void updateMessageToDelivered(Long userBroadcastMessageId, Long broadcastId) {
         int updatedRows = userBroadcastRepository.updateDeliveryStatus(userBroadcastMessageId, Constants.DeliveryStatus.DELIVERED.name());
@@ -49,40 +49,15 @@ public class MessageStatusService {
         }
     }
 
-     /**
-     * Updates the status of a specific UserBroadcastMessage to DELIVERED.
-     * This method is now primarily for the "fan-out-on-write" (SELECTED user) path.
-     *
-     * @return true if the status was successfully updated from PENDING to DELIVERED.
-     */
-    @Transactional
-    public boolean updateMessageStatusToDelivered(String userId, Long broadcastId) {
-        Optional<UserBroadcastMessage> userMessageOpt = userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcastId);
-
-        if (userMessageOpt.isPresent()) {
-            UserBroadcastMessage userMessage = userMessageOpt.get();
-            if (Constants.DeliveryStatus.PENDING.name().equals(userMessage.getDeliveryStatus())) {
-                userMessage.setDeliveryStatus(Constants.DeliveryStatus.DELIVERED.name());
-                userMessage.setDeliveredAt(ZonedDateTime.now(ZoneOffset.UTC));
-                userBroadcastRepository.update(userMessage);
-                broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
-                return true;
-            }
-        }
-        return false;
-    }
-
     /**
-     * Publishes a READ event to the outbox.
-     * It now checks if a UserBroadcastMessage record exists before publishing.
+     * Publishes a READ event to the outbox. This now publishes to the central orchestration topic.
      */
     @Transactional
     public void publishReadEvent(Long broadcastId, String userId) {
         Optional<UserBroadcastMessage> userMessageOpt = userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcastId);
         
         if (userMessageOpt.isEmpty()) {
-            log.info("Skipping READ event publication for user {} and broadcast {}. No user-specific record found (likely a group broadcast).", userId, broadcastId);
-            return;
+            log.info("No existing UserBroadcastMessage for user {}, broadcast {}. A new record was likely created.", userId, broadcastId);
         }
 
         MessageDeliveryEvent event = MessageDeliveryEvent.builder()
@@ -93,9 +68,9 @@ public class MessageStatusService {
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
 
-        String topicName = appProperties.getKafka().getTopic().getNameUserActions();
+        // MODIFIED: All user actions are now sent to the central orchestration topic for routing.
+        String topicName = appProperties.getKafka().getTopic().getNameOrchestration();
         outboxEventPublisher.publish(event, userId, Constants.EventType.READ.name(), topicName);
-        log.info("Published READ event for user: {}, broadcast: {}", userId, broadcastId);
+        log.info("Published READ event for user: {}, broadcast: {} to orchestration topic.", userId, broadcastId);
     }
-
 }
