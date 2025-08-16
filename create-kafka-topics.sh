@@ -5,7 +5,7 @@
 KAFKA_BROKERS="${KAFKA_BROKER_ADDRESS:-kafka-dev:29092}"
 CLUSTER_NAME="${CLUSTER_NAME:-local}"
 POD_NAME_PREFIX="${POD_NAME_PREFIX:-docker-pod-}"
-MAX_REPLICAS="${MAX_REPLICAS:-10}"
+MAX_REPLICAS="${MAX_REPLICAS:-2}"
 
 # --- Wait for Kafka to be ready ---
 echo "Waiting for Kafka broker at $KAFKA_BROKERS to be ready..."
