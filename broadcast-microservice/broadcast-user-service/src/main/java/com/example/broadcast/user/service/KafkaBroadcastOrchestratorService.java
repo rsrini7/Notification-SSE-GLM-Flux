@@ -57,6 +57,7 @@ public class KafkaBroadcastOrchestratorService {
                 .map(userId -> {
                     UserConnectionInfo connectionInfo = cacheService.getUserConnectionInfo(userId);
                     if (connectionInfo != null && connectionInfo.getPodId() != null) {
+                        log.debug("User Connection Info : {}", connectionInfo);
                         // This user is ONLINE. Route the event to their specific pod's topic.
                         String topicName = appProperties.getKafka().getTopic().getNameWorkerPrefix() + connectionInfo.getPodId();
                         return createWorkerOutboxEvent(event, userId, topicName);
