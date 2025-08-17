@@ -84,7 +84,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - SPRING_PROFILES_ACTIVE=dev-pg
+      - SPRING_PROFILES_ACTIVE=dev-pg,admin-only
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:9092
