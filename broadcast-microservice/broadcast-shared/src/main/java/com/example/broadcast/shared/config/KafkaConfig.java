@@ -2,6 +2,8 @@ package com.example.broadcast.shared.config;
 
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -33,6 +35,7 @@ import java.util.function.BiFunction;
 @Configuration
 @EnableKafka
 @RequiredArgsConstructor
+@Slf4j
 public class KafkaConfig {
 
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
@@ -59,9 +62,7 @@ public class KafkaConfig {
         configProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         configProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
-
-        // --- CORRECTED CONFIGURATION ---
-        // ADD THIS LINE BACK - This is the mandatory configuration for the message key.
+       
         configProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
 
         // Configure the value deserializer
@@ -101,15 +102,32 @@ public class KafkaConfig {
     @Bean
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
             @Qualifier("dltKafkaTemplate") KafkaTemplate<String, Object> dltKafkaTemplate) {
-        
-        // THIS IS THE NEW, SMARTER RESOLVER
-        // It creates a TopicPartition for the correct DLT topic, but ALWAYS uses partition 0.
-        BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) ->
-                new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
+
+        BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) -> {
+            String workerTopicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
+            String orchestrationTopic = appProperties.getKafka().getTopic().getNameOrchestration();
+
+            // CORRECTED LOGIC: Check if the topic name CONTAINS the worker prefix,
+            // which accounts for the cluster name at the beginning.
+            if (cr.topic().contains(workerTopicPrefix)) {
+                String sharedDltTopic = workerTopicPrefix + Constants.DLT_SUFFIX;
+                log.info("Routing failed record from worker topic {} to shared DLT {}", cr.topic(), sharedDltTopic);
+                return new TopicPartition(sharedDltTopic, 0);
+            }
+
+            if (cr.topic().equals(orchestrationTopic)) {
+                String orchestrationDltTopic = orchestrationTopic + Constants.DLT_SUFFIX;
+                log.info("Routing failed record from orchestration topic {} to its DLT {}", cr.topic(), orchestrationDltTopic);
+                return new TopicPartition(orchestrationDltTopic, 0);
+            }
+            
+            // This fallback should ideally not be hit.
+            log.warn("Unrecognized topic '{}' in DLT resolver. Using default fallback DLT name.", cr.topic());
+            return new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
+        };
+        // ========================= END OF FIX =========================
 
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
-        
-        // This setting ensures that if the DLT publish itself fails, the error is not swallowed.
         recoverer.setFailIfSendResultIsError(true);
         
         return recoverer;
