@@ -1,4 +1,3 @@
-// UPDATED FILE
 package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.exception.UserServiceUnavailableException;
@@ -21,7 +20,7 @@ import java.util.List;
 public class BroadcastSchedulingService {
 
     private final BroadcastRepository broadcastRepository;
-    // We now need the BroadcastLifecycleService to reuse its fan-out method
+
     private final BroadcastLifecycleService broadcastLifecycleService;
 
     private static final int BATCH_LIMIT = 100;
@@ -41,20 +40,9 @@ public class BroadcastSchedulingService {
         log.info("Found and locked {} ready broadcasts to activate.", broadcastsToProcess.size());
         for (BroadcastMessage broadcast : broadcastsToProcess) {
             try {
-                // *** THIS IS THE FIX ***
-                // Instead of calling a separate method, we'll bring the activation and fan-out logic directly here.
+
                 log.info("Activating and fanning out scheduled broadcast ID: {}", broadcast.getId());
-
-                // 1. Set status to ACTIVE
-                broadcast.setStatus("ACTIVE");
-                broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
-                broadcastRepository.update(broadcast);
-
-                // 2. Get the pre-computed list of users
-                List<String> targetUserIds = broadcastLifecycleService.getTargetUserIds(broadcast.getId());
-
-                // 3. Call the fan-out method from BroadcastLifecycleService, which now works for all types
-                broadcastLifecycleService.triggerFanOut(broadcast, targetUserIds);
+                broadcastLifecycleService.processReadyBroadcast(broadcast.getId());
 
             } catch (Exception e) {
                 log.error("Error activating scheduled broadcast with ID: {}", broadcast.getId(), e);

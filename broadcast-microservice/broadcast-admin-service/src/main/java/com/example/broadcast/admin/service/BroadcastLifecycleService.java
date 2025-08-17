@@ -1,4 +1,3 @@
-// CORRECTED FILE: broadcast-microservice/broadcast-admin-service/src/main/java/com/example/broadcast/admin/service/BroadcastLifecycleService.java
 package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.config.AppProperties;
@@ -132,35 +131,18 @@ public class BroadcastLifecycleService {
         return broadcastMapper.toBroadcastResponse(broadcast, 0);
     }
 
-     public void triggerFanOut(BroadcastMessage broadcast, List<String> targetUserIds) {
-        if (targetUserIds.isEmpty()) {
-            log.warn("Broadcast {} activated, but no users were targeted.", broadcast.getId());
-            return;
-        }
-
-        initializeStatistics(broadcast.getId(), targetUserIds.size());
+    @Transactional(noRollbackFor = UserServiceUnavailableException.class)
+    public void processReadyBroadcast(Long broadcastId) {
+        BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
         
-        log.info("Fanning out {} events for broadcast ID: {} directly from the admin service.", targetUserIds.size(), broadcast.getId());
-        publishEventsToWorkerTopics(broadcast, targetUserIds, Constants.EventType.CREATED, broadcast.getContent());
+        broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
+        broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
+        broadcastRepository.update(broadcast);
+        
+        List<String> targetUserIds = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcastId);
+        triggerCreateBroadcastEventFromPrefetchedUsers(broadcast, targetUserIds);
     }
-    
-    // NEW Public method to get the user list
-    public List<String> getTargetUserIds(Long broadcastId) {
-        return userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcastId);
-    }
-
-    // @Transactional(noRollbackFor = UserServiceUnavailableException.class)
-    // public void processReadyBroadcast(Long broadcastId) {
-    //     BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
-    //             .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
-        
-    //     broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
-    //     broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
-    //     broadcastRepository.update(broadcast);
-        
-    //     List<String> targetUserIds = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcastId);
-    //     triggerCreateBroadcastEventFromPrefetchedUsers(broadcast, targetUserIds);
-    // }
 
     @Transactional
     public void cancelBroadcast(Long id) {
