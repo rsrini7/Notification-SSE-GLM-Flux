@@ -82,7 +82,7 @@ A high-performance Java microservice for the Broadcast Messaging System, built w
 - We need to disable h2 console in application.yml and enable it in H2ConsoleConfig.java.
 
 -   `http://localhost:8083` - H2 Console
--   `jdbc:h2:mem:broadcastdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL` - JDBC URL
+-   `jdbc:h2:~/broadcast-system/broadcastdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL` - JDBC URL
 -   `sa` - Username
 -   `` - Password
 
