@@ -1,5 +1,5 @@
 #!/bin/bash
-TOPIC_NAME="broadcast-events-selected"
+TOPIC_NAME="broadcast-user-service-selected"
 USER_KEY="user-001"
 INVALID_PAYLOAD='{"eventId":"missing-data-'"$(date +%s)"'","broadcastId":99999,"userId":"'"$USER_KEY"'","eventType":"CREATED","message":"This message references data that does not exist yet."}'
 

@@ -6,10 +6,10 @@ Step 2: Use the Kafka Console Producer to Send a Message
 
 kafka-console-producer \
 --bootstrap-server localhost:9092 \
---topic broadcast-events-dlt \
+--topic broadcast-user-service-dlt \
 --property "parse.key=true" \
 --property "key.separator=:" \
---property "headers=dlt-original-topic:broadcast-events,dlt-exception-message:'Manual Test: Invalid JSON payload from CLI',dlt-exception-stacktrace:'N/A'"
+--property "headers=dlt-original-topic:broadcast-user-service,dlt-exception-message:'Manual Test: Invalid JSON payload from CLI',dlt-exception-stacktrace:'N/A'"
 
 Step 3: Send the Message Payload
 

@@ -3,7 +3,7 @@ sequenceDiagram
     participant OrchestrationTopic as Kafka Topic <br/> (broadcast-group-orchestration)
     participant LeaderConsumer as User Service (Leader Pod)
     participant DB as PostgreSQL DB
-    participant DeliveryTopic as Kafka Topic <br/> (broadcast-events-selected)
+    participant DeliveryTopic as Kafka Topic <br/> (broadcast-user-service-selected)
     participant WorkerConsumers as User Service (Worker Pods)
     participant UserUI as User UI (Browser)
 

@@ -15,8 +15,8 @@ Apache Kafka is a distributed event streaming platform that excels at handling h
 Key concepts in our Kafka implementation include:
 
 1. **Topics**: We use separate topics for different types of broadcasts:
-   - `broadcast-events-selected`: For broadcasts to specific users
-   - `broadcast-events-group`: For broadcasts to all users or groups or roles
+   - `broadcast-user-service-selected`: For broadcasts to specific users
+   - `broadcast-user-service-group`: For broadcasts to all users or groups or roles
 
 2. **Partitioning**: Each topic is divided into 10 partitions, allowing parallel processing of messages
 
@@ -36,7 +36,7 @@ Key concepts in our Kafka implementation include:
 ```java
 // From KafkaConsumerService.java
 @KafkaListener(
-        topics = "${broadcast.kafka.topic.name.selected:broadcast-events-selected}",
+        topics = "${broadcast.kafka.topic.name.selected:broadcast-user-service-selected}",
         groupId = "${spring.kafka.consumer.group-id:broadcast-service-group}-selected",
         containerFactory = "kafkaListenerContainerFactory"
 )
@@ -93,8 +93,8 @@ sequenceDiagram
 1. When an administrator creates a broadcast, the `BroadcastLifecycleService` saves it to the database and creates `MessageDeliveryEvent` objects for each recipient
 
 2. These events are published to the appropriate Kafka topic based on the broadcast type:
-   - Targeted broadcasts go to `broadcast-events-selected`
-   - All users / Role-based broadcasts go to `broadcast-events-group`
+   - Targeted broadcasts go to `broadcast-user-service-selected`
+   - All users / Role-based broadcasts go to `broadcast-user-service-group`
 
 3. Kafka distributes these events across partitions, allowing multiple consumers to process them in parallel
 

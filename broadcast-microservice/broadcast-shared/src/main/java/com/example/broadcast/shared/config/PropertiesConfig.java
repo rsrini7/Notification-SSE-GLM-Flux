@@ -10,10 +10,10 @@ import org.springframework.context.annotation.Configuration;
 public class PropertiesConfig {
 
     // Inject the pod and cluster names directly from the environment/system properties
-    @Value("${pod.name:${POD_NAME:pod-local-fallback}}")
+    @Value("${pod.name:${POD_NAME:docker-pod-0}}")
     private String podName;
 
-    @Value("${cluster.name:${CLUSTER_NAME:local}}")
+    @Value("${cluster.name:${CLUSTER_NAME:cluster-a}}")
     private String clusterName;
 
     @Bean

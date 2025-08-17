@@ -12,7 +12,7 @@ sequenceDiagram
     alt Flow for SELECTED User
         AdminSvc->>+SharedCache: 1a- GET "connection:user-xyz"
         SharedCache-->>-AdminSvc: returns "pod-7"
-        AdminSvc->>+Kafka: 2a- Publishes CREATED event to "broadcast-events-pod-7"
+        AdminSvc->>+Kafka: 2a- Publishes CREATED event to "broadcast-user-service-pod-7"
         Kafka-->>-AdminSvc: Acknowledged
     end
     
@@ -22,7 +22,7 @@ sequenceDiagram
         Kafka->>+Orchestrator: 2b- Leader consumes orchestration event
         Orchestrator->>+SharedCache: 3b- GET "connection:user-xyz"
         SharedCache-->>-Orchestrator: returns "pod-7"
-        Orchestrator->>+Kafka: 4b- Publishes CREATED event for user-xyz to "broadcast-events-pod-7"
+        Orchestrator->>+Kafka: 4b- Publishes CREATED event for user-xyz to "broadcast-user-service-pod-7"
         Kafka-->>-Orchestrator: Acknowledged
     end
     
@@ -45,7 +45,7 @@ sequenceDiagram
     Kafka->>+Orchestrator: 12- Leader consumes READ event
     Orchestrator->>+SharedCache: 13- GET "connection:user-xyz"
     SharedCache-->>-Orchestrator: returns "pod-7"
-    Orchestrator->>+Kafka: 14- Publishes targeted READ event to "broadcast-events-pod-7"
+    Orchestrator->>+Kafka: 14- Publishes targeted READ event to "broadcast-user-service-pod-7"
     Kafka-->>-Orchestrator: Acknowledged
 
     Kafka->>+Pod7: 15- Pod 7 consumes targeted READ event

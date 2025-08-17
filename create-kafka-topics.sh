@@ -19,7 +19,7 @@ echo "Kafka is ready!"
 # --- Create Singleton Topics ---
 ORCHESTRATION_TOPIC="broadcast-orchestration"
 ORCHESTRATION_DLT="${ORCHESTRATION_TOPIC}-dlt"
-WORKER_DLT="broadcast-events-dlt"
+WORKER_DLT="broadcast-user-service-dlt"
 
 echo "--- Creating Singleton Topics ---"
 kafka-topics --bootstrap-server $KAFKA_BROKERS --create --if-not-exists --topic $ORCHESTRATION_TOPIC --partitions 1 --replication-factor 1
@@ -29,7 +29,7 @@ kafka-topics --bootstrap-server $KAFKA_BROKERS --create --if-not-exists --topic 
 # --- Create Pod-Specific Worker Topics ---
 echo "--- Creating Worker Topics for Cluster: $CLUSTER_NAME ---"
 # CORRECTED: Remove the trailing hyphen from the prefix
-WORKER_TOPIC_PREFIX="broadcast-events" 
+WORKER_TOPIC_PREFIX="broadcast-user-service" 
 for ((i=0; i<$MAX_REPLICAS; i++)); do
   # CORRECTED: Add the hyphen here to match the application.yml logic
   TOPIC_NAME="${CLUSTER_NAME}-${WORKER_TOPIC_PREFIX}-${POD_NAME_PREFIX}${i}"

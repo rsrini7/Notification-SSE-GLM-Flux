@@ -103,7 +103,7 @@ public class AppProperties {
             @NotBlank
             private String nameOrchestration = "broadcast-orchestration";
             @NotBlank
-            private String nameWorkerPrefix = "broadcast-events"; // Prefix for pod-specific topics
+            private String nameWorkerPrefix = "broadcast-user-service"; // Prefix for pod-specific topics
             @Positive
             private int partitions = 1;
             @Positive

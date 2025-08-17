@@ -44,7 +44,7 @@ graph TD
         SseService[SSE Service & Connection Manager]
     end
     subgraph "Shared Infrastructure"
-        Kafka["Kafka Broker broadcast-events-selected broadcast-events-group ...-dlt"]
+        Kafka["Kafka Broker broadcast-user-service-selected broadcast-user-service-group ...-dlt"]
         PostgresDB["PostgreSQL DB broadcast_messages user_broadcast_messages outbox_events dlt_messages"]
         RedisCache["Redis Cache online-users pending-events user-msg:userId"]
     end

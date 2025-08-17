@@ -181,7 +181,7 @@ graph TD
     end
 
     subgraph "Data & Eventing Infrastructure"
-        KafkaTopic[Kafka Topic broadcast-events-selected/group]
+        KafkaTopic[Kafka Topic broadcast-user-service-selected/group]
         KafkaDLT[Kafka DLT...-dlt]
         Postgres[PostgreSQL Database]
     end

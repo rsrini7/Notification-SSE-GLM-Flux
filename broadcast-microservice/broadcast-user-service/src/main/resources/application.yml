@@ -137,7 +137,7 @@ broadcast:
     topic:
       name: "#{environment.getProperty('CLUSTER_NAME', 'cluster-a')}-#{'${broadcast.kafka.topic.name-worker-prefix}'}-#{environment.getProperty('POD_NAME', 'docker-pod-0')}"
       name-orchestration: broadcast-orchestration
-      name-worker-prefix: broadcast-events
+      name-worker-prefix: broadcast-user-service
       partitions: 1
       replication-factor: 1
     consumer:
