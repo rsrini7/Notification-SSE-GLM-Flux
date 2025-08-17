@@ -118,6 +118,9 @@ public class BroadcastLifecycleService {
         log.info("Broadcast is immediate or scheduled too close. Treating as immediate. Saving with PREPARING status.");
         broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
         broadcast = broadcastRepository.save(broadcast);
+
+        cacheService.evictBroadcastContent(broadcast.getId());
+        log.info("Evicted broadcast-content cache for ID: {}", broadcast.getId());
         
         if (isFailureTest) {
             testingConfigurationService.markBroadcastForFailure(broadcast.getId());
