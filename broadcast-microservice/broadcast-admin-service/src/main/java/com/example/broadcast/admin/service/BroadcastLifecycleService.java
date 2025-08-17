@@ -17,10 +17,13 @@ import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.service.TestingConfigurationService;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.admin.event.BroadcastCreatedEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
@@ -50,6 +53,7 @@ public class BroadcastLifecycleService {
     private final ObjectMapper objectMapper;
     private final CacheService cacheService;
     private final TestingConfigurationService testingConfigurationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     private void publishEventsToWorkerTopics(BroadcastMessage broadcast, List<String> userIds, Constants.EventType eventType, String message) {
         List<OutboxEvent> eventsToPublish = new ArrayList<>();
@@ -127,8 +131,8 @@ public class BroadcastLifecycleService {
             log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
         }
 
-        log.info("Triggering async user pre-computation for immediate broadcast ID: {}", broadcast.getId());
-        broadcastTargetingService.precomputeAndStoreTargetUsers(broadcast.getId());
+        log.info("Triggering async (BroadcastEventListener) user pre-computation for immediate broadcast ID: {}", broadcast.getId());
+        eventPublisher.publishEvent(new BroadcastCreatedEvent(broadcast.getId()));
 
         return broadcastMapper.toBroadcastResponse(broadcast, 0);
     }
