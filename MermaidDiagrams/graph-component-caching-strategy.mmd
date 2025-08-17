@@ -1,0 +1,33 @@
+graph TD
+    subgraph "Services"
+        AdminService["Admin Service"]
+        UserService["User Service"]
+    end
+
+    subgraph "Redis Cache Data Stores"
+        direction LR
+        UserConn["<strong>user-conn:* (Hash)</strong><br/><em>Maps userId to connection details</em>"]
+        OnlineUsers["<strong>online-users (Set)</strong><br/><em>Set of all online userIds</em>"]
+        PendingEvents["<strong>pending-evt:* (List)</strong><br/><em>Events for offline users</em>"]
+        BroadcastContent["<strong>broadcast-content:* (String)</strong><br/><em>Cached message content</em>"]
+    end
+
+    %% Data Flows - Grouped by type for stable link indexing
+    
+    %% Writes (Green) - Links 0, 1, 2, 3
+    UserService -- "Writes On Connect" --> UserConn;
+    UserService -- "Writes On Connect" --> OnlineUsers;
+    AdminService -- "Writes if User Offline" --> PendingEvents;
+    UserService -- "Writes on Read Miss" --> BroadcastContent;
+    
+    %% Reads (Orange) - Links 4, 5
+    AdminService -- "Reads to find pod topic" --> UserConn;
+    UserService -- "Reads & Clears on Reconnect" --> PendingEvents;
+
+    %% Invalidates (Red) - Link 6
+    AdminService -- "Invalidates on Create/Update" --> BroadcastContent;
+
+    %% Style Definitions
+    linkStyle 0,1,2,3 stroke-width:2px,stroke:green;
+    linkStyle 4,5 stroke-width:2px,stroke:orange;
+    linkStyle 6 stroke-width:2px,stroke:red;
