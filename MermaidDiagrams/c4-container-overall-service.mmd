@@ -29,7 +29,7 @@ graph TD
 
     AdminService -- "Produces Events (TCP)" --> Kafka
     AdminService -- "Reads/Writes State (JDBC)" --> Postgres
-    AdminService -- "Writes DLT Failure State (TCP)" --> Redis
+    AdminService -- "Manage Cache (TCP)" --> Redis
 
     UserService -- "Consumes Events (TCP)" --> Kafka
     UserService -- "Reads/Writes State (JDBC)" --> Postgres
