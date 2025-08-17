@@ -38,14 +38,14 @@ data:
     # --- Create Pod-Specific Worker Topics ---
     echo ""
     echo "--- Creating Pod-Specific Worker Topics ---"
-    WORKER_TOPIC_PREFIX="broadcast-user-service"
+    POD_NAME_PREFIX="broadcast-user-service"
 
     for cluster in "${CLUSTER_NAMES[@]}"; do
       for ((i=0; i<$MAX_REPLICAS; i++)); do
         # The pod name from a StatefulSet is stable: <statefulset-name>-<index>
         # The app logic will combine the prefix with the pod name's index.
         # Example topic name: cluster-a-broadcast-user-service-0
-        TOPIC_NAME="${cluster}-${WORKER_TOPIC_PREFIX}-${i}"
+        TOPIC_NAME="${cluster}-${POD_NAME_PREFIX}-${i}"
         echo "Creating topic: $TOPIC_NAME"
         kafka-topics --bootstrap-server $KAFKA_BROKERS --create --if-not-exists --topic $TOPIC_NAME --partitions 1 --replication-factor 3
       done

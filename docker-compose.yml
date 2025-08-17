@@ -45,7 +45,7 @@ services:
     environment:
       - KAFKA_BROKER_ADDRESS=kafka-dev:29092
       - CLUSTER_NAME=cluster-a
-      - POD_NAME_PREFIX=broadcast-user-service-
+      - POD_NAME_PREFIX=broadcast-user-service
     command: ["sh", "-c", "echo 'Waiting 5s for dev Kafka...' && sleep 5 && /tmp/create-kafka-topics.sh"]
     networks:
       - broadcast-net
@@ -107,7 +107,7 @@ services:
     environment:
       - KAFKA_BROKER_ADDRESS=kafka-prod:29093
       - CLUSTER_NAME=cluster-a
-      - POD_NAME_PREFIX=broadcast-user-service-      
+      - POD_NAME_PREFIX=broadcast-user-service
     command: ["sh", "-c", "echo 'Waiting 5s for prod Kafka...' && sleep 5 && /tmp/create-kafka-topics.sh"]
     networks:
       - broadcast-net
