@@ -30,6 +30,8 @@ spec:
         - containerPort: 8082
           name: api
         env:
+        - name: LOGGING_FILE_NAME
+          value: "broadcast-user-service"
         - name: POD_NAME
           valueFrom:
             fieldRef:

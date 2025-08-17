@@ -1,6 +1,6 @@
 # Patches for the user service deployment
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: broadcast-user-service
 spec:
