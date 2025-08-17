@@ -7,4 +7,4 @@ mvn clean package
 # export CLUSTER_NAME="cluster-a"
 
 # Run the application
-java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" -jar target/broadcast-admin-service-1.0.0.jar
+java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg,admin-only" -jar target/broadcast-admin-service-1.0.0.jar

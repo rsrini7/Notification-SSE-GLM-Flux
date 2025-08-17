@@ -12,4 +12,4 @@ mvn clean package
 # Run the application
 # Note: In PowerShell, quotes around the -D arguments are not needed.
 Write-Host "Starting admin-service..."
-java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" -jar target/broadcast-admin-service-1.0.0.jar
+java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg,admin-only" -jar target/broadcast-admin-service-1.0.0.jar
