@@ -56,7 +56,7 @@ spec:
         - name: JAVA_OPTS
           value: "-Xms512m -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2"
         - name: SPRING_PROFILES_ACTIVE
-          value: "dev-pg"
+          value: "dev-pg,admin-only"
         resources:
           requests:
             memory: "1Gi"
