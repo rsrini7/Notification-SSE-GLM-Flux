@@ -135,7 +135,7 @@ broadcast:
   # Kafka Configuration
   kafka:
     topic:
-      name: "#{environment.getProperty('CLUSTER_NAME', 'cluster-a')}-#{'${broadcast.kafka.topic.name-worker-prefix}'}-#{environment.getProperty('POD_NAME', 'docker-pod-0')}"
+      name: "#{environment.getProperty('CLUSTER_NAME', 'cluster-a')}-#{'${broadcast.kafka.topic.name-worker-prefix}'}-#{environment.getProperty('POD_NAME', 'broadcast-user-service-0')}"
       name-orchestration: broadcast-orchestration
       name-worker-prefix: broadcast-user-service
       partitions: 1

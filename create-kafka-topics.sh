@@ -4,7 +4,7 @@
 # Use environment variables for all settings, with sane defaults for local dev.
 KAFKA_BROKERS="${KAFKA_BROKER_ADDRESS:-kafka-dev:29092}"
 CLUSTER_NAME="${CLUSTER_NAME:-cluster-a}"
-POD_NAME_PREFIX="${POD_NAME_PREFIX:-docker-pod-}"
+POD_NAME_PREFIX="${POD_NAME_PREFIX:-broadcast-user-service-}"
 MAX_REPLICAS="${MAX_REPLICAS:-2}"
 
 # --- Wait for Kafka to be ready ---

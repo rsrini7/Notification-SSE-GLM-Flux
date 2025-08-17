@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Configuration;
 public class PropertiesConfig {
 
     // Inject the pod and cluster names directly from the environment/system properties
-    @Value("${pod.name:${POD_NAME:docker-pod-0}}")
+    @Value("${pod.name:${POD_NAME:broadcast-user-service-0}}")
     private String podName;
 
     @Value("${cluster.name:${CLUSTER_NAME:cluster-a}}")

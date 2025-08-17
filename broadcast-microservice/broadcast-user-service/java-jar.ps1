@@ -6,7 +6,7 @@ Remove-Item -Path "logs\*" -Recurse -Force -ErrorAction SilentlyContinue
 mvn clean package
 
 # Set environment variables for the current PowerShell session
-$env:POD_NAME = "docker-pod-0"
+$env:POD_NAME = "broadcast-user-service-0"
 $env:CLUSTER_NAME = "cluster-a"
 
 # Run the application

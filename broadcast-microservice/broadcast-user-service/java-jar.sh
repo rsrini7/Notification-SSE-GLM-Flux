@@ -2,7 +2,7 @@ rm logs\*
 mvn clean package
 
 echo Set environment variables for this session
-export POD_NAME=docker-pod-0
+export POD_NAME=broadcast-user-service-0
 export CLUSTER_NAME=cluster-a
 
 echo Run the application
