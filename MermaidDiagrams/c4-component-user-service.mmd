@@ -13,8 +13,8 @@ graph TD
         end
         
         subgraph "Kafka Consumers"
-            Orchestrator["<div style='font-weight:bold'>KafkaBroadcastOrchestratorService</div><div style='font-size: smaller;'>*Leader Consumer*<br/>(Static Group ID)<br/>Receives single events and scatters the work.</div>"]
-            WorkerConsumer["<div style='font-weight:bold'>KafkaConsumerService</div><div style='font-size: smaller;'>*Worker Consumers*<br/>(Dynamic Group ID)<br/>Process fanned-out, user-specific events.</div>"]
+            Orchestrator["<div style='font-weight:bold'>KafkaBroadcastOrchestratorService</div><div style='font-size: smaller;'>*Leader Consumer*<br/>Receives single events and scatters the work.</div>"]
+            WorkerConsumer["<div style='font-weight:bold'>KafkaConsumerService</div><div style='font-size: smaller;'>*Worker Consumers*<br/>Process fanned-out, user-specific events.</div>"]
         end
 
         subgraph "Data Access & Distributed State"
