@@ -3,7 +3,7 @@
 
 # Use environment variables for all settings, with sane defaults for local dev.
 KAFKA_BROKERS="${KAFKA_BROKER_ADDRESS:-kafka-dev:29092}"
-CLUSTER_NAME="${CLUSTER_NAME:-local}"
+CLUSTER_NAME="${CLUSTER_NAME:-cluster-a}"
 POD_NAME_PREFIX="${POD_NAME_PREFIX:-docker-pod-}"
 MAX_REPLICAS="${MAX_REPLICAS:-2}"
 

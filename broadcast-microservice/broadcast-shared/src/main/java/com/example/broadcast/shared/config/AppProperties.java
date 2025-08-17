@@ -40,7 +40,7 @@ public class AppProperties {
 
     @Data
     public static class Pod {
-        @Value("${pod.name:${POD_NAME:pod-local}}")
+        @Value("${pod.name:${POD_NAME:docker-pod-0}}")
         @NotBlank
         private String id;
     }

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-info
+  namespace: broadcast-system
+data:
+  # This value would be "cluster-a" in one cluster, "cluster-b" in another, etc.
+  cluster.name: "cluster-a"

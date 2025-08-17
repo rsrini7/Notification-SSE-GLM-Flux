@@ -7,7 +7,7 @@ mvn clean package
 
 # Set environment variables for the current PowerShell session
 $env:POD_NAME = "docker-pod-0"
-$env:CLUSTER_NAME = "local"
+$env:CLUSTER_NAME = "cluster-a"
 
 # Run the application
 # The fix is to pass pod.name and cluster.name as -D system properties

@@ -6,8 +6,8 @@ Remove-Item -Path "logs\*" -Recurse -Force -ErrorAction SilentlyContinue
 mvn clean package
 
 # Set environment variables for the current PowerShell session
-$env:POD_NAME = "admin-local-0"
-$env:CLUSTER_NAME = "local"
+# $env:POD_NAME = "admin-local-0"
+# $env:CLUSTER_NAME = "local"
 
 # Run the application
 # Note: In PowerShell, quotes around the -D arguments are not needed.

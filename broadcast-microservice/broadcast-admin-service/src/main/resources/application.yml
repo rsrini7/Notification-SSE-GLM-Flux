@@ -54,7 +54,7 @@ spring:
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      group-id: ${broadcast.kafka.consumer.dlt-group-id}
+      # group-id: ${broadcast.kafka.consumer.dlt-group-id}
       auto-offset-reset: earliest
       properties:
         '[spring.json.trusted.packages]': "*"
