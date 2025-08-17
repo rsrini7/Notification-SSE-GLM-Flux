@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant AdminUI as Admin UI
+    participant AdminSvc as Admin Service
+    participant Kafka as Kafka Broker
+    participant WorkerConsumer as User Service Pod
+    participant UserUI as Target User's UI
+    participant SseClient as User's SSE Client-Side Logic
+
+    AdminUI->>+AdminSvc: 1- POST /broadcasts (isFireAndForget=true, category="Force Logoff")
+    Note right of AdminSvc: Treated as immediate, <br/> sets a short 30s expiry.
+    AdminSvc-->>-AdminUI: 2- Returns 202 Accepted
+
+    Note over AdminSvc, Kafka: Outbox poller publishes the event...
+    AdminSvc->>+Kafka: 3- Publishes event to user's topic
+    Kafka-->>-AdminSvc: 
+
+    Kafka->>+WorkerConsumer: 4- Delivers event to the correct pod
+    WorkerConsumer->>+UserUI: 5- Pushes MESSAGE event via SSE
+    UserUI->>+SseClient: 6- Receives SSE event
+    
+    Note over SseClient: 7- Client checks event.data.category === "Force Logoff"
+    SseClient->>SseClient: 8- Triggers force disconnect
+    SseClient--xUserUI: 9- Terminates SSE Connection
+    
+    WorkerConsumer-->>-Kafka: 10- Acknowledges Kafka message
