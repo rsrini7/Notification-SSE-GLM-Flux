@@ -46,7 +46,6 @@ public class BroadcastLifecycleService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
-    private final BroadcastTargetingService broadcastTargetingService;
     private final OutboxEventPublisher outboxEventPublisher;
     private final BroadcastMapper broadcastMapper;
     private final AppProperties appProperties;
