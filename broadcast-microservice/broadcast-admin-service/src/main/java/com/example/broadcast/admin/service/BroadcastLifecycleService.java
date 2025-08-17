@@ -88,6 +88,9 @@ public class BroadcastLifecycleService {
         broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
         broadcast = broadcastRepository.save(broadcast);
 
+        cacheService.evictBroadcastContent(broadcast.getId());
+        log.info("Evicted broadcast-content cache for ID: {}", broadcast.getId());
+
         if (isFailureTest) {
             testingConfigurationService.markBroadcastForFailure(broadcast.getId());
             log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
