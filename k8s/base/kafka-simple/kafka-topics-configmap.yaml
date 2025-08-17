@@ -12,7 +12,8 @@ data:
     
     # This should be the address of your Kafka service within the Kubernetes cluster.
     KAFKA_BROKERS="kafka-service.broadcast-system.svc.cluster.local:9092"
-    CLUSTER_NAMES=("cluster-a" "cluster-b")
+    # CLUSTER_NAMES=("cluster-a" "cluster-b")
+    CLUSTER_NAMES=("cluster-a")
     MAX_REPLICAS=3
 
     # --- Wait for Kafka to be ready ---

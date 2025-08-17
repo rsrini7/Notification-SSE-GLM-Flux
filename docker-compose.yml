@@ -164,7 +164,7 @@ services:
       - prod
     image: broadcast-user-service:1.0.0
     deploy:
-      replicas: 3
+      replicas: 1
     environment:
       - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g    
       - SPRING_PROFILES_ACTIVE=dev-pg
