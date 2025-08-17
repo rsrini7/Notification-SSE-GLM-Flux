@@ -1,7 +1,5 @@
-// FINAL CORRECTED FILE
 package com.example.broadcast.user.service;
 
-import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.OutboxEvent;
@@ -32,7 +30,6 @@ public class KafkaBroadcastOrchestratorService {
 
     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
     private final OutboxEventPublisher outboxEventPublisher;
-    private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
     private final CacheService cacheService;
 
@@ -61,9 +58,7 @@ public class KafkaBroadcastOrchestratorService {
 
                     if (!userConnections.isEmpty()) {
                         UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
-                        
-                        // CORRECTED LOGIC: Use the clusterName FROM the connectionInfo object
-                        // to ensure correct cross-cluster routing.
+
                         String topicName = connectionInfo.getClusterName() + "-" + connectionInfo.getPodId();
                         log.info("orchestrateBroadcastEvents TopicName: {}",topicName);
                         
