@@ -5,6 +5,7 @@ import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
+import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -47,12 +48,22 @@ public class KafkaBroadcastOrchestratorService {
 
         log.info("Orchestration event received for type '{}' on broadcast ID: {}. [Topic: {}, Partition: {}, Offset: {}]", event.getEventType(), event.getBroadcastId(), topic, partition, offset);
 
-        List<String> allTargetedUsers = userBroadcastTargetRepository.findUserIdsByBroadcastId(event.getBroadcastId());
-
-        if (!allTargetedUsers.isEmpty()) {
-            log.info("Scattering {} user-specific '{}' events to worker topics", allTargetedUsers.size(), event.getEventType());
-            
-            List<OutboxEvent> eventsToPublish = allTargetedUsers.stream()
+        final List<String> targetUsers;
+        
+        // If the event is user-specific, target only that user.
+        if (Constants.EventType.READ.name().equals(event.getEventType())) {
+            log.debug("Handling user-specific READ event for user: {}", event.getUserId());
+            targetUsers = List.of(event.getUserId());
+        } else {
+            // For broadcast-wide events, get all originally targeted users.
+            log.debug("Handling broadcast-wide {} event.", event.getEventType());
+            targetUsers = userBroadcastTargetRepository.findUserIdsByBroadcastId(event.getBroadcastId());
+        }
+        
+        // The rest of the logic uses the correctly-scoped 'targetUsers' list
+        if (!targetUsers.isEmpty()) {
+            log.info("Scattering {} user-specific '{}' events to worker topics", targetUsers.size(), event.getEventType());
+            List<OutboxEvent> eventsToPublish = targetUsers.stream()
                 .map(userId -> {
                     Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
 
