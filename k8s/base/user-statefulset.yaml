@@ -40,7 +40,7 @@ spec:
                   name: cluster-info
                   key: cluster.name
         - name: JAVA_OPTS
-          value: "-Xms512m -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+          value: "-Xms512m -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2"
         - name: SPRING_PROFILES_ACTIVE
           value: "dev-pg"
         resources:
@@ -64,3 +64,15 @@ spec:
             scheme: HTTPS
           initialDelaySeconds: 30
           periodSeconds: 10
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+        - name: logs
+          mountPath: /var/log
+      volumes:
+      - name: config-volume
+        configMap:
+          name: broadcast-config
+      - name: logs
+        emptyDir: {}
+      
