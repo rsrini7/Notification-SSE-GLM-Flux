@@ -1,0 +1,56 @@
+sequenceDiagram
+    participant UserUI as User UI (Browser)
+    participant SseSvc as SseService
+    participant RedisCache as RedisCacheService
+    participant UserMsgSvc as UserMessageService
+
+    %% Part 1: User Connects to the Service
+    Note over UserUI, RedisCache: Scenario 1: User 'user-001' connects via SSE
+
+    UserUI->>+SseSvc: 1- GET /api/user/sse/connect?userId=user-001
+    SseSvc->>+RedisCache: 2- registerUserConnection("user-001", "conn-xyz", ...)
+    
+    Note right of RedisCache: HSET "user-conn:user-001" "conn-xyz" "{...info...}"
+    Note right of RedisCache: SET "conn-to-user:conn-xyz" "user-001"
+    Note right of RedisCache: SADD "online-users" "user-001"
+    Note right of RedisCache: SADD "pod-connections:pod-0" "conn-xyz"
+    Note right of RedisCache: ZADD "active-connections-by-heartbeat" <timestamp> "conn-xyz"
+    
+    RedisCache-->>-SseSvc: 
+    SseSvc-->>-UserUI: 3- SSE Stream Established
+
+    %% Part 2: Admin Creates a Broadcast
+    Note over UserUI, RedisCache: Scenario 2: Admin creates a broadcast for 'ALL' users
+
+    UserMsgSvc->>+RedisCache: 4- getActiveGroupBroadcasts("ALL")
+    Note right of RedisCache: GET "active-group-bcast:ALL" (Cache Miss)
+    RedisCache-->>-UserMsgSvc: returns null
+
+    Note over UserMsgSvc: Fetches active 'ALL' broadcasts from DB...
+
+    UserMsgSvc->>+RedisCache: 5- cacheActiveGroupBroadcasts("ALL", [BroadcastMessage])
+    Note right of RedisCache: SET "active-group-bcast:ALL" "[{...broadcast...}]"
+    RedisCache-->>-UserMsgSvc: 
+
+    %% Part 3: User Fetches Inbox
+    Note over UserUI, RedisCache: Scenario 3: User 'user-001' fetches their inbox
+
+    UserMsgSvc->>+RedisCache: 6- getCachedUserMessages("user-001")
+    Note right of RedisCache: GET "user-msg:user-001" (Cache Miss)
+    RedisCache-->>-UserMsgSvc: returns null
+
+    Note over UserMsgSvc: Fetches user's inbox from DB...
+
+    UserMsgSvc->>+RedisCache: 7- cacheUserMessages("user-001", [PersistentUserMessageInfo])
+    Note right of RedisCache: SET "user-msg:user-001" "[{...msgInfo...}]"
+    RedisCache-->>-UserMsgSvc: 
+
+    UserMsgSvc->>+RedisCache: 8- getBroadcastContent(1)
+    Note right of RedisCache: GET "broadcast-content:1" (Cache Miss)
+    RedisCache-->>-UserMsgSvc: returns null
+
+    Note over UserMsgSvc: Fetches broadcast content from DB...
+
+    UserMsgSvc->>+RedisCache: 9- cacheBroadcastContent(BroadcastMessage)
+    Note right of RedisCache: SET "broadcast-content:1" "{...broadcast...}"
+    RedisCache-->>-UserMsgSvc: ...

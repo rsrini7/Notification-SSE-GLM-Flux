@@ -248,7 +248,7 @@ public class BroadcastRepository {
         String sql = """
             SELECT * FROM broadcast_messages
             WHERE status = 'READY' AND (scheduled_at IS NULL OR scheduled_at <= ?)
-            ORDER BY scheduled_at
+            ORDER BY created_at
             LIMIT ?
             FOR UPDATE SKIP LOCKED
             """;

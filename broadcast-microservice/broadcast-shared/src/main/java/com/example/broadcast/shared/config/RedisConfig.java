@@ -1,3 +1,4 @@
+// UPDATED FILE: broadcast-microservice/broadcast-shared/src/main/java/com/example/broadcast/shared/config/RedisConfig.java
 package com.example.broadcast.shared.config;
 
 import com.example.broadcast.shared.dto.cache.*;
@@ -24,14 +25,13 @@ public class RedisConfig {
     }
 
     @Bean
-    public RedisTemplate<String, UserConnectionInfo> userConnectionInfoRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
-        RedisTemplate<String, UserConnectionInfo> template = new RedisTemplate<>();
+    public RedisTemplate<String, Object> genericRedisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
-        Jackson2JsonRedisSerializer<UserConnectionInfo> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, UserConnectionInfo.class);
         template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(serializer);
         template.setHashKeySerializer(new StringRedisSerializer());
-        template.setHashValueSerializer(serializer);
+        // Use standard string serializer for hash values to store them as JSON strings
+        template.setHashValueSerializer(new StringRedisSerializer());
         return template;
     }
 
@@ -39,7 +39,7 @@ public class RedisConfig {
     public RedisTemplate<String, List<PersistentUserMessageInfo>> persistentUserMessagesRedisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
         RedisTemplate<String, List<PersistentUserMessageInfo>> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
-        
+
         JavaType type = objectMapper.getTypeFactory().constructCollectionType(List.class, PersistentUserMessageInfo.class);
         Jackson2JsonRedisSerializer<List<PersistentUserMessageInfo>> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, type);
 

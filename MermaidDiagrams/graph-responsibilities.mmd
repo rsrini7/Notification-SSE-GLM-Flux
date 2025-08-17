@@ -1,0 +1,92 @@
+flowchart TD
+    root(("🎯 Service Responsibilities Architecture"))
+
+    %% --- Admin Service ---
+    root --> AdminService["🔧 Admin Service - Control Plane"]
+    AdminService --> BroadcastLifecycle["🟦 Broadcast Lifecycle Management"]
+    BroadcastLifecycle --> CreateBroadcast["🟢 Create New Broadcasts"]
+    BroadcastLifecycle --> CancelBroadcast["🔴 Cancel Active Broadcasts"]
+    BroadcastLifecycle --> ExpireBroadcast["🟡 Auto-Expire Old Broadcasts"]
+
+    AdminService --> UserTargeting["🟪 User Targeting & Pre-computation"]
+    UserTargeting --> AudienceSelection["🔵 Audience Selection Logic"]
+    UserTargeting --> PreCalculation["🟠 Pre-calculate User Lists"]
+    UserTargeting --> SegmentationRules["🟣 Segmentation Rules"]
+
+    AdminService --> EventGeneration["🟨 Event Generation - Messaging"]
+    EventGeneration --> TransactionalOutbox["🟫 Transactional Outbox Pattern"]
+    EventGeneration --> ReliablePublishing["🔷 Reliable Event Publishing"]
+    EventGeneration --> EventConsistency["🔶 Event Ordering & Consistency"]
+
+    AdminService --> DLTManagement["🟧 DLT Management - Dead Letter Topics"]
+    DLTManagement --> ConsumeFailedMessages["⚫ Consume Failed Messages"]
+    DLTManagement --> RedriveAPIs["🔘 Provide Redrive APIs"]
+    DLTManagement --> ErrorRecovery["🟥 Error Recovery Mechanisms"]
+
+    AdminService --> AdminAnalytics["🟩 Admin Analytics & Queries"]
+    AdminAnalytics --> PerformanceMetrics["📈 Broadcast Performance Metrics"]
+    AdminAnalytics --> HistoricalData["🔎 Query Historical Data"]
+    AdminAnalytics --> ReportingData["📊 Reporting Dashboard Data"]
+
+    %% --- User Service ---
+    root --> UserService["🚀 User Service - Delivery Plane"]
+    UserService --> SSEConnection["🟦 SSE Connection Management"]
+    SSEConnection --> ConcurrentUsers["🌟 Handle 30k+ Concurrent Users"]
+    SSEConnection --> ConnectionPool["🔗 Real-time Connection Pool"]
+    SSEConnection --> HealthChecks["💚 Heartbeat & Health Checks"]
+
+    UserService --> EventConsumption["🟪 Event Consumption - Message Processing"]
+    EventConsumption --> Orchestrator["👑 Orchestrator Leader Node"]
+    EventConsumption --> Workers["👷 Worker Follower Nodes"]
+    EventConsumption --> LoadDistribution["⚖️ Load Distribution Logic"]
+
+    UserService --> DistributedState["🟨 Distributed State - User Tracking"]
+    DistributedState --> OnlineUsers["🔴 Track Online Users in Redis"]
+    DistributedState --> SessionState["🔵 Session State Management"]
+    DistributedState --> CrossInstance["🌐 Cross-Instance Coordination"]
+
+    UserService --> UserActions["🟧 Handle User Actions - Interactions"]
+    UserActions --> MarkAsRead["✅ Mark as Read Functionality"]
+    UserActions --> PreferenceUpdates["⚙️ User Preference Updates"]
+    UserActions --> RealtimeProcessing["⚡ Real-time Action Processing"]
+
+    UserService --> UserSpecificData["🟩 Serve User-Specific Data"]
+    UserSpecificData --> InboxCaching["📦 Inbox Caching Strategy"]
+    UserSpecificData --> PersonalizedRetrieval["🎯 Personalized Data Retrieval"]
+    UserSpecificData --> FastExperience["🚀 Fast User Experience"]
+
+    %% --- Shared Components ---
+    root --> SharedComponents["🔗 Shared Components - Common Infrastructure"]
+    SharedComponents --> BroadcastSharedModule["🟦 broadcast-shared Module"]
+    BroadcastSharedModule --> DataModels["🟢 Data Models Entities"]
+    BroadcastSharedModule --> DatabaseRepos["🔵 Database Repositories"]
+    BroadcastSharedModule --> DTOs["🟡 DTOs Data Transfer Objects"]
+    BroadcastSharedModule --> JavaSpringConfig["🟣 Common Java Spring Config"]
+
+    SharedComponents --> SharedInfrastructure["🟪 Shared Infrastructure - Backend Services"]
+    SharedInfrastructure --> PostgreSQL["🐘 PostgreSQL Database"]
+    SharedInfrastructure --> RedisCache["⚡ Redis Cache Layer"]
+    SharedInfrastructure --> KafkaBroker["📡 Kafka Message Broker"]
+
+    %% --- Styling ---
+    classDef root fill:#f3f4f6,stroke:#111827,stroke-width:2px,color:#111827;
+    classDef group fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0c4a6e;
+    classDef leaf1 fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#064e3b;
+    classDef leaf2 fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#7f1d1d;
+    classDef leaf3 fill:#fef9c3,stroke:#eab308,stroke-width:1.5px,color:#78350f;
+    classDef leaf4 fill:#e0e7ff,stroke:#4338ca,stroke-width:1.5px,color:#312e81;
+    classDef leaf5 fill:#fbcfe8,stroke:#db2777,stroke-width:1.5px,color:#831843;
+    classDef infra fill:#ede9fe,stroke:#7c3aed,stroke-width:1.5px,color:#4c1d95;
+
+    %% Apply classes
+    class root root
+    class AdminService,UserService,SharedComponents group
+    class BroadcastLifecycle,UserTargeting,EventGeneration,DLTManagement,AdminAnalytics group
+    class SSEConnection,EventConsumption,DistributedState,UserActions,UserSpecificData group
+    class BroadcastSharedModule,SharedInfrastructure infra
+
+    class CreateBroadcast,PerformanceMetrics,ConcurrentUsers,DataModels leaf1
+    class CancelBroadcast,OnlineUsers,RedisCache leaf2
+    class ExpireBroadcast,DTOs,RealtimeProcessing leaf3
+    class AudienceSelection,SessionState,DatabaseRepos leaf4
+    class SegmentationRules,Workers,JavaSpringConfig leaf5

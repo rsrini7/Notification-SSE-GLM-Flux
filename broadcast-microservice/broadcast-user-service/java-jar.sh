@@ -1,1 +1,10 @@
-mvn clean package && java -jar "-Dspring.profiles.active=dev-pg" target/broadcast-user-service-1.0.0.jar
+rm logs\*
+mvn clean package
+
+echo Set environment variables for this session
+export POD_NAME=broadcast-user-service-0
+export CLUSTER_NAME=cluster-a
+
+echo Run the application
+# The fix is to pass pod.name and cluster.name as -D system properties
+java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" "-Dpod.name=${POD_NAME}" "-Dcluster.name=${CLUSTER_NAME}" -jar target/broadcast-user-service-1.0.0.jar

@@ -20,7 +20,7 @@ spring:
 
   # h2 Database Configuration (default)
   datasource:
-    url: jdbc:h2:mem:broadcastdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    url: jdbc:h2:~/broadcast-system/broadcastdb;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE;MODE=PostgreSQL
     driver-class-name: org.h2.Driver
     username: sa
     password:
@@ -54,7 +54,7 @@ spring:
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      group-id: ${broadcast.kafka.consumer.dlt-group-id}
+      # group-id: ${broadcast.kafka.consumer.dlt-group-id}
       auto-offset-reset: earliest
       properties:
         '[spring.json.trusted.packages]': "*"
@@ -143,7 +143,7 @@ broadcast:
     tcp-port: "9094"
 
   simulation:
-    user-fetch-delay-ms: 120000
+    user-fetch-delay-ms: 5000
 
   # SSE Configuration
   sse:
@@ -170,15 +170,12 @@ broadcast:
   # Kafka Configuration
   kafka:
     topic:
-      name-selected: broadcast-events-selected
-      name-group-orchestration: broadcast-group-orchestration
-      name-user-group: broadcast-user-events-group
-      name-actions-orchestration: broadcast-actions-orchestration
-      name-user-actions: broadcast-user-actions
-      partitions: 10
+      name-orchestration: broadcast-orchestration
+      name-worker-prefix: broadcast-user-service
+      partitions: 1
       replication-factor: 1
     consumer:
-      dlt-group-id: broadcast-dlt-group # Group ID for the DLT listener
+      group-dlt: "broadcast-dlt-group"
 
 ---
 # PostgreSQL-specific profile
@@ -187,13 +184,15 @@ spring:
     activate:
       on-profile: "dev-pg"
   datasource:
-    url: jdbc:postgresql://localhost:5432/broadcastdb
+    url: jdbc:postgresql://localhost:5432/broadcastdb?serverTimezone=UTC
     driver-class-name: org.postgresql.Driver
     username: user
     password: password
     hikari:
       max-lifetime: 1800000 # 30 minutes
       maximum-pool-size: 50 # Set an explicit max size
+      data-source-properties:
+        serverTimezone: UTC
   sql:
     init:
       mode: always

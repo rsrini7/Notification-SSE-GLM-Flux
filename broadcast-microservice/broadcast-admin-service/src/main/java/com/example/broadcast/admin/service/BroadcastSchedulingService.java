@@ -20,33 +20,32 @@ import java.util.List;
 public class BroadcastSchedulingService {
 
     private final BroadcastRepository broadcastRepository;
-    private final BroadcastLifecycleService broadcastLifecycleService; // Updated dependency
+
+    private final BroadcastLifecycleService broadcastLifecycleService;
 
     private static final int BATCH_LIMIT = 100;
 
-    /**
-     * Periodically processes scheduled broadcasts that are due.
-     * The SchedulerLock ensures this only runs on one pod at a time.
-     */
-    @Scheduled(fixedRate = 60000) // Run every minute
+    @Scheduled(fixedRate = 60000)
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     @SchedulerLock(name = "processScheduledBroadcasts", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     public void processScheduledBroadcasts() {
-        log.info("Checking for scheduled broadcasts to process...");
+        log.info("Checking for READY broadcasts to activate...");
         List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findAndLockReadyBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
 
         if (broadcastsToProcess.isEmpty()) {
-            log.info("No scheduled broadcasts to process at this time.");
+            log.info("No ready broadcasts are due for activation at this time.");
             return;
         }
 
-        log.info("Found and locked {} scheduled broadcasts to process.", broadcastsToProcess.size());
+        log.info("Found and locked {} ready broadcasts to activate.", broadcastsToProcess.size());
         for (BroadcastMessage broadcast : broadcastsToProcess) {
             try {
-                // Call the method on the unified lifecycle service
-                broadcastLifecycleService.processScheduledBroadcast(broadcast.getId());
+
+                log.info("Activating and fanning out scheduled broadcast ID: {}", broadcast.getId());
+                broadcastLifecycleService.processReadyBroadcast(broadcast.getId());
+
             } catch (Exception e) {
-                log.error("Error processing scheduled broadcast with ID: {}", broadcast.getId(), e);
+                log.error("Error activating scheduled broadcast with ID: {}", broadcast.getId(), e);
             }
         }
     }

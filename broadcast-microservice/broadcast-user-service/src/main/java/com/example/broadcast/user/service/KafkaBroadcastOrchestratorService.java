@@ -1,172 +1,111 @@
 package com.example.broadcast.user.service;
 
-import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
-import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.OutboxEvent;
-import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.shared.service.cache.CacheService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-// "Scatter-Gather" pattern introduced to avoid the "thundering herd" problem.
-//  This class consumed by single "leader" pod using a static group ID.
-//  This leader publish user-specific tasks to a new user ( "worker" consumer kept in KafkaConsumerService.java)
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class KafkaBroadcastOrchestratorService {
 
-    private final BroadcastRepository broadcastRepository;
-     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
+    private final UserBroadcastTargetRepository userBroadcastTargetRepository;
     private final OutboxEventPublisher outboxEventPublisher;
-    private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
+    private final CacheService cacheService;
 
     @KafkaListener(
-        topics = "${broadcast.kafka.topic.name-group-orchestration}",
-        groupId = "${broadcast.kafka.consumer.group-orchestration-group-id}", // Static Group ID
+        topics = "${broadcast.kafka.topic.name-orchestration}",
+        groupId = "${broadcast.kafka.consumer.group-orchestration}",
         containerFactory = "kafkaListenerContainerFactory"
     )
     @Transactional
-    public void orchestrateGroupBroadcast(MessageDeliveryEvent event, Acknowledgment acknowledgment) {
-        log.info("Orchestration event received for broadcast ID: {}. Fetching user list...", event.getBroadcastId());
+    public void orchestrateBroadcastEvents(MessageDeliveryEvent event,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
+            @Header(KafkaHeaders.OFFSET) long offset,
+            Acknowledgment acknowledgment) {
+
+        log.info("Orchestration event received for type '{}' on broadcast ID: {}. [Topic: {}, Partition: {}, Offset: {}]", event.getEventType(), event.getBroadcastId(), topic, partition, offset);
+
+        final List<String> targetUsers;
         
-        BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId()).orElse(null);
-        if (broadcast == null) {
-            log.warn("Cannot orchestrate broadcast {}: not found.", event.getBroadcastId());
-            acknowledgment.acknowledge();
-            return;
+        // If the event is user-specific, target only that user.
+        if (Constants.EventType.READ.name().equals(event.getEventType())) {
+            log.debug("Handling user-specific READ event for user: {}", event.getUserId());
+            targetUsers = List.of(event.getUserId());
+        } else {
+            // For broadcast-wide events, get all originally targeted users.
+            log.debug("Handling broadcast-wide {} event.", event.getEventType());
+            targetUsers = userBroadcastTargetRepository.findUserIdsByBroadcastId(event.getBroadcastId());
         }
+        
+        // The rest of the logic uses the correctly-scoped 'targetUsers' list
+        if (!targetUsers.isEmpty()) {
+            log.info("Scattering {} user-specific '{}' events to worker topics", targetUsers.size(), event.getEventType());
+            List<OutboxEvent> eventsToPublish = targetUsers.stream()
+                .map(userId -> {
+                    Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
 
-        // 1. Fetch the full list of targeted user IDs ONCE.
-        List<String> allTargetedUsers = determineAllTargetedUsers(broadcast);
+                    if (!userConnections.isEmpty()) {
+                        UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
 
-        if (!allTargetedUsers.isEmpty()) {
-            // 2. "Scatter" the work by publishing user-specific events to the 'UserGroup' topic.
-            String topicName = appProperties.getKafka().getTopic().getNameUserGroup();
-            log.info("Scattering {} user-specific delivery events to topic '{}'", allTargetedUsers.size(), topicName);
-            
-            List<OutboxEvent> eventsToPublish = allTargetedUsers.stream()
-                .map(userId -> createDeliveryOutboxEvent(broadcast, userId, topicName))
+                        String topicName = connectionInfo.getClusterName() + "-" + connectionInfo.getPodId();
+                        log.info("orchestrateBroadcastEvents TopicName: {}",topicName);
+                        
+                        return createWorkerOutboxEvent(event, userId, topicName);
+                    } else {
+                        log.debug("User {} is offline. Caching pending event for broadcast {}.", userId, event.getBroadcastId());
+                        cacheService.cachePendingEvent(event.toBuilder().userId(userId).build());
+                        return null;
+                    }
+                })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
             
-            outboxEventPublisher.publishBatch(eventsToPublish);
-        }
-        
-        acknowledgment.acknowledge();
-    }
-
-    /**
-     * NEW: This is the "leader" consumer for actions (CANCELLED, EXPIRED, READ).
-     * It uses a STATIC group ID to ensure it runs only once per event.
-     */
-    @KafkaListener(
-        topics = "${broadcast.kafka.topic.name-actions-orchestration}",
-        groupId = "${broadcast.kafka.consumer.actions-orchestration-group-id}", // Static Group ID
-        containerFactory = "kafkaListenerContainerFactory"
-    )
-    @Transactional
-    public void orchestrateActionEvent(MessageDeliveryEvent event, Acknowledgment acknowledgment) {
-        log.info("Orchestration event received for action '{}' on broadcast ID: {}. Fetching user list...", event.getEventType(), event.getBroadcastId());
-
-        // A READ event is already user-specific, so we can forward it directly.
-        if (event.getEventType().equals(Constants.EventType.READ.name())) {
-            log.info("Forwarding user-specific READ event for user {} directly to worker topic.", event.getUserId());
-            OutboxEvent userAction = createActionOutboxEvent(event, event.getUserId());
-            if (userAction != null) {
-                outboxEventPublisher.publish(userAction);
+            if (!eventsToPublish.isEmpty()) {
+                outboxEventPublisher.publishBatch(eventsToPublish);
             }
-            acknowledgment.acknowledge();
-            return;
-        }
-
-        // For CANCELLED/EXPIRED, we fan-out.
-        BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId()).orElse(null);
-        if (broadcast == null) {
-            log.warn("Cannot orchestrate action for broadcast {}: not found.", event.getBroadcastId());
-            acknowledgment.acknowledge();
-            return;
-        }
-
-        List<String> allTargetedUsers = determineAllTargetedUsers(broadcast);
-
-        if (!allTargetedUsers.isEmpty()) {
-            log.info("Scattering {} user-specific action events to topic '{}'", allTargetedUsers.size(), appProperties.getKafka().getTopic().getNameUserActions());
-            List<OutboxEvent> eventsToPublish = allTargetedUsers.stream()
-                .map(userId -> createActionOutboxEvent(event, userId))
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-            
-            outboxEventPublisher.publishBatch(eventsToPublish);
         }
         
         acknowledgment.acknowledge();
     }
 
-    private OutboxEvent createActionOutboxEvent(MessageDeliveryEvent originalEvent, String userId) {
-        MessageDeliveryEvent userEvent = originalEvent.toBuilder().userId(userId).build();
-        try {
-            String payloadJson = objectMapper.writeValueAsString(userEvent);
-            return OutboxEvent.builder()
-                    .id(UUID.randomUUID()) // Generate a new ID for the sub-task event
-                    .aggregateType(userEvent.getClass().getSimpleName())
-                    .aggregateId(userId)
-                    .eventType(userEvent.getEventType())
-                    .topic(appProperties.getKafka().getTopic().getNameUserActions()) // Publish to the user-actions topic
-                    .payload(payloadJson)
-                    .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
-                    .build();
-        } catch (JsonProcessingException e) {
-            log.error("Could not serialize payload for user action. User: {}, Event: {}", userId, originalEvent.getEventType(), e);
-            return null;
-        }
-    }
-
-    private List<String> determineAllTargetedUsers(BroadcastMessage broadcast) {
-        log.info("Orchestrator fetching pre-computed user list for broadcast ID: {}", broadcast.getId());
-        // This is now a fast, local database query.
-        return userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
-    }
-
-
-    private OutboxEvent createDeliveryOutboxEvent(BroadcastMessage broadcast, String userId, String topicName) {
-        MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
+    private OutboxEvent createWorkerOutboxEvent(MessageDeliveryEvent originalEvent, String userId, String topicName) {
+        MessageDeliveryEvent userSpecificEvent = originalEvent.toBuilder()
                 .eventId(UUID.randomUUID().toString())
-                .broadcastId(broadcast.getId())
                 .userId(userId)
-                .eventType(Constants.EventType.CREATED.name())
-                .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
-                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-                .message(broadcast.getContent())
-                .isFireAndForget(broadcast.isFireAndForget())
                 .build();
         try {
-            String payloadJson = objectMapper.writeValueAsString(eventPayload);
+            String payloadJson = objectMapper.writeValueAsString(userSpecificEvent);
             return OutboxEvent.builder()
-                    .id(UUID.fromString(eventPayload.getEventId()))
-                    .aggregateType(eventPayload.getClass().getSimpleName())
-                    .aggregateId(eventPayload.getUserId())
-                    .eventType(eventPayload.getEventType())
+                    .id(UUID.fromString(userSpecificEvent.getEventId()))
+                    .aggregateType(userSpecificEvent.getClass().getSimpleName())
+                    .aggregateId(userSpecificEvent.getUserId())
+                    .eventType(userSpecificEvent.getEventType())
                     .topic(topicName)
                     .payload(payloadJson)
-                    .createdAt(eventPayload.getTimestamp())
+                    .createdAt(userSpecificEvent.getTimestamp())
                     .build();
         } catch (JsonProcessingException e) {
             log.error("Could not serialize payload for user {}. Event will be skipped.", userId, e);

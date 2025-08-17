@@ -35,8 +35,8 @@ spec:
         - containerPort: 8081
           name: api
         env:
-        - name: JAVA_OPTS
-          value: "-Xms512m -Xmx1g -XX:+UseG1GC"
+        - name: LOGGING_FILE_NAME
+          value: "broadcast-admin-service"
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -49,14 +49,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
-        - name: BROADCAST_POD_ID
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
         - name: JAVA_OPTS
           value: "-Xms512m -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2"
         - name: SPRING_PROFILES_ACTIVE
-          value: "dev-pg"
+          value: "dev-pg,admin-only"
         resources:
           requests:
             memory: "1Gi"

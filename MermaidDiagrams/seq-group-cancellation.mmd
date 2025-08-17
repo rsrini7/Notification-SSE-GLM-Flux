@@ -1,0 +1,27 @@
+sequenceDiagram
+    participant AdminSvc as Admin Service (Lifecycle)
+    participant DB as DB (Outbox)
+    participant KafkaOrchestration as Kafka (broadcast-orchestration)
+    participant Orchestrator as User Service (Leader Pod)
+    participant KafkaWorkers as Kafka (Worker Topics)
+    participant WorkerConsumer as User Service (Worker Pod)
+
+    AdminSvc->>+DB: 1- Writes ONE orchestration event (type=CANCELLED) to Outbox
+    DB-->>-AdminSvc: ...
+
+    Note right of KafkaOrchestration: Outbox Poller publishes the event...
+
+    KafkaOrchestration->>+Orchestrator: 2- Leader consumer receives event
+    Orchestrator->>+DB: 3- Fetches full user list from broadcast_user_targets
+    DB-->>-Orchestrator: Returns user list
+
+    loop For each targeted user
+        Orchestrator->>+KafkaWorkers: 4- "Scatters" user-specific CANCELLED events to worker topics
+    end
+    KafkaWorkers-->>-Orchestrator: ...
+
+    Orchestrator-->>-KafkaOrchestration: 5- Acknowledges orchestration event
+
+    KafkaWorkers->>+WorkerConsumer: 6- Worker pods consume events in parallel
+    Note over WorkerConsumer: 7- Handles event: Removes message from cache and pushes 'MESSAGE_REMOVED' via SSE.
+    WorkerConsumer-->>-KafkaWorkers: 8- Acknowledges message

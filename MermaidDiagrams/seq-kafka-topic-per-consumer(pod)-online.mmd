@@ -1,0 +1,52 @@
+sequenceDiagram
+    participant UserUI as User UI
+    participant AdminSvc as Admin Service
+    participant Orchestrator as User Service (Leader)
+    participant SharedCache as Shared Cache
+    participant DB as PostgreSQL DB
+    participant Kafka as Kafka Broker
+    participant Pod7 as User Service (Pod 7)
+
+    Note over AdminSvc, Pod7: Part 1- Real-time Message Delivery to Pod 7
+    
+    alt Flow for SELECTED User
+        AdminSvc->>+SharedCache: 1a- GET "connection:user-xyz"
+        SharedCache-->>-AdminSvc: returns "pod-7"
+        AdminSvc->>+Kafka: 2a- Publishes CREATED event to "broadcast-user-service-pod-7"
+        Kafka-->>-AdminSvc: Acknowledged
+    end
+    
+    alt Flow for ALL/ROLE Users
+        AdminSvc->>+Kafka: 1b- Publishes ONE event to "broadcast-orchestration"
+        Kafka-->>-AdminSvc: Acknowledged
+        Kafka->>+Orchestrator: 2b- Leader consumes orchestration event
+        Orchestrator->>+SharedCache: 3b- GET "connection:user-xyz"
+        SharedCache-->>-Orchestrator: returns "pod-7"
+        Orchestrator->>+Kafka: 4b- Publishes CREATED event for user-xyz to "broadcast-user-service-pod-7"
+        Kafka-->>-Orchestrator: Acknowledged
+    end
+    
+    Kafka->>+Pod7: 5- Consumes CREATED event
+    Pod7->>+UserUI: 6- Pushes MESSAGE event via SSE
+    Pod7-->>-Kafka: 7- Acknowledges message
+
+    Note over UserUI, Pod7: Part 2- User Marks the Message as Read
+
+    UserUI->>+Pod7: 8- POST /api/user/messages/read
+    Pod7->>+DB: 9- Update DB records & write READ event to Outbox
+    DB-->>-Pod7: Success
+    Pod7-->>-UserUI: 10- Returns 200 OK
+
+    Note right of Kafka: ...Outbox Poller (in Admin Service) runs...
+
+    AdminSvc->>+Kafka: 11- Publishes READ event to "broadcast-orchestration"
+    Kafka-->>-AdminSvc: Acknowledged
+
+    Kafka->>+Orchestrator: 12- Leader consumes READ event
+    Orchestrator->>+SharedCache: 13- GET "connection:user-xyz"
+    SharedCache-->>-Orchestrator: returns "pod-7"
+    Orchestrator->>+Kafka: 14- Publishes targeted READ event to "broadcast-user-service-pod-7"
+    Kafka-->>-Orchestrator: Acknowledged
+
+    Kafka->>+Pod7: 15- Pod 7 consumes targeted READ event
+    Pod7->>+UserUI: 16- Pushes READ_RECEIPT event via SSE

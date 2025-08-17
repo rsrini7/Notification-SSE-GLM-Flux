@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 import java.time.ZoneOffset;
+import java.sql.Types;
 
 @Repository
 public class BroadcastStatisticsRepository {
@@ -45,14 +46,27 @@ public class BroadcastStatisticsRepository {
                 VALUES (s.broadcast_id, s.total_targeted, s.total_delivered, s.total_read, s.total_failed, s.calculated_at)
             """;
         
-        jdbcTemplate.update(sql,
-                stats.getBroadcastId(),
-                stats.getTotalTargeted(),
-                stats.getTotalDelivered(),
-                stats.getTotalRead(),
-                stats.getTotalFailed(),
-                stats.getCalculatedAt() != null ? stats.getCalculatedAt().toOffsetDateTime() : null
-        );
+        Object[] params = {
+            stats.getBroadcastId(),
+            stats.getTotalTargeted(),
+            stats.getTotalDelivered(),
+            stats.getTotalRead(),
+            stats.getTotalFailed(),
+            stats.getCalculatedAt() != null ? stats.getCalculatedAt().toOffsetDateTime() : null
+        };
+        
+        // Define the SQL types for each parameter to ensure correct type handling.
+        int[] types = {
+            Types.BIGINT,
+            Types.INTEGER,
+            Types.INTEGER,
+            Types.INTEGER,
+            Types.INTEGER,
+            Types.TIMESTAMP_WITH_TIMEZONE
+        };
+
+        
+        jdbcTemplate.update(sql,params,types);
     }
 
     public Optional<BroadcastStatistics> findByBroadcastId(Long broadcastId) {

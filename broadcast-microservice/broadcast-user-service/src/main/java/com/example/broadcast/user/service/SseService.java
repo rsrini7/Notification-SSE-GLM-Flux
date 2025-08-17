@@ -73,7 +73,7 @@ public class SseService {
     }
 
     /**
-     * MODIFIED LOGIC: This is the main entry point for processing an incoming message event.
+     * This is the main entry point for processing an incoming message event.
      * It now differentiates between delivery strategies.
      */
     public void handleMessageEvent(MessageDeliveryEvent event) {
@@ -105,7 +105,7 @@ public class SseService {
     }
 
     /**
-     * NEW METHOD: Handles lifecycle events like READ, EXPIRED, CANCELLED that simply remove a message from the UI.
+     * Handles lifecycle events like READ, EXPIRED, CANCELLED that simply remove a message from the UI.
      */
     private void handleLifecycleEvent(MessageDeliveryEvent event) {
         try {
@@ -119,7 +119,7 @@ public class SseService {
     }
     
     /**
-     * NEW METHOD: For delivering ROLE and ALL broadcasts.
+     * For delivering ROLE and ALL broadcasts.
      * It bypasses the database check and sends the message directly.
      */
     private void deliverGroupUserMessage(String userId, BroadcastMessage broadcast) {
@@ -127,10 +127,13 @@ public class SseService {
         // We create the response directly from the parent BroadcastMessage, passing null for the UserBroadcastMessage.
         UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
         sendSseEvent(userId, response);
+
+        broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
+        log.debug("Incremented delivered count for group broadcast ID: {}", broadcast.getId());
     }
 
     /**
-     * MODIFIED METHOD: The original delivery logic, now specifically for SELECTED users.
+     * The original delivery logic, now specifically for SELECTED users.
      * This still requires a PENDING database record.
      */
     @Transactional
@@ -210,7 +213,7 @@ public class SseService {
     }
     
     /**
-     * NEW HELPER METHOD: To centralize the sending of the SSE event itself.
+     * To centralize the sending of the SSE event itself.
      */
     private void sendSseEvent(String userId, UserBroadcastResponse response) {
         try {
@@ -223,10 +226,6 @@ public class SseService {
             
             sseConnectionManager.sendEvent(userId, sse);
 
-            // if ("Force Logoff".equalsIgnoreCase(response.getCategory())) {
-            //     log.warn("Force Logoff message delivered to user {}. Terminating their connection.", userId);
-            //     sseConnectionManager.removeEventStream(userId, sseConnectionManager.getConnectionIdForUser(userId));
-            // }
         } catch (JsonProcessingException e) {
             log.error("Error delivering message to user as SSE", e);
         }
@@ -255,8 +254,7 @@ public class SseService {
         BroadcastMessage broadcastStub = BroadcastMessage.builder()
                 .id(event.getBroadcastId())
                 .content(event.getMessage())
-                // You can add more fields from the event if needed by the frontend
-                .senderName("System") // Provide a default or get from event
+                .senderName("System")
                 .priority("NORMAL")
                 .category("GENERAL")
                 .createdAt(event.getTimestamp())

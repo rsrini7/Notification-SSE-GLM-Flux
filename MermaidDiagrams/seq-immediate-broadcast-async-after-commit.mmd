@@ -1,0 +1,31 @@
+sequenceDiagram
+    participant LifecycleSvc as BroadcastLifecycleService
+    participant DB as PostgreSQL DB
+    participant AppPublisher as ApplicationEventPublisher
+    participant Spring as Spring Framework
+    participant EventListener as BroadcastEventListener
+    participant TargetingSvc as BroadcastTargetingService
+
+    Note over LifecycleSvc, DB: Inside @Transactional createBroadcast() method
+    LifecycleSvc->>+DB: 1- BEGIN TRANSACTION
+    LifecycleSvc->>DB: 2- SAVE broadcast (record is uncommitted)
+
+    LifecycleSvc->>AppPublisher: 3- publishEvent(new BroadcastCreatedEvent(id))
+    Note right of AppPublisher: The event is queued by Spring.
+
+    LifecycleSvc->>DB: 4- COMMIT TRANSACTION
+    DB-->>-LifecycleSvc: ...
+
+    Note over Spring, EventListener: Spring now dispatches the event because the transaction was successful.
+    Spring->>+EventListener: 5- handleBroadcastCreatedEvent(event) <br/> [ @TransactionalEventListener(AFTER_COMMIT) ]
+
+    Note over EventListener, TargetingSvc: The listener now calls the async method.
+    EventListener-)+TargetingSvc: 6- precomputeAndStoreTargetUsers(id) <br/> [ @Async ]
+
+    Note over TargetingSvc: A new transaction begins on a separate thread.
+    TargetingSvc->>+DB: 7- findById(id)
+    Note right of DB: The record is now visible.
+    DB-->>-TargetingSvc: Returns broadcast data
+    
+    deactivate TargetingSvc
+    deactivate EventListener

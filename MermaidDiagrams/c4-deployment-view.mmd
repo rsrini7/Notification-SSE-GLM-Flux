@@ -1,0 +1,58 @@
+graph TD
+    subgraph "Internet"
+        User["Admin / Regular User"]
+    end
+
+    subgraph "Kubernetes Cluster"
+        direction LR
+        Ingress["Ingress Controller"]
+        
+        subgraph "Node 1"
+            direction TB
+            subgraph "Pod: Admin Service"
+                AdminContainer["[Container: broadcast-admin-service]"]
+            end
+            subgraph "Pod: User Service (Replica 1)"
+                UserContainer1["[Container: broadcast-user-service]"]
+            end
+            subgraph "Pod: Redis"
+                RedisContainer["[Container: redis]"]
+            end
+        end
+        
+        subgraph "Node 2"
+            direction TB
+             subgraph "Pod: User Service (Replica 2)"
+                UserContainer2["[Container: broadcast-user-service]"]
+            end
+            subgraph "Pod: PostgreSQL"
+                PostgresContainer["[Container: postgres]"]
+            end
+             subgraph "Pod: Outbox Poller (Admin Replica)"
+                AdminContainer2["[Container: broadcast-admin-service]"]
+            end
+        end
+
+        subgraph "Node 3"
+            direction TB
+             subgraph "Pod: User Service (Replica 3)"
+                UserContainer3["[Container: broadcast-user-service]"]
+            end
+            subgraph "Pod: Kafka"
+                KafkaContainer["[Container: kafka]"]
+            end
+             subgraph "Pod: Zookeeper"
+                ZkContainer["[Container: zookeeper]"]
+            end
+        end
+        
+        AdminSvc["Service: admin-service"]
+        UserSvc["Service: user-service"]
+    end
+
+    User -- "HTTPS" --> Ingress
+    Ingress -- "Routes /api/admin/*" --> AdminSvc
+    Ingress -- "Routes /api/user/*" --> UserSvc
+    
+    AdminSvc --> AdminContainer & AdminContainer2
+    UserSvc --> UserContainer1 & UserContainer2 & UserContainer3

@@ -18,7 +18,8 @@ resources:
   - configmap.yaml
   - network-policy.yaml
   - admin-deployment.yaml
-  - user-deployment.yaml
+  - user-statefulset.yaml
+  - cluster-a-configmap.yaml
   - admin-service.yaml
   - user-service.yaml
   - hpa.yaml

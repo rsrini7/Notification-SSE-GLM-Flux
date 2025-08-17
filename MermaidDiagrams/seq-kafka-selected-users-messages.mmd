@@ -2,7 +2,7 @@ sequenceDiagram
     participant AdminSvc as Admin Service <br/> (LifecycleService)
     participant DB as DB (Outbox Table)
     participant OutboxPoller as Outbox Poller
-    participant Kafka as Kafka <br/> (broadcast-events-selected)
+    participant Kafka as Kafka <br/> (broadcast-user-service-selected)
     participant Worker as User Service <br/> (KafkaConsumerService)
     participant SseSvc as User Service <br/> (SseService)
 

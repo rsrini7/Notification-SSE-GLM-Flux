@@ -7,6 +7,7 @@ data:
   # Logback Configuration
   logback.xml: |
     <configuration>
+        <property name="LOG_FILE_NAME" value="${LOGGING_FILE_NAME:-broadcast-service}" />
         <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
             <encoder>
                 <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
@@ -14,9 +15,9 @@ data:
         </appender>
 
         <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-            <file>/var/log/broadcast-microservice.log</file>
+            <file>/var/log/${LOG_FILE_NAME}.log</file>
             <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-                <fileNamePattern>/var/log/broadcast-microservice.%d{yyyy-MM-dd}.log</fileNamePattern>
+                <fileNamePattern>/var/log/${LOG_FILE_NAME}.%d{yyyy-MM-dd}.log</fileNamePattern>
                 <maxHistory>30</maxHistory>
             </rollingPolicy>
             <encoder>

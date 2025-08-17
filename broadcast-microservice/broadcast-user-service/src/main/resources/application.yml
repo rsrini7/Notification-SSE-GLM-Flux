@@ -19,7 +19,7 @@ spring:
 
   # --- SHARED CONFIGURATIONS ---
   datasource:
-    url: jdbc:h2:mem:broadcastdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    url: jdbc:h2:~/broadcast-system/broadcastdb;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE;MODE=PostgreSQL
     driver-class-name: org.h2.Driver
     username: sa
     password:
@@ -44,7 +44,7 @@ spring:
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
+      # group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
       auto-offset-reset: earliest
       properties:
         '[spring.json.trusted.packages]': "*"
@@ -135,20 +135,15 @@ broadcast:
   # Kafka Configuration
   kafka:
     topic:
-      name-selected: broadcast-events-selected
-      name-group-orchestration: broadcast-group-orchestration
-      name-user-group: broadcast-user-events-group
-      name-actions-orchestration: broadcast-actions-orchestration
-      name-user-actions: broadcast-user-actions
-      partitions: 10
+      name: "#{environment.getProperty('CLUSTER_NAME', 'cluster-a')}-#{environment.getProperty('POD_NAME', 'broadcast-user-service-0')}"
+      name-orchestration: broadcast-orchestration
+      name-worker-prefix: broadcast-user-service
+      partitions: 1
       replication-factor: 1
     consumer:
-      selected-group-id: "broadcast-selected-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
-      group-orchestration-group-id: "broadcast-group-orchestration-group"
-      group-user-group-id: "broadcast-user-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
-      actions-orchestration-group-id: "broadcast-actions-orchestration-group"
-      actions-user-group-id: "broadcast-user-actions-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
-      dlt-group-id: broadcast-dlt-group
+      group-orchestration: "broadcast-orchestration-group"
+      group-worker: "broadcast-worker-group"
+      # group-dlt: "broadcast-dlt-group" # Included for consistency, though not used by a listener in this service
     retry:
       max-attempts: 3
       backoff-delay: 1000
@@ -160,7 +155,15 @@ spring:
     activate:
       on-profile: "dev-pg"
   datasource:
-    url: jdbc:postgresql://localhost:5432/broadcastdb
+    url: jdbc:postgresql://localhost:5432/broadcastdb?serverTimezone=UTC
     driver-class-name: org.postgresql.Driver # Explicitly set the PostgreSQL driver
     username: user
     password: password
+    hikari:
+      max-lifetime: 1800000 # 30 minutes
+      maximum-pool-size: 50 # Set an explicit max size
+      data-source-properties:
+        serverTimezone: UTC
+  sql:
+    init:
+      mode: never    

@@ -11,6 +11,7 @@ import com.example.broadcast.shared.repository.DltRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.service.TestingConfigurationService;
+import com.example.broadcast.shared.config.AppProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class DltService {
     private final BroadcastRepository broadcastRepository;
     private final MessageStatusService messageStatusService;
     private final TestingConfigurationService testingConfigurationService;
+    private final AppProperties appProperties;
     
     public Collection<DltMessage> getDltMessages() {
         return dltRepository.findAll();
@@ -58,7 +60,7 @@ public class DltService {
             testingConfigurationService.clearFailureMark(originalPayload.getBroadcastId());
             log.info("Cleared DLT failure mark for broadcast ID: {}", originalPayload.getBroadcastId());
 
-            String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
+            String dltTopicName = resolveDltTopicName(dltMessage.getOriginalTopic());
             kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null).get();
             
             dltRepository.deleteById(id);
@@ -138,7 +140,7 @@ public class DltService {
     public void purgeMessage(String id) {
         DltMessage dltMessage = dltRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
-        String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
+        String dltTopicName = resolveDltTopicName(dltMessage.getOriginalTopic());
         kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null);
         dltRepository.deleteById(id);
         log.info("Purged DLT message with ID: {} and sent tombstone to topic {} with key {}.", id, dltTopicName, dltMessage.getOriginalKey());
@@ -153,10 +155,25 @@ public class DltService {
         }
         log.info("Purging all {} messages from the DLT.", messagesToPurge.size());
         for (DltMessage dltMessage : messagesToPurge) {
-            String dltTopicName = dltMessage.getOriginalTopic() + Constants.DLT_SUFFIX;
+            String dltTopicName = resolveDltTopicName(dltMessage.getOriginalTopic());
             kafkaTemplate.send(dltTopicName, dltMessage.getOriginalKey(), null);
         }
         dltRepository.deleteAll();
         log.info("Purged all DLT messages from the database and sent tombstone records to Kafka.");
+    }
+
+     /**
+     * Determines the correct DLT topic name based on the original topic.
+     * This logic now mirrors the DeadLetterPublishingRecoverer.
+     * @param originalTopic The topic where the message originally failed.
+     * @return The correct DLT topic name.
+     */
+    private String resolveDltTopicName(String originalTopic) {
+        String workerTopicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
+        if (originalTopic != null && originalTopic.contains(workerTopicPrefix)) {
+            return workerTopicPrefix + Constants.DLT_SUFFIX;
+        }
+        // Fallback for orchestration topic or other potential topics
+        return originalTopic + Constants.DLT_SUFFIX;
     }
 }

@@ -1,33 +1,41 @@
 sequenceDiagram
-    participant UserSvc as User Service <br/> (MessageService)
-    participant DB as DB (Outbox Table)
-    participant OutboxPoller as Outbox Poller
-    participant KafkaUserActions as Kafka <br/> (broadcast-user-actions)
-    participant Worker as User Service <br/> (Consumer)
-    participant SpringKafka as Spring Kafka Error Handler
-    participant KafkaDLT as Kafka (-dlt Topic)
-    participant DLTConsumer as Admin Service <br/> (DltKafkaConsumerService)
+    participant UserUI as User UI
+    participant UserSvc as UserMessageService
+    participant DB as DB (Outbox)
+    participant OutboxPoller as AdminSvc (Outbox Poller)
+    participant KafkaOrch as Kafka (broadcast-orchestration)
+    participant Orchestrator as UserSvc (Orchestrator)
+    participant KafkaWorker as Kafka (Worker Topic)
+    participant Worker as UserSvc (Worker Consumer)
+    participant DLT as Kafka (broadcast-user-service-dlt)
+    participant DLTConsumer as AdminSvc (DLT Consumer)
 
-    Note over UserSvc: User marks a message as read...
-    UserSvc->>+DB: 1- Writes user-specific READ event to Outbox
-    DB-->>-UserSvc: 
+    UserUI->>+UserSvc: 1- POST /messages/read (user-xxx)
+    UserSvc->>+DB: 2- Writes READ event to Outbox
+    DB-->>-UserSvc: ...
+    UserSvc-->>-UserUI: 3- Returns 200 OK
 
-    OutboxPoller->>+KafkaUserActions: 2- Polls and publishes READ event
-    KafkaUserActions-->>-OutboxPoller: 
+    OutboxPoller->>+KafkaOrch: 4- Polls & Publishes READ event
+    KafkaOrch-->>-OutboxPoller: ...
 
-    KafkaUserActions->>+Worker: 3- Consumes READ event
-    
-    alt Message Processed Successfully
-        Note over Worker: 4a- Processes event (e.g., sends READ_RECEIPT via SSE)
-        Worker-->>-KafkaUserActions: 5a- Acknowledges message
-    else Message Processing Fails
-        Worker-->>+SpringKafka: 4b- Throws exception after retries
-        SpringKafka->>+KafkaDLT: 5b- Publishes failed message to DLT
-        KafkaDLT-->>-SpringKafka: 
-        SpringKafka-->>-Worker: Acknowledges original message
+    KafkaOrch->>+Orchestrator: 5- Leader consumes READ event
+    Note over Orchestrator: 6- Checks event type is READ,<br/>targets only event.getUserId() (user-xxx)
+    Orchestrator->>+KafkaWorker: 7- Forwards event to correct worker topic
+    KafkaWorker-->>-Orchestrator: ...
+    Orchestrator-->>-KafkaOrch: 8- Acknowledges orchestration event
+
+    KafkaWorker->>+Worker: 9- Worker for user-xxx consumes event
+
+    alt Happy Path (Message Processed)
+        Worker->>Worker: 10a- Sends MESSAGE_REMOVED via SSE to user-xxx
+        Worker-->>-KafkaWorker: 11a- Acknowledges message
+    else DLT Path (Processing Fails)
+        Worker-->>+KafkaWorker: 10b- Throws exception after retries
+        Note over KafkaWorker, DLT: Spring Kafka Error Handler routes to shared DLT
+        KafkaWorker->>+DLT: 11b- Publishes failed message
+        DLT-->>-KafkaWorker: ...
+        DLT->>+DLTConsumer: 12b- Admin service consumes from DLT
+        DLTConsumer->>+DB: 13b- Saves DLT message for review
+        DB-->>-DLTConsumer: ...
+        DLTConsumer-->>-DLT: 14b- Acknowledges DLT message
     end
-    
-    KafkaDLT->>+DLTConsumer: 6b- DLT consumer (in Admin Service) receives
-    DLTConsumer->>+DB: 7b- Saves failed message for admin review
-    DB-->>-DLTConsumer: 
-    DLTConsumer-->>-KafkaDLT: 8b- Acknowledges DLT message
