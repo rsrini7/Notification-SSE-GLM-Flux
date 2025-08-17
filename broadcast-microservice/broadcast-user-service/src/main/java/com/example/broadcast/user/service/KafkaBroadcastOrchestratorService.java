@@ -55,8 +55,6 @@ public class KafkaBroadcastOrchestratorService {
         if (!allTargetedUsers.isEmpty()) {
             log.info("Scattering {} user-specific '{}' events to worker topics", allTargetedUsers.size(), event.getEventType());
             
-            String topicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
-
             List<OutboxEvent> eventsToPublish = allTargetedUsers.stream()
                 .map(userId -> {
                     Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
@@ -66,7 +64,7 @@ public class KafkaBroadcastOrchestratorService {
                         
                         // CORRECTED LOGIC: Use the clusterName FROM the connectionInfo object
                         // to ensure correct cross-cluster routing.
-                        String topicName = connectionInfo.getClusterName() + "-" + topicPrefix+ "-" + connectionInfo.getPodId();
+                        String topicName = connectionInfo.getClusterName() + "-" + connectionInfo.getPodId();
                         log.info("orchestrateBroadcastEvents TopicName: {}",topicName);
                         
                         return createWorkerOutboxEvent(event, userId, topicName);

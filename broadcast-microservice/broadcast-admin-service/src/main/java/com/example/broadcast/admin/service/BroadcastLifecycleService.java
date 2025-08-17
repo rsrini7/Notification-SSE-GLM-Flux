@@ -53,7 +53,6 @@ public class BroadcastLifecycleService {
 
     private void publishEventsToWorkerTopics(BroadcastMessage broadcast, List<String> userIds, Constants.EventType eventType, String message) {
         List<OutboxEvent> eventsToPublish = new ArrayList<>();
-        String topicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
 
         if (eventType == Constants.EventType.CREATED) {
             List<UserBroadcastMessage> userBroadcasts = userIds.stream()
@@ -77,7 +76,7 @@ public class BroadcastLifecycleService {
             if (!userConnections.isEmpty()) {
                 // User is online, get podId from the first available connection.
                 UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
-                String topicName = connectionInfo.getClusterName() + "-" + topicPrefix + "-" + connectionInfo.getPodId();
+                String topicName = connectionInfo.getClusterName() + "-" + connectionInfo.getPodId();
                 log.info("Broadcast Lifecycle sending message to the topic: {}", topicName);
                 eventsToPublish.add(createOutboxEvent(eventPayload, topicName, userId));
             } else {
