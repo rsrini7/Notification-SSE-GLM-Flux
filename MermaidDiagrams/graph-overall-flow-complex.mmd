@@ -71,18 +71,19 @@ graph TD
 
     %% --- Kafka to User Service Fan-Out ---
     Kafka -- "12a- (Group) Single Orchestration Event" --> OrchestratorConsumer
-    OrchestratorConsumer -- "13a- Reads pre-computed user list" --> Postgres
-    OrchestratorConsumer -- "14a- Scatters User-Specific Events" --> Kafka
+    OrchestratorConsumer -- "13- Reads pre-computed user list" --> Postgres
+    OrchestratorConsumer -- "14- Scatters User-Specific Events" --> Kafka
 
-    Kafka -- "12b- (Selected) Publishes directly to Worker Topic" --> WorkerConsumer
+    Kafka -- "12b- (Selected) Publishes User-Specific Event" --> WorkerConsumer
 
     %% --- Final Delivery ---
-    Kafka -- "User-Specific Event" --> WorkerConsumer
-    WorkerConsumer -- "15- Checks Redis for User Status" --> Redis
-    Redis -- "16a- (Online)" --> WorkerConsumer
-    WorkerConsumer -- "17a- Forwards to SSE Service" --> SseService
-    SseService -- "18a- Pushes Message via SSE" --> ReactUI
-    SseService -- "19a- Updates DB Status to DELIVERED" --> Postgres
+    Kafka -- "15- Worker receives User-Specific Event" --> WorkerConsumer
+    WorkerConsumer -- "16- Checks Redis for User Status" --> Redis
+    Redis -- "17a- (Online)" --> WorkerConsumer
+    WorkerConsumer -- "18- Forwards to SSE Service for delivery" --> SseService
+    SseService -- "19- Pushes Message via SSE" --> ReactUI
+    SseService -- "20a- (If 'SELECTED')<br/>Updates user_broadcast_messages" --> Postgres
+    SseService -- "20b- (If 'GROUP')<br/>Increments broadcast_statistics" --> Postgres
 
-    Redis -- "16b- (Offline)" --> WorkerConsumer
-    WorkerConsumer -- "17b- Caches Pending Event in Redis" --> Redis
+    Redis -- "17b- (Offline)" --> WorkerConsumer
+    WorkerConsumer -- "18b- Caches Pending Event in Redis" --> Redis
