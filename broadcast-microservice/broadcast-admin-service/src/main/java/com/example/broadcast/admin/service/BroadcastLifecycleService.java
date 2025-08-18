@@ -1,5 +1,6 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.admin.event.BroadcastCreatedEvent;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.admin.BroadcastRequest;
 import com.example.broadcast.shared.dto.admin.BroadcastResponse;
@@ -23,6 +24,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
@@ -45,13 +48,13 @@ public class BroadcastLifecycleService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final UserBroadcastTargetRepository userBroadcastTargetRepository; 
-    private final BroadcastTargetingService broadcastTargetingService;
     private final OutboxEventPublisher outboxEventPublisher;
     private final BroadcastMapper broadcastMapper;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
     private final CacheService cacheService;
     private final TestingConfigurationService testingConfigurationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
@@ -68,7 +71,7 @@ public class BroadcastLifecycleService {
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
 
-        // MODIFIED: Use the configured delay to determine if a broadcast is truly "scheduled"
+        // Use the configured delay to determine if a broadcast is truly "scheduled"
         // or if it needs to be treated as "immediate".
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
         long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
@@ -97,8 +100,8 @@ public class BroadcastLifecycleService {
         }
 
         // 2. Trigger the ASYNCHRONOUS pre-computation task.
-        log.info("Triggering async user pre-computation for immediate broadcast ID: {}", broadcast.getId());
-        broadcastTargetingService.precomputeAndStoreTargetUsers(broadcast.getId());
+        log.info("Triggering async (BroadcastEventListener) user pre-computation for immediate broadcast ID: {}", broadcast.getId());
+        eventPublisher.publishEvent(new BroadcastCreatedEvent(broadcast.getId()));
 
         // 3. Immediately return a 202 Accepted-style response to the user.
         return broadcastMapper.toBroadcastResponse(broadcast, 0);
