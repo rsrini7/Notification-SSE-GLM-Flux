@@ -30,7 +30,6 @@ public class UserMessageController {
     @GetMapping("/groups")
     public ResponseEntity<List<UserBroadcastResponse>> getGroupMessages(@RequestParam String userId) {
         log.info("Retrieving group messages for user: {}", userId);
-        // List<UserBroadcastResponse> messages = userMessageService.getGroupMessagesForUser(userId);
         List<UserBroadcastResponse> messages = userMessageService.getActiveBroadcastsForUser(userId);
         log.info("Retrieved {} group messages for user: {}", messages.size(), userId);
         return ResponseEntity.ok(messages);

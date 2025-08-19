@@ -161,11 +161,6 @@ public class UserBroadcastRepository {
             return ps;
         });
     }
-
-    public List<UserBroadcastMessage> findPendingMessages(String userId) {
-        String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND delivery_status = 'PENDING' ORDER BY created_at ASC";
-        return jdbcTemplate.query(sql, userBroadcastRowMapper, userId);
-    }
     
     public Optional<UserBroadcastMessage> findByUserIdAndBroadcastId(String userId, Long broadcastId) {
         String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND broadcast_id = ?";

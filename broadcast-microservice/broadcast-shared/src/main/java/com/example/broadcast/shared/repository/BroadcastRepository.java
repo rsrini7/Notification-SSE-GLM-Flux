@@ -259,5 +259,20 @@ public class BroadcastRepository {
         String sql = "SELECT * FROM broadcast_messages WHERE status IN ('CANCELLED', 'EXPIRED') AND updated_at < ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, cutoff.toOffsetDateTime());
     }
+
+    /**
+     * Finds active broadcasts of type 'SELECTED' where the target_ids list contains the given userId.
+     * WARNING: This query uses a LIKE pattern which is not performant and can cause full table scans.
+     * For a production system, the data model should be normalized with a dedicated join table
+     * and an index on the user_id column to make this lookup efficient.
+     * @param userId The ID of the user to check for.
+     * @return A list of matching broadcast messages.
+     */
+    public List<BroadcastMessage> findActiveSelectedBroadcastsForUser(String userId) {
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = 'SELECTED' AND target_ids LIKE ?";
+        // The '%' wildcards are necessary to find the userId within the JSON array string `["user-a", "user-b"]`
+        String searchTerm = "%\"" + userId + "\"%"; 
+        return jdbcTemplate.query(sql, broadcastRowMapper, searchTerm);
+    }
     
 }

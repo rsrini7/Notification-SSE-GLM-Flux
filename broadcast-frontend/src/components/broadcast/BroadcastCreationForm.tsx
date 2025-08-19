@@ -62,7 +62,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
         // Calculate expiresAt for Fire and Forget at the moment of submission
         let finalExpiresAt = formData.expiresAt ? new Date(formData.expiresAt).toISOString() : undefined;
         if (formData.scheduleType === 'fireAndForget') {
-            finalExpiresAt = new Date(Date.now() + 30000).toISOString();
+            finalExpiresAt = new Date(Date.now() + 10000).toISOString();
         }
 
         const payload: BroadcastRequest = {

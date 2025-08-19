@@ -212,13 +212,7 @@ public class BroadcastLifecycleService {
         }
 
         initializeStatistics(broadcast.getId(), totalTargeted);
-
-        if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
-            publishEventsToWorkerTopics(broadcast, targetUserIds, Constants.EventType.CREATED, broadcast.getContent());
-        } else {
-            publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
-        }
-
+        publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
         return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
     }
 

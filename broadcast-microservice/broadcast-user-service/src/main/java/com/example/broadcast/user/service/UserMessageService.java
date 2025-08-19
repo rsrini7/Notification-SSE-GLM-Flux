@@ -72,24 +72,28 @@ public class UserMessageService {
         return dbMessages;
     }
 
-    @Transactional(readOnly = true)
+   @Transactional(readOnly = true)
     public List<UserBroadcastResponse> getActiveBroadcastsForUser(String userId) {
-        // 1. Get a list of broadcast IDs the user already has a record for.
+        // 1. Get a list of broadcast IDs the user has already interacted with (e.g., marked as read).
+        // These should not be re-sent.
         List<Long> processedBroadcastIds = userBroadcastRepository.findActiveBroadcastIdsByUserId(userId);
         Set<Long> processedBroadcastIdSet = new HashSet<>(processedBroadcastIds);
 
-        // 2. Fetch broadcasts targeted to the user's roles
+        // 2. Fetch broadcasts targeted to the user's roles.
         List<String> userRoles = userService.getRolesForUser(userId);
         List<BroadcastMessage> roleBroadcasts = userRoles.stream()
             .flatMap(role -> getActiveBroadcastsForRole(role).stream())
             .distinct()
             .collect(Collectors.toList());
 
-        // 3. Fetch broadcasts targeted to "ALL" users
+        // 3. Fetch broadcasts targeted to "ALL" users.
         List<BroadcastMessage> allUserBroadcasts = getActiveBroadcastsForAll();
 
-        // 4. Combine, filter, and map. The call for 'SELECTED' users is now removed.
-        return Stream.of(roleBroadcasts, allUserBroadcasts) // 'selectedBroadcasts' is removed from this stream
+        // 4. Fetch broadcasts where this specific user was 'SELECTED'.
+        List<BroadcastMessage> selectedBroadcasts = broadcastRepository.findActiveSelectedBroadcastsForUser(userId);
+
+        // 5. Combine all three lists, deduplicate, filter out already processed messages, and map to the response DTO.
+        return Stream.of(roleBroadcasts, allUserBroadcasts, selectedBroadcasts)
                 .flatMap(List::stream)
                 .distinct()
                 .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId()))

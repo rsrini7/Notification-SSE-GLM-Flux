@@ -10,8 +10,6 @@ import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
-// import com.example.broadcast.shared.util.Constants.DeliveryStatus;
-// import com.example.broadcast.shared.util.Constants.EventType;
 import com.example.broadcast.shared.util.Constants.SseEventType;
 import com.example.broadcast.shared.service.MessageStatusService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -182,25 +180,12 @@ public class SseService {
             cacheService.clearPendingEvents(userId);
             return;
         }
-
-        // 2. Only if the cache is empty, check the database for older messages.
-        // This logic correctly handles messages that might have been created before the refactor.
-        List<UserBroadcastMessage> pendingDbMessages = userBroadcastRepository.findPendingMessages(userId);
-        if (!pendingDbMessages.isEmpty()) {
-            log.warn("Cache was empty, but found {} pending messages in DB for user: {}", pendingDbMessages.size(), userId);
-            for (UserBroadcastMessage message : pendingDbMessages) {
-                broadcastRepository.findById(message.getBroadcastId()).ifPresent(broadcast -> {
-                    deliverSelectedUserMessage(userId, broadcast);
-                });
-            }
-        }
     }
     
 
     private void sendActiveGroupMessages(String userId) {
         log.info("Checking for active group (ALL/ROLE) messages for newly connected user: {}", userId);
         // Reuse the logic from UserMessageService to get all relevant group messages for this user.
-        // List<UserBroadcastResponse> groupMessages = userMessageService.getGroupMessagesForUser(userId);
         List<UserBroadcastResponse> groupMessages = userMessageService.getActiveBroadcastsForUser(userId);
 
         if (!groupMessages.isEmpty()) {

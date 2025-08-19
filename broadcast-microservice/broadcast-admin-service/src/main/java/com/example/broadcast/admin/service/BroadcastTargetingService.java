@@ -42,27 +42,6 @@ public class BroadcastTargetingService {
     private final AppProperties appProperties;
 
     /**
-     * Creates UserBroadcastMessage entities for a 'SELECTED' user broadcast.
-     * This method is now specifically for the "fan-out-on-write" strategy.
-     */
-    @CircuitBreaker(name = "userService", fallbackMethod = "fallbackCreateUserBroadcastMessagesForBroadcast")
-    @Bulkhead(name = "userService")
-    public List<UserBroadcastMessage> createUserBroadcastMessagesForBroadcast(BroadcastMessage broadcast) {
-        if (!Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
-            return Collections.emptyList();
-        }
-
-        List<String> targetUserIds = broadcast.getTargetIds() != null ? broadcast.getTargetIds() : List.of();
-        log.info("Broadcast ID {}: Determined {} initial target users for SELECTED broadcast.", broadcast.getId(), targetUserIds.size());
-
-        if (targetUserIds.isEmpty()) {
-            return Collections.emptyList();
-        }
-        
-        return createMessagesWithPreferenceFiltering(broadcast, targetUserIds);
-    }
-
-    /**
      * Efficiently counts the number of target users for 'ALL' or 'ROLE' broadcasts without fetching all user IDs.
      * This is used for the "fan-out-on-read" strategy.
      */
