@@ -1,8 +1,8 @@
-// UPDATED FILE
 package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.service.cache.CacheService;
+import com.example.broadcast.shared.util.Constants;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.scheduling.annotation.Scheduled;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.springframework.stereotype.Service;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -53,10 +54,31 @@ public class SseConnectionManager {
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
         log.debug("Creating SSE event stream for user: {}, connection: {}", userId, connectionId);
         Sinks.Many<ServerSentEvent<String>> sink = Sinks.many().multicast().onBackpressureBuffer();
+        
+        // Store the sink before sending the initial event
         connectionSinks.put(connectionId, sink);
         userToConnectionIdsMap.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(connectionId);
         connectionIdToUserIdMap.put(connectionId, userId);
+        // Immediately send a "CONNECTED" event to trigger the client's onopen handler.
+        try {
+            String connectedPayload = objectMapper.writeValueAsString(Map.of(
+                "message", "SSE connection established",
+                "connectionId", connectionId,
+                "timestamp", ZonedDateTime.now().toString()
+            ));
+            ServerSentEvent<String> connectedEvent = ServerSentEvent.<String>builder()
+                .event(Constants.SseEventType.CONNECTED.name())
+                .data(connectedPayload)
+                .build();
+            
+            // Emit the event directly into the newly created sink
+            sink.tryEmitNext(connectedEvent);
+            log.info("Sent initial CONNECTED event for connection {}", connectionId);
 
+        } catch (JsonProcessingException e) {
+            log.error("Error creating CONNECTED event payload for connection {}", connectionId, e);
+        }
+        
         return sink.asFlux()
                 .doOnCancel(() -> removeEventStream(userId, connectionId))
                 .doOnError(throwable -> removeEventStream(userId, connectionId))

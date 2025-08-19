@@ -99,7 +99,7 @@ public class UserMessageService {
 
     @Transactional(readOnly = true)
     public List<UserBroadcastResponse> getActiveBroadcastsForUser(String userId) {
-        // 1. Get a list of broadcast IDs the user already has a specific record for (e.g., from a past read action).
+        // 1. Get a list of broadcast IDs the user already has a record for.
         List<Long> processedBroadcastIds = userBroadcastRepository.findActiveBroadcastIdsByUserId(userId);
         Set<Long> processedBroadcastIdSet = new HashSet<>(processedBroadcastIds);
 
@@ -113,17 +113,8 @@ public class UserMessageService {
         // 3. Fetch broadcasts targeted to "ALL" users
         List<BroadcastMessage> allUserBroadcasts = getActiveBroadcastsForAll();
 
-        // =======================================================================
-        // == NEW LOGIC TO INCLUDE 'SELECTED' BROADCASTS                      ==
-        // =======================================================================
-        // 4. Fetch broadcasts where this specific user was 'SELECTED'
-        List<BroadcastMessage> selectedBroadcasts = broadcastRepository.findActiveSelectedBroadcastsForUser(userId);
-        // =======================================================================
-        // == END NEW LOGIC                                                   ==
-        // =======================================================================
-
-        // 5. Combine, deduplicate, filter out already processed messages, and map to DTO
-        return Stream.of(roleBroadcasts, allUserBroadcasts, selectedBroadcasts) // Add selectedBroadcasts to the stream
+        // 4. Combine, filter, and map. The call for 'SELECTED' users is now removed.
+        return Stream.of(roleBroadcasts, allUserBroadcasts) // 'selectedBroadcasts' is removed from this stream
                 .flatMap(List::stream)
                 .distinct()
                 .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId()))

@@ -95,17 +95,17 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
       case 'CONNECTED':
         console.log(`SSE Connection Confirmed via Event for user: ${userId}`, payload);
+        fetchMessages();
         break;
       case 'HEARTBEAT':
         break;
       default:
         console.log('Unhandled SSE event type:', event.type);
     }
-  }, [toast, userId, onForcedDisconnect]);
+  }, [toast, userId, onForcedDisconnect, fetchMessages]);
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
-    fetchMessages();
   }, [toast, fetchMessages, userId]);
 
   const onDisconnect = useCallback(() => { /* Silent */ }, []);

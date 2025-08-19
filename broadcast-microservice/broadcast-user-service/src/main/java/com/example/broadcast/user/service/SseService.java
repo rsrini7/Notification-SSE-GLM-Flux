@@ -21,7 +21,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.scheduler.Schedulers;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
@@ -48,23 +50,36 @@ public class SseService {
     }
 
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
-        log.info("Orchestrating event stream creation for user: {}, connection: {}", userId, connectionId);
-        Flux<ServerSentEvent<String>> eventStream = sseConnectionManager.createEventStream(userId, connectionId);
+        log.info("Establishing event stream for user: {}, connection: {}", userId, connectionId);
 
-        sendPendingMessages(userId);
-        sendActiveGroupMessages(userId);
+        // 1. Get the live event stream from the manager immediately.
+        Flux<ServerSentEvent<String>> liveStream = sseConnectionManager.createEventStream(userId, connectionId);
 
-        try {
-            String connectedPayload = objectMapper.writeValueAsString(Map.of("message", "SSE connection established with connection " + connectionId));
-            sseConnectionManager.sendEvent(userId, ServerSentEvent.<String>builder()
-                .event(SseEventType.CONNECTED.name())
-                .data(connectedPayload)
-                .build());
-        } catch (JsonProcessingException e) {
-            log.error("Error creating CONNECTED event", e);
-        }
+        // 2. Get a separate, cold stream that will do the heavy work of fetching initial messages.
+        Flux<Void> initialMessagesStream = getInitialMessagesFlux(userId);
 
-        return eventStream;
+        // 3. Merge the two streams. The connection is established instantly by liveStream.
+        return Flux.merge(liveStream, initialMessagesStream.thenMany(Flux.empty()));
+    }
+
+    // REPLACE the existing getInitialMessagesFlux method with this corrected version
+    private Flux<Void> getInitialMessagesFlux(String userId) {
+        // CORRECTED: Use Mono.fromRunnable for broader compatibility. It is the correct operator for void, blocking tasks.
+        return Mono.fromRunnable(() -> {
+            try {
+                log.info("Starting async fetch of initial messages for user: {}", userId);
+                // These are the blocking calls that were causing the timeout
+                sendPendingMessages(userId);
+                sendActiveGroupMessages(userId);
+                log.info("Finished async fetch of initial messages for user: {}", userId);
+            } catch (Exception e) {
+                log.error("Error during async initial message delivery for user: {}", userId, e);
+            }
+        })
+        // Run this blocking JDBC work on a dedicated scheduler
+        .subscribeOn(Schedulers.boundedElastic())
+        .then() // Ignores the result of the Mono and returns an empty Mono<Void> on completion
+        .flux(); // Converts the empty Mono<Void> to an empty Flux<ServerSentEvent<String>>
     }
 
     @Transactional
