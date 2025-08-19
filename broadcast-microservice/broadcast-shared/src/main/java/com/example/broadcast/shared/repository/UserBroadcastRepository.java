@@ -252,11 +252,14 @@ public class UserBroadcastRepository {
      */
     public int createIfNotExists(Long broadcastId, String userId, ZonedDateTime deliveredAt) {
         String sql = """
-            INSERT INTO user_broadcast_messages 
-                (broadcast_id, user_id, delivery_status, read_status, delivered_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT (broadcast_id, user_id) DO NOTHING
+            MERGE INTO user_broadcast_messages AS t
+            USING (VALUES (?, ?, ?, ?, ?)) AS s(p_broadcast_id, p_user_id, p_delivery_status, p_read_status, p_delivered_at)
+                ON t.broadcast_id = s.p_broadcast_id AND t.user_id = s.p_user_id
+            WHEN NOT MATCHED THEN
+                INSERT (broadcast_id, user_id, delivery_status, read_status, delivered_at)
+                VALUES (s.p_broadcast_id, s.p_user_id, s.p_delivery_status, s.p_read_status, s.p_delivered_at)
             """;
+
         return jdbcTemplate.update(sql,
                 broadcastId,
                 userId,
