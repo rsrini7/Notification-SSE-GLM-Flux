@@ -34,10 +34,11 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                 ...prev,
                 category: 'Force Logoff',
                 priority: 'URGENT',
+                content: 'FireAndForget',
                 scheduledAt: '',
                 expiresAt: '' // Clear expiresAt initially; it will be set on submit
             }));
-        } else if ((formData.targetType === 'ALL' || formData.targetType === 'ROLE') && formData.scheduleType === 'fireAndForget') {
+        } else if ((formData.targetType === 'ALL' || formData.targetType === 'ROLE' || formData.targetType === 'PRODUCT') && formData.scheduleType === 'fireAndForget') {
              setFormData(prev => ({
                 ...prev,
                 scheduleType: 'immediate' // Reset to default
@@ -169,7 +170,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                                 <SelectContent position="popper" sideOffset={20}>
                                     <SelectItem value="immediate">Publish Immediately</SelectItem>
                                     <SelectItem value="scheduled">Schedule for Later</SelectItem>
-                                    <SelectItem value="fireAndForget" disabled={formData.targetType === 'ALL' || formData.targetType === 'ROLE'}>Fire and Forget</SelectItem>
+                                    <SelectItem value="fireAndForget" disabled={formData.targetType === 'ALL' || formData.targetType === 'ROLE' || formData.targetType === 'PRODUCT'}>Fire and Forget</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
