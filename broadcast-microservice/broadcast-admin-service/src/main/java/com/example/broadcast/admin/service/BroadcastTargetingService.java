@@ -3,16 +3,12 @@ package com.example.broadcast.admin.service;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
-import com.example.broadcast.shared.model.UserPreferences;
 import com.example.broadcast.shared.repository.BroadcastRepository;
-import com.example.broadcast.shared.repository.UserPreferencesRepository;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
 import com.example.broadcast.shared.exception.UserServiceUnavailableException;
 
 import com.example.broadcast.shared.util.Constants;
-import com.example.broadcast.shared.util.Constants.DeliveryStatus;
-import com.example.broadcast.shared.util.Constants.ReadStatus;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
@@ -22,12 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.scheduling.annotation.Async;
 
 import java.util.concurrent.ThreadLocalRandom;
-import java.time.LocalTime;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,7 +27,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class BroadcastTargetingService {
 
-    private final UserPreferencesRepository userPreferencesRepository;
     private final UserService userService;
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
@@ -71,27 +62,6 @@ public class BroadcastTargetingService {
     public int fallbackCountTargetUsers(BroadcastMessage broadcast, Throwable t) {
         log.error("Circuit breaker opened for user service during count. Falling back for broadcast ID {}. Error: {}", broadcast.getId(), t.getMessage());
         return 0;
-    }
-
-    private boolean shouldDeliverToUser(UserPreferences preferences) {
-        if (preferences == null || preferences.getNotificationEnabled() == null) {
-            return true;
-        }
-        if (!preferences.getNotificationEnabled()) {
-            return false;
-        }
-        if (preferences.getQuietHoursStart() != null && preferences.getQuietHoursEnd() != null) {
-            LocalTime now = LocalTime.now(); 
-            return !isInQuietHours(now, preferences.getQuietHoursStart(), preferences.getQuietHoursEnd());
-        }
-        return true;
-    }
-
-    private boolean isInQuietHours(LocalTime now, LocalTime start, LocalTime end) {
-        if (start.isAfter(end)) {
-            return now.isAfter(start) || now.isBefore(end);
-        }
-        return now.isAfter(start) && now.isBefore(end);
     }
 
     /**
