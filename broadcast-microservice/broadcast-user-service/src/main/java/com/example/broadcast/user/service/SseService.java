@@ -10,8 +10,8 @@ import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
-import com.example.broadcast.shared.util.Constants.DeliveryStatus;
-import com.example.broadcast.shared.util.Constants.EventType;
+// import com.example.broadcast.shared.util.Constants.DeliveryStatus;
+// import com.example.broadcast.shared.util.Constants.EventType;
 import com.example.broadcast.shared.util.Constants.SseEventType;
 import com.example.broadcast.shared.service.MessageStatusService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -73,35 +73,26 @@ public class SseService {
     }
 
     /**
-     * This is the main entry point for processing an incoming message event.
-     * It now differentiates between delivery strategies.
+     * Main entry point for processing a CREATED event from Kafka.
+     * This logic is now unified for ALL, ROLE, and SELECTED types.
      */
     public void handleMessageEvent(MessageDeliveryEvent event) {
         log.debug("Orchestrating message event: {} for user: {}", event.getEventType(), event.getUserId());
         
-        // For non-creation events, we can use a simpler path.
-        if (!event.getEventType().equals(EventType.CREATED.name())) {
-            handleLifecycleEvent(event);
+        if (!event.getEventType().equals(Constants.EventType.CREATED.name())) {
+            handleLifecycleEvent(event); // Handles READ, CANCELLED, EXPIRED
             return;
         }
 
-        // For CREATED events, we need the full BroadcastMessage to determine the delivery strategy.
+        // For ALL CREATED events (ALL, ROLE, SELECTED), fetch the broadcast content.
         Optional<BroadcastMessage> broadcastOpt = broadcastRepository.findById(event.getBroadcastId());
         if (broadcastOpt.isEmpty()) {
             log.error("Cannot process event. BroadcastMessage with ID {} not found.", event.getBroadcastId());
             return;
         }
-        BroadcastMessage broadcast = broadcastOpt.get();
-        String targetType = broadcast.getTargetType();
-        
-        // Route to the correct delivery method based on target type.
-        if (Constants.TargetType.SELECTED.name().equals(targetType)) {
-            // Use the original, database-dependent delivery method for targeted messages.
-            deliverSelectedUserMessage(event.getUserId(), broadcast);
-        } else {
-            // Use the new, direct-to-SSE delivery method for group messages.
-            deliverGroupUserMessage(event.getUserId(), broadcast);
-        }
+
+        // UNIFIED LOGIC: All fan-out-on-read types are delivered the same way.
+        deliverFanOutOnReadMessage(event.getUserId(), broadcastOpt.get());
     }
 
     /**
@@ -117,34 +108,37 @@ public class SseService {
             log.error("Error processing lifecycle event for SSE", e);
         }
     }
-    
+
     /**
-     * For delivering ROLE and ALL broadcasts.
-     * It bypasses the database check and sends the message directly.
+     * RENAMED & UNIFIED: Delivers a broadcast to a user for any fan-out-on-read type.
+     * It creates the response on-the-fly without checking for a pre-existing DB record.
      */
-    private void deliverGroupUserMessage(String userId, BroadcastMessage broadcast) {
-        log.info("Delivering group (ROLE/ALL) broadcast {} to online user {}", broadcast.getId(), userId);
-        // We create the response directly from the parent BroadcastMessage, passing null for the UserBroadcastMessage.
+    private void deliverFanOutOnReadMessage(String userId, BroadcastMessage broadcast) {
+        log.info("Delivering fan-out-on-read broadcast {} to online user {}", broadcast.getId(), userId);
+        
+        // Create the response directly from the parent BroadcastMessage, passing null for UserBroadcastMessage.
         UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
         sendSseEvent(userId, response);
 
+        // This is a fan-out-on-read delivery, so we only increment the central counter.
         broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
-        log.debug("Incremented delivered count for group broadcast ID: {}", broadcast.getId());
+        log.debug("Incremented delivered count for broadcast ID: {}", broadcast.getId());
     }
 
+
     /**
-     * The original delivery logic, now specifically for SELECTED users.
-     * This still requires a PENDING database record.
+     * This method is now only used for delivering PENDING messages to users who were offline
+     * and have just reconnected. It is NO LONGER used for new real-time CREATED events.
      */
     @Transactional
     public void deliverSelectedUserMessage(String userId, BroadcastMessage broadcast) {
         UserBroadcastMessage message = userBroadcastRepository
                 .findByUserIdAndBroadcastId(userId, broadcast.getId())
-                .filter(msg -> msg.getDeliveryStatus().equals(DeliveryStatus.PENDING.name()))
+                .filter(msg -> msg.getDeliveryStatus().equals(Constants.DeliveryStatus.PENDING.name()))
                 .orElse(null);
 
         if (message == null) {
-            log.warn("Skipping delivery. No PENDING UserBroadcastMessage found for user {} and broadcast {}", userId, broadcast.getId());
+            log.warn("Skipping pending delivery. No PENDING UserBroadcastMessage found for user {} and broadcast {}", userId, broadcast.getId());
             return;
         }
 
@@ -153,39 +147,29 @@ public class SseService {
                 sendSseEvent(userId, response);
                 if (isUserConnected(userId)) {
                     messageStatusService.updateMessageToDelivered(message.getId(), broadcast.getId());
-                    log.info("Message delivered and status updated for SELECTED user: {}, broadcast: {}", userId, broadcast.getId());
+                    log.info("Delivered PENDING message and updated status for user: {}, broadcast: {}", userId, broadcast.getId());
                 }
             });
     }
 
     private void sendPendingMessages(String userId) {
-        // --- START: THIS IS THE CORRECTED LOGIC ---
-
-        // 1. First, check the cache for any recently missed messages.
+        // 1. First, check the Redis cache for any recently missed messages.
         List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
         
-        // 2. If events are found in the cache, deliver them and STOP.
-        if (pendingEvents != null && !pendingEvents.isEmpty()) {
+        if (pendingEvents != null && !pendingEvents.isEmpty()) { 
             log.info("Found {} pending messages in cache for user: {}", pendingEvents.size(), userId);
-            for (MessageDeliveryEvent event : pendingEvents) {
-                // Re-fetch the broadcast to ensure it's still active before delivering
+            for (MessageDeliveryEvent event : pendingEvents) { 
                 broadcastRepository.findById(event.getBroadcastId()).ifPresent(broadcast -> {
-                    
-                    // Route to the correct delivery method based on the original broadcast's target type
-                    if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
-                        deliverSelectedUserMessage(event.getUserId(), broadcast);
-                    } else {
-                        deliverGroupUserMessage(event.getUserId(), broadcast);
-                    }
-
+                    deliverFanOutOnReadMessage(event.getUserId(), broadcast);
                 });
             }
             // After sending, clear the pending events cache for this user.
             cacheService.clearPendingEvents(userId);
-            return; // This 'return' is critical.
+            return;
         }
 
-        // 3. Only if the cache is empty, check the database for older, targeted messages.
+        // 2. Only if the cache is empty, check the database for older messages.
+        // This logic correctly handles messages that might have been created before the refactor.
         List<UserBroadcastMessage> pendingDbMessages = userBroadcastRepository.findPendingMessages(userId);
         if (!pendingDbMessages.isEmpty()) {
             log.warn("Cache was empty, but found {} pending messages in DB for user: {}", pendingDbMessages.size(), userId);
@@ -196,6 +180,85 @@ public class SseService {
             }
         }
     }
+    
+    /**
+     * For delivering ROLE and ALL broadcasts.
+     * It bypasses the database check and sends the message directly.
+     */
+    // private void deliverGroupUserMessage(String userId, BroadcastMessage broadcast) {
+    //     log.info("Delivering group (ROLE/ALL) broadcast {} to online user {}", broadcast.getId(), userId);
+    //     // We create the response directly from the parent BroadcastMessage, passing null for the UserBroadcastMessage.
+    //     UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
+    //     sendSseEvent(userId, response);
+
+    //     broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
+    //     log.debug("Incremented delivered count for group broadcast ID: {}", broadcast.getId());
+    // }
+
+    /**
+     * The original delivery logic, now specifically for SELECTED users.
+     * This still requires a PENDING database record.
+     */
+    // @Transactional
+    // public void deliverSelectedUserMessage(String userId, BroadcastMessage broadcast) {
+    //     UserBroadcastMessage message = userBroadcastRepository
+    //             .findByUserIdAndBroadcastId(userId, broadcast.getId())
+    //             .filter(msg -> msg.getDeliveryStatus().equals(DeliveryStatus.PENDING.name()))
+    //             .orElse(null);
+
+    //     if (message == null) {
+    //         log.warn("Skipping delivery. No PENDING UserBroadcastMessage found for user {} and broadcast {}", userId, broadcast.getId());
+    //         return;
+    //     }
+
+    //     buildUserBroadcastResponse(message)
+    //         .ifPresent(response -> {
+    //             sendSseEvent(userId, response);
+    //             if (isUserConnected(userId)) {
+    //                 messageStatusService.updateMessageToDelivered(message.getId(), broadcast.getId());
+    //                 log.info("Message delivered and status updated for SELECTED user: {}, broadcast: {}", userId, broadcast.getId());
+    //             }
+    //         });
+    // }
+
+    // private void sendPendingMessages(String userId) {
+
+    //     // 1. First, check the cache for any recently missed messages.
+    //     List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
+        
+    //     // 2. If events are found in the cache, deliver them and STOP.
+    //     if (pendingEvents != null && !pendingEvents.isEmpty()) {
+    //         log.info("Found {} pending messages in cache for user: {}", pendingEvents.size(), userId);
+    //         for (MessageDeliveryEvent event : pendingEvents) {
+    //             // Re-fetch the broadcast to ensure it's still active before delivering
+    //             broadcastRepository.findById(event.getBroadcastId()).ifPresent(broadcast -> {
+                    
+    //                 // Route to the correct delivery method based on the original broadcast's target type
+    //                 if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
+    //                     deliverSelectedUserMessage(event.getUserId(), broadcast);
+    //                 } else {
+    //                     deliverGroupUserMessage(event.getUserId(), broadcast);
+    //                 }
+
+    //             });
+    //         }
+    //         // After sending, clear the pending events cache for this user.
+    //         cacheService.clearPendingEvents(userId);
+    //         return; // This 'return' is critical.
+    //     }
+
+    //     // 3. Only if the cache is empty, check the database for older, targeted messages.
+    //     List<UserBroadcastMessage> pendingDbMessages = userBroadcastRepository.findPendingMessages(userId);
+    //     if (!pendingDbMessages.isEmpty()) {
+    //         log.warn("Cache was empty, but found {} pending messages in DB for user: {}", pendingDbMessages.size(), userId);
+    //         for (UserBroadcastMessage message : pendingDbMessages) {
+    //             broadcastRepository.findById(message.getBroadcastId()).ifPresent(broadcast -> {
+    //                 deliverSelectedUserMessage(userId, broadcast);
+    //             });
+    //         }
+    //     }
+    // }
+
 
     private void sendActiveGroupMessages(String userId) {
         log.info("Checking for active group (ALL/ROLE) messages for newly connected user: {}", userId);

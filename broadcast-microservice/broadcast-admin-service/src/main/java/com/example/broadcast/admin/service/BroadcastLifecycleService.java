@@ -105,50 +105,51 @@ public class BroadcastLifecycleService {
             broadcast = broadcastRepository.save(broadcast);
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
-
         if (isFailureTest) {
             testingConfigurationService.markBroadcastForFailure(broadcast.getId());
             log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
         }
-
         cacheService.evictBroadcastContent(broadcast.getId());
         log.info("Evicted broadcast-content cache for ID: {}", broadcast.getId());
-        
-        // ONLY the 'PRODUCT' type requires the intensive user list preparation.
+
+        // ONLY the 'PRODUCT' type requires the intensive user list preparation (Fan-out-on-Write).
         if (Constants.TargetType.PRODUCT.name().equals(request.getTargetType())) {
             log.info("Broadcast is for PRODUCT users. Saving with PREPARING status to trigger user pre-computation.", broadcast.getId());
             broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
             broadcast = broadcastRepository.save(broadcast);
             
-            // This event triggers the async task to populate the broadcast_user_targets table.
             eventPublisher.publishEvent(new BroadcastCreatedEvent(broadcast.getId()));
             return broadcastMapper.toBroadcastResponse(broadcast, 0); // Target count is unknown until preparation is complete.
         }
 
+        // ALL, ROLE, and SELECTED are handled as immediate Fan-out-on-Read types.
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
         long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
         ZonedDateTime precomputationThreshold = now.plus(fetchDelayMs, ChronoUnit.MILLIS);
-
-        boolean isActive = true;
+        boolean isImmediatelyActive = true;
 
         if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(precomputationThreshold)) {
             broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
-            isActive = false; // It's not active yet
+            isImmediatelyActive = false; // It's not active yet, the scheduler will handle it.
         } else {
             broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
         }
         
         broadcast = broadcastRepository.save(broadcast);
 
-        // If it's immediately active, we MUST publish the orchestration event NOW.
-        if (isActive) {
+        // If it's an immediate broadcast, we MUST publish the single orchestration event to the outbox.
+        // This now correctly includes ALL, ROLE, and SELECTED types.
+        if (isImmediatelyActive) {
             publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
         }
 
-        cacheService.evictActiveGroupBroadcastsCache();
+        // This is for display purposes only on the API response.
         int totalTargeted = Constants.TargetType.SELECTED.name().equals(request.getTargetType()) ? request.getTargetIds().size() : 0;
+        
+        // Evict cache so newly connecting users see the latest group broadcasts.
+        cacheService.evictActiveGroupBroadcastsCache();
+
         return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
-    
     }
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
