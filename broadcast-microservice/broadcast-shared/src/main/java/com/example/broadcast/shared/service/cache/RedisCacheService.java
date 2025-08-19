@@ -72,7 +72,6 @@ public class RedisCacheService implements CacheService {
         }
     }
     
-    // ... The rest of the file is unchanged from the previous version ...
     @Override
     public void unregisterUserConnection(String userId, String connectionId) {
         Optional<UserConnectionInfo> details = getConnectionDetails(connectionId);

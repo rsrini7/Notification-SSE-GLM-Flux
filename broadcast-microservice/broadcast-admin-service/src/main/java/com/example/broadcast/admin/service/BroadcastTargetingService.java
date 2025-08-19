@@ -212,6 +212,12 @@ public class BroadcastTargetingService {
                 .collect(Collectors.toList());
         } else if (Constants.TargetType.SELECTED.name().equals(targetType)) {
             return broadcast.getTargetIds();
+        }else if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
+            // Fetch users for each specified product and combine them into a unique list.
+            return broadcast.getTargetIds().stream()
+                .flatMap(productId -> userService.getUserIdsByProduct(productId).stream())
+                .distinct()
+                .collect(Collectors.toList());
         }
 
         return Collections.emptyList();

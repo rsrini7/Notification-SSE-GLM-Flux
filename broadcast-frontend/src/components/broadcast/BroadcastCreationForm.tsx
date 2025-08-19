@@ -128,6 +128,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                                     <SelectItem value="ALL" disabled={formData.scheduleType === 'fireAndForget'}>All Users</SelectItem>
                                     <SelectItem value="SELECTED">Selected Users</SelectItem>
                                     <SelectItem value="ROLE" disabled={formData.scheduleType === 'fireAndForget'}>By Role</SelectItem>
+                                    <SelectItem value="PRODUCT" disabled={formData.scheduleType === 'fireAndForget'}>By Product</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -149,9 +150,13 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                         </div>
                     </div>
 
-                    {(formData.targetType === 'SELECTED' || formData.targetType === 'ROLE') && (
+                    {(formData.targetType === 'SELECTED' || formData.targetType === 'ROLE' || formData.targetType === 'PRODUCT') && (
                         <div className="grid gap-1.5">
-                            <Label htmlFor="targetIds">{formData.targetType === 'SELECTED' ? 'User IDs (comma-separated)' : 'Role IDs (comma-separated)'}</Label>
+                            <Label htmlFor="targetIds">{
+                                formData.targetType === 'SELECTED' ? 'User IDs (comma-separated)' :
+                                formData.targetType === 'ROLE' ? 'Role IDs (comma-separated)' :
+                                'Product IDs (e.g., Payments)'
+                            }</Label>
                             <Input id="targetIds" placeholder={formData.targetType === 'SELECTED' ? 'user-001, user-002' : 'admin, moderator'} value={formData.targetIds} onChange={(e) => setFormData(prev => ({ ...prev, targetIds: e.target.value }))} required />
                         </div>
                     )}

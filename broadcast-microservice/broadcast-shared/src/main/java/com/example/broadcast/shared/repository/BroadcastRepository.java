@@ -260,5 +260,20 @@ public class BroadcastRepository {
         return jdbcTemplate.query(sql, broadcastRowMapper, cutoff.toOffsetDateTime());
     }
 
+    /**
+     * Finds active broadcasts of type 'SELECTED' where the target_ids list contains the given userId.
+     * NOTE: This query can be intensive on databases without good JSON/array indexing capabilities.
+     * For PostgreSQL, creating a GIN index on the target_ids column would be recommended.
+     * @param userId The ID of the user to check for.
+     * @return A list of matching broadcast messages.
+     */
+    public List<BroadcastMessage> findActiveSelectedBroadcastsForUser(String userId) {
+        // This query uses a LIKE pattern which is universally compatible.
+        // For PostgreSQL, a query like `WHERE target_ids::jsonb @> ?::jsonb` with a GIN index would be more performant.
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = 'SELECTED' AND target_ids LIKE ?";
+        // The '%' wildcards are necessary to find the userId within the JSON array string representation `["user-a", "user-b"]`
+        String searchTerm = "%\"" + userId + "\"%"; 
+        return jdbcTemplate.query(sql, broadcastRowMapper, searchTerm);
+    }
     
 }

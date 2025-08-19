@@ -200,7 +200,8 @@ public class SseService {
     private void sendActiveGroupMessages(String userId) {
         log.info("Checking for active group (ALL/ROLE) messages for newly connected user: {}", userId);
         // Reuse the logic from UserMessageService to get all relevant group messages for this user.
-        List<UserBroadcastResponse> groupMessages = userMessageService.getGroupMessagesForUser(userId);
+        // List<UserBroadcastResponse> groupMessages = userMessageService.getGroupMessagesForUser(userId);
+        List<UserBroadcastResponse> groupMessages = userMessageService.getActiveBroadcastsForUser(userId);
 
         if (!groupMessages.isEmpty()) {
             log.info("Delivering {} active group messages to user: {}", groupMessages.size(), userId);

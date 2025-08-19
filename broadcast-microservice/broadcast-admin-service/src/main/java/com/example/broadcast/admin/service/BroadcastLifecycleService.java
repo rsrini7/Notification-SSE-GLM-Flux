@@ -93,7 +93,6 @@ public class BroadcastLifecycleService {
         }
     }
 
-    // ... [ The rest of the methods from the original file are unchanged and go here ] ...
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         boolean isFailureTest = testingConfigurationService.consumeArmedState();
@@ -107,33 +106,49 @@ public class BroadcastLifecycleService {
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
 
-        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
-        long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
-        ZonedDateTime precomputationThreshold = now.plus(fetchDelayMs, ChronoUnit.MILLIS);
-
-        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(precomputationThreshold)) {
-            broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
-            broadcast = broadcastRepository.save(broadcast);
-            log.info("Broadcast ID: {} is a true scheduled broadcast. Saving with SCHEDULED status.", broadcast.getId());
-            return broadcastMapper.toBroadcastResponse(broadcast, 0);
-        }
-
-        log.info("Broadcast is immediate or scheduled too close. Treating as immediate. Saving with PREPARING status.");
-        broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
-        broadcast = broadcastRepository.save(broadcast);
-
-        cacheService.evictBroadcastContent(broadcast.getId());
-        log.info("Evicted broadcast-content cache for ID: {}", broadcast.getId());
-        
         if (isFailureTest) {
             testingConfigurationService.markBroadcastForFailure(broadcast.getId());
             log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
         }
 
-        log.info("Triggering async (BroadcastEventListener) user pre-computation for immediate broadcast ID: {}", broadcast.getId());
-        eventPublisher.publishEvent(new BroadcastCreatedEvent(broadcast.getId()));
+        cacheService.evictBroadcastContent(broadcast.getId());
+        log.info("Evicted broadcast-content cache for ID: {}", broadcast.getId());
+        
+        // ONLY the 'PRODUCT' type requires the intensive user list preparation.
+        if (Constants.TargetType.PRODUCT.name().equals(request.getTargetType())) {
+            log.info("Broadcast is for PRODUCT users. Saving with PREPARING status to trigger user pre-computation.", broadcast.getId());
+            broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
+            broadcast = broadcastRepository.save(broadcast);
+            
+            // This event triggers the async task to populate the broadcast_user_targets table.
+            eventPublisher.publishEvent(new BroadcastCreatedEvent(broadcast.getId()));
+            return broadcastMapper.toBroadcastResponse(broadcast, 0); // Target count is unknown until preparation is complete.
+        }
 
-        return broadcastMapper.toBroadcastResponse(broadcast, 0);
+        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
+        long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
+        ZonedDateTime precomputationThreshold = now.plus(fetchDelayMs, ChronoUnit.MILLIS);
+
+        boolean isActive = true;
+
+        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(precomputationThreshold)) {
+            broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
+            isActive = false; // It's not active yet
+        } else {
+            broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
+        }
+        
+        broadcast = broadcastRepository.save(broadcast);
+
+        // If it's immediately active, we MUST publish the orchestration event NOW.
+        if (isActive) {
+            publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
+        }
+
+        cacheService.evictActiveGroupBroadcastsCache();
+        int totalTargeted = Constants.TargetType.SELECTED.name().equals(request.getTargetType()) ? request.getTargetIds().size() : 0;
+        return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
+    
     }
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)

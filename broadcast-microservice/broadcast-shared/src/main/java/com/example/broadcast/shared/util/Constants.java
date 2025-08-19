@@ -32,7 +32,8 @@ public final class Constants {
     public enum TargetType {
         ALL,
         SELECTED,
-        ROLE
+        ROLE,
+        PRODUCT
     }
 
     public enum EventType {

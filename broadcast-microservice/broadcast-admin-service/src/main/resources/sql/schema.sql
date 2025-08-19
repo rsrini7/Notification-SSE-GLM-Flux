@@ -40,7 +40,7 @@ CREATE TABLE broadcast_messages (
     sender_id VARCHAR(255) NOT NULL,
     sender_name VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
-    target_type VARCHAR(50) NOT NULL CHECK (target_type IN ('ALL', 'SELECTED', 'ROLE')),
+    target_type VARCHAR(50) NOT NULL CHECK (target_type IN ('ALL', 'SELECTED', 'ROLE','PRODUCT')),
     target_ids TEXT, -- JSON array of user IDs or role IDs for targeted broadcasts
     priority VARCHAR(20) DEFAULT 'NORMAL' CHECK (priority IN ('LOW', 'NORMAL', 'HIGH', 'URGENT')),
     category VARCHAR(100),

@@ -72,27 +72,61 @@ public class UserMessageService {
         return dbMessages;
     }
 
+    // @Transactional(readOnly = true)
+    // public List<UserBroadcastResponse> getGroupMessagesForUser(String userId) {
+    //     // 1. (NEW) First, get a list of broadcast IDs the user already has a specific record for.
+    //     List<Long> processedBroadcastIds = userBroadcastRepository.findActiveBroadcastIdsByUserId(userId);
+    //     Set<Long> processedBroadcastIdSet = new HashSet<>(processedBroadcastIds);
+
+    //     List<String> userRoles = userService.getRolesForUser(userId);
+
+    //     // 2. Fetch broadcasts targeted to the user's specific roles
+    //     List<BroadcastMessage> roleBroadcasts = userRoles.stream()
+    //             .flatMap(role -> getActiveBroadcastsForRole(role).stream())
+    //             .distinct()
+    //             .collect(Collectors.toList());
+
+    //     // 3. Fetch broadcasts targeted to "ALL" users
+    //     List<BroadcastMessage> allUserBroadcasts = getActiveBroadcastsForAll();
+
+    //     // 4. (MODIFIED) Combine, deduplicate, filter out already processed messages, and map to DTO
+    //     return Stream.concat(roleBroadcasts.stream(), allUserBroadcasts.stream())
+    //             .distinct()
+    //             .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId())) // This is the new exclusion logic
+    //             .map(broadcast -> broadcastMapper.toUserBroadcastResponse(null, broadcast))
+    //             .collect(Collectors.toList());
+    // }
+
     @Transactional(readOnly = true)
-    public List<UserBroadcastResponse> getGroupMessagesForUser(String userId) {
-        // 1. (NEW) First, get a list of broadcast IDs the user already has a specific record for.
+    public List<UserBroadcastResponse> getActiveBroadcastsForUser(String userId) {
+        // 1. Get a list of broadcast IDs the user already has a specific record for (e.g., from a past read action).
         List<Long> processedBroadcastIds = userBroadcastRepository.findActiveBroadcastIdsByUserId(userId);
         Set<Long> processedBroadcastIdSet = new HashSet<>(processedBroadcastIds);
 
+        // 2. Fetch broadcasts targeted to the user's roles
         List<String> userRoles = userService.getRolesForUser(userId);
-
-        // 2. Fetch broadcasts targeted to the user's specific roles
         List<BroadcastMessage> roleBroadcasts = userRoles.stream()
-                .flatMap(role -> getActiveBroadcastsForRole(role).stream())
-                .distinct()
-                .collect(Collectors.toList());
+            .flatMap(role -> getActiveBroadcastsForRole(role).stream())
+            .distinct()
+            .collect(Collectors.toList());
 
         // 3. Fetch broadcasts targeted to "ALL" users
         List<BroadcastMessage> allUserBroadcasts = getActiveBroadcastsForAll();
 
-        // 4. (MODIFIED) Combine, deduplicate, filter out already processed messages, and map to DTO
-        return Stream.concat(roleBroadcasts.stream(), allUserBroadcasts.stream())
+        // =======================================================================
+        // == NEW LOGIC TO INCLUDE 'SELECTED' BROADCASTS                      ==
+        // =======================================================================
+        // 4. Fetch broadcasts where this specific user was 'SELECTED'
+        List<BroadcastMessage> selectedBroadcasts = broadcastRepository.findActiveSelectedBroadcastsForUser(userId);
+        // =======================================================================
+        // == END NEW LOGIC                                                   ==
+        // =======================================================================
+
+        // 5. Combine, deduplicate, filter out already processed messages, and map to DTO
+        return Stream.of(roleBroadcasts, allUserBroadcasts, selectedBroadcasts) // Add selectedBroadcasts to the stream
+                .flatMap(List::stream)
                 .distinct()
-                .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId())) // This is the new exclusion logic
+                .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId()))
                 .map(broadcast -> broadcastMapper.toUserBroadcastResponse(null, broadcast))
                 .collect(Collectors.toList());
     }

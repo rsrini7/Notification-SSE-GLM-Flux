@@ -71,7 +71,6 @@ public class SseConnectionManager {
         log.info("User connection registered for user: {}, connection: {}, cluster: {}, pod: {}", userId, connectionId, clusterName, podName);
     }
     
-    // ... The rest of the SseConnectionManager file remains unchanged ...
     public void removeEventStream(String userId, String connectionId) {
         Sinks.Many<ServerSentEvent<String>> sink = connectionSinks.remove(connectionId);
         if (sink != null) {
