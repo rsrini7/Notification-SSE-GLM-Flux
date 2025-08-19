@@ -17,6 +17,7 @@ import com.example.broadcast.shared.mapper.BroadcastMapper;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -72,10 +73,9 @@ public class UserMessageService {
         return dbMessages;
     }
 
-   @Transactional(readOnly = true)
-    public List<UserBroadcastResponse> getActiveBroadcastsForUser(String userId) {
-        // 1. Get a list of broadcast IDs the user has already interacted with (e.g., marked as read).
-        // These should not be re-sent.
+    @Transactional(readOnly = true)
+    public List<BroadcastMessage> getActiveBroadcastsForUser(String userId) {
+        // 1. Get a list of broadcast IDs the user has already interacted with.
         List<Long> processedBroadcastIds = userBroadcastRepository.findActiveBroadcastIdsByUserId(userId);
         Set<Long> processedBroadcastIdSet = new HashSet<>(processedBroadcastIds);
 
@@ -92,12 +92,11 @@ public class UserMessageService {
         // 4. Fetch broadcasts where this specific user was 'SELECTED'.
         List<BroadcastMessage> selectedBroadcasts = broadcastRepository.findActiveSelectedBroadcastsForUser(userId);
 
-        // 5. Combine all three lists, deduplicate, filter out already processed messages, and map to the response DTO.
+        // 5. Combine all lists, deduplicate, and filter out already processed messages.
         return Stream.of(roleBroadcasts, allUserBroadcasts, selectedBroadcasts)
                 .flatMap(List::stream)
                 .distinct()
                 .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId()))
-                .map(broadcast -> broadcastMapper.toUserBroadcastResponse(null, broadcast))
                 .collect(Collectors.toList());
     }
 
@@ -224,4 +223,28 @@ public class UserMessageService {
 
         return Optional.of(broadcastMapper.toUserBroadcastResponse(messageStub, broadcast));
     }
+
+    /**
+     * Centralized method to process the delivery of a fan-out-on-read (group) message.
+     * It idempotently creates a user-specific record and increments the central delivery counter
+     * only if this is the first time this user has received this message.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void processAndCountGroupMessageDelivery(String userId, BroadcastMessage broadcast) {
+        if (broadcast == null || userId == null) {
+            return;
+        }
+        
+        // The createIfNotExists method is atomic. It returns 1 only if a new row was inserted.
+        int newRows = userBroadcastRepository.createIfNotExists(broadcast.getId(), userId, ZonedDateTime.now(ZoneOffset.UTC));
+
+        if (newRows > 0) {
+            // Only if a new record was created, we increment the master counter.
+            broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
+            log.info("Recorded and counted first-time delivery of group broadcast {} to user {}", broadcast.getId(), userId);
+        } else {
+            log.debug("Ignoring duplicate delivery of group broadcast {} to user {}", broadcast.getId(), userId);
+        }
+    }
+
 }

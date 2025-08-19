@@ -40,7 +40,7 @@ public class BroadcastPrecomputationService {
         long totalWindowMs = fetchDelayMs + BUFFER_MILLISECONDS;
         ZonedDateTime prefetchCutoff = ZonedDateTime.now(ZoneOffset.UTC).plus(totalWindowMs, ChronoUnit.MILLIS);
 
-        List<BroadcastMessage> broadcastsToPrepare = broadcastRepository.findScheduledBroadcastsWithinWindow(prefetchCutoff);
+        List<BroadcastMessage> broadcastsToPrepare = broadcastRepository.findScheduledProductBroadcastsWithinWindow(prefetchCutoff);
 
         if (broadcastsToPrepare.isEmpty()) {
             return;

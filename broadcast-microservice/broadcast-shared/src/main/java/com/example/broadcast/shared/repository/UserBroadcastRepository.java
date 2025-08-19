@@ -3,6 +3,7 @@ package com.example.broadcast.shared.repository;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
+import com.example.broadcast.shared.util.Constants.ReadStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -242,5 +243,26 @@ public class UserBroadcastRepository {
     public List<String> findBroadcastReceivers(Long broadcastId) {
         String sql = "SELECT user_id FROM user_broadcast_messages WHERE broadcast_id = ?";
         return jdbcTemplate.queryForList(sql, String.class, broadcastId);
+    }
+
+     /**
+     * Atomically creates a user_broadcast_messages record if it does not already exist.
+     * This is used to ensure idempotent processing for fan-out-on-read broadcasts.
+     * @return The number of rows inserted (1 if created, 0 if it already existed).
+     */
+    public int createIfNotExists(Long broadcastId, String userId, ZonedDateTime deliveredAt) {
+        String sql = """
+            INSERT INTO user_broadcast_messages 
+                (broadcast_id, user_id, delivery_status, read_status, delivered_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (broadcast_id, user_id) DO NOTHING
+            """;
+        return jdbcTemplate.update(sql,
+                broadcastId,
+                userId,
+                DeliveryStatus.DELIVERED.name(),
+                ReadStatus.UNREAD.name(),
+                deliveredAt.toOffsetDateTime()
+        );
     }
 }

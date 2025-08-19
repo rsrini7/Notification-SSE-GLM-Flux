@@ -7,7 +7,6 @@ import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
-import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.SseEventType;
@@ -35,7 +34,6 @@ public class SseService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final ObjectMapper objectMapper;
     private final BroadcastRepository broadcastRepository;
-    private final BroadcastStatisticsRepository broadcastStatisticsRepository;    
     private final MessageStatusService messageStatusService;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
@@ -129,13 +127,11 @@ public class SseService {
     private void deliverFanOutOnReadMessage(String userId, BroadcastMessage broadcast) {
         log.info("Delivering fan-out-on-read broadcast {} to online user {}", broadcast.getId(), userId);
         
-        // Create the response directly from the parent BroadcastMessage, passing null for UserBroadcastMessage.
         UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
         sendSseEvent(userId, response);
 
-        // This is a fan-out-on-read delivery, so we only increment the central counter.
-        broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
-        log.debug("Incremented delivered count for broadcast ID: {}", broadcast.getId());
+        // DELEGATE the counting to the new idempotent service method.
+        userMessageService.processAndCountGroupMessageDelivery(userId, broadcast);
     }
 
 
@@ -181,19 +177,21 @@ public class SseService {
             return;
         }
     }
-    
 
     private void sendActiveGroupMessages(String userId) {
         log.info("Checking for active group (ALL/ROLE) messages for newly connected user: {}", userId);
-        // Reuse the logic from UserMessageService to get all relevant group messages for this user.
-        List<UserBroadcastResponse> groupMessages = userMessageService.getActiveBroadcastsForUser(userId);
+        // This method now returns BroadcastMessage objects directly
+        List<BroadcastMessage> groupMessages = userMessageService.getActiveBroadcastsForUser(userId);
 
         if (!groupMessages.isEmpty()) {
             log.info("Delivering {} active group messages to user: {}", groupMessages.size(), userId);
-            for (UserBroadcastResponse response : groupMessages) {
+            for (BroadcastMessage broadcast : groupMessages) {
+                // Create the response DTO for the SSE event
+                UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
                 sendSseEvent(userId, response);
-
-                broadcastStatisticsRepository.incrementDeliveredCount(response.getBroadcastId());
+                
+                // DELEGATE the counting to the new idempotent service method.
+                userMessageService.processAndCountGroupMessageDelivery(userId, broadcast);
             }
         }
     }

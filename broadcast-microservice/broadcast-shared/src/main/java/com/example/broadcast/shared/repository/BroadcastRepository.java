@@ -274,5 +274,23 @@ public class BroadcastRepository {
         String searchTerm = "%\"" + userId + "\"%"; 
         return jdbcTemplate.query(sql, broadcastRowMapper, searchTerm);
     }
+
+    // For BroadcastPrecomputationService
+    public List<BroadcastMessage> findScheduledProductBroadcastsWithinWindow(ZonedDateTime cutoffTime) {
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'SCHEDULED' AND target_type = 'PRODUCT' AND scheduled_at <= ?";
+        return jdbcTemplate.query(sql, broadcastRowMapper, cutoffTime.toOffsetDateTime());
+    }
+
+    // For BroadcastSchedulingService
+    public List<BroadcastMessage> findAndLockScheduledFanOutOnReadBroadcasts(ZonedDateTime now, int limit) {
+        String sql = """
+            SELECT * FROM broadcast_messages
+            WHERE status = 'SCHEDULED' AND target_type IN ('ALL', 'ROLE', 'SELECTED') AND scheduled_at <= ?
+            ORDER BY scheduled_at
+            LIMIT ?
+            FOR UPDATE SKIP LOCKED
+            """;
+        return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime(), limit);
+    }
     
 }
