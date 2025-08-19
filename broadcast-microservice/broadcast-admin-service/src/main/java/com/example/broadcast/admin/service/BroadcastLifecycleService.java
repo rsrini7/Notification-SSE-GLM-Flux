@@ -223,13 +223,8 @@ public class BroadcastLifecycleService {
     }
 
     private void triggerCancelOrExpireBroadcastEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
-        String targetType = broadcast.getTargetType();
-        if (Constants.TargetType.SELECTED.name().equals(targetType)) {
-            List<String> targetUserIds = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
-            publishEventsToWorkerTopics(broadcast, targetUserIds, eventType, message);
-        } else {
-            publishSingleOrchestrationEvent(broadcast, eventType, message);
-        }
+        log.info("Publishing single orchestration event for broadcast ID {} with type {}", broadcast.getId(), eventType);
+        publishSingleOrchestrationEvent(broadcast, eventType, message);
     }
     
     private void publishSingleOrchestrationEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {

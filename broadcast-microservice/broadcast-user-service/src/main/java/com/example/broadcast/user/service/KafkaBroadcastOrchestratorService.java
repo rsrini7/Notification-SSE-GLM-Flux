@@ -9,9 +9,10 @@ import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
+import com.example.broadcast.shared.model.BroadcastStatistics;
+import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.service.UserService;
 import java.util.Collections;
-import java.util.stream.Stream;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,6 +43,7 @@ public class KafkaBroadcastOrchestratorService {
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
     private final UserService userService;
+    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
 
     @KafkaListener(
         topics = "${broadcast.kafka.topic.name-orchestration}",
@@ -63,26 +67,17 @@ public class KafkaBroadcastOrchestratorService {
             return;
         }
 
-        final List<String> targetUsers;
-        
-        String targetType = broadcast.getTargetType();
+        final List<String> targetUsers = determineTargetUsers(broadcast,event);
 
-        if (Constants.EventType.READ.name().equals(event.getEventType())) {
-            // READ events are always for a single user
-            targetUsers = List.of(event.getUserId());
-        } else if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
-            // PRODUCT type still uses the pre-computed list
-            log.debug("Distributing for PRODUCT broadcast. Reading from broadcast_user_targets table.");
-            targetUsers = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
-        } else {
-            // ALL, ROLE, and SELECTED types determine the user list dynamically NOW.
-            log.debug("Distributing for fan-out-on-read broadcast (ALL, ROLE, or SELECTED).");
-            targetUsers = determineFanOutOnReadUsers(broadcast);
-        }
-        
         if (targetUsers.isEmpty()) {
             log.warn("Orchestrator found no target users for broadcast ID {}. No events will be scattered.", broadcast.getId());
         } else {
+
+            if (Constants.EventType.CREATED.name().equals(event.getEventType()) &&
+                   (!Constants.TargetType.PRODUCT.name().equals(broadcast.getTargetType()))) {
+                initializeStatistics(broadcast.getId(), targetUsers.size());
+            }
+
             log.info("Scattering {} user-specific '{}' events to worker topics for broadcast ID {}", targetUsers.size(), event.getEventType(), broadcast.getId());
             List<OutboxEvent> eventsToPublish = targetUsers.stream()
                 .map(userId -> {
@@ -106,6 +101,25 @@ public class KafkaBroadcastOrchestratorService {
         }
         
         acknowledgment.acknowledge();
+    }
+
+    private List<String> determineTargetUsers(BroadcastMessage broadcast, MessageDeliveryEvent event){
+        final List<String> targetUsers;
+        String eventType = event.getEventType();
+        String targetType = broadcast.getTargetType();
+         // For lifecycle events (READ, CANCELLED, EXPIRED), the audience is determined the same way as for CREATED events.
+        if (Constants.EventType.READ.name().equals(eventType)) {
+            targetUsers = List.of(event.getUserId());
+        } else if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
+            // For fan-out-on-write types, the definitive user list is in the pre-computed targets table.
+            log.debug("Distributing for fan-out-on-write broadcast ({}). Reading from broadcast_user_targets table.", targetType);
+            targetUsers = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
+        } else {
+            // For fan-out-on-read types (ALL, ROLE), determine the user list dynamically.
+            log.debug("Distributing for fan-out-on-read broadcast ({}).", targetType);
+            targetUsers = determineFanOutOnReadUsers(broadcast);
+        }
+        return targetUsers;
     }
 
     private List<String> determineFanOutOnReadUsers(BroadcastMessage broadcast) {
@@ -145,5 +159,19 @@ public class KafkaBroadcastOrchestratorService {
             log.error("Could not serialize payload for user {}. Event will be skipped.", userId, e);
             return null;
         }
+    }
+
+    private void initializeStatistics(Long broadcastId, int totalTargeted) {
+        log.info("Orchestrator initializing statistics for broadcast ID {} with {} targeted users.", broadcastId, totalTargeted);
+        BroadcastStatistics stats = BroadcastStatistics.builder()
+                .broadcastId(broadcastId)
+                .totalTargeted(totalTargeted)
+                .totalDelivered(0)
+                .totalRead(0)
+                .totalFailed(0)
+                .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .build();
+        // The existing save method uses MERGE, which is safe to call even if the record somehow already exists.
+        broadcastStatisticsRepository.save(stats);
     }
 }

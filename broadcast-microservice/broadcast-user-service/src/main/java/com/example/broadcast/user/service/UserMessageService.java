@@ -72,31 +72,6 @@ public class UserMessageService {
         return dbMessages;
     }
 
-    // @Transactional(readOnly = true)
-    // public List<UserBroadcastResponse> getGroupMessagesForUser(String userId) {
-    //     // 1. (NEW) First, get a list of broadcast IDs the user already has a specific record for.
-    //     List<Long> processedBroadcastIds = userBroadcastRepository.findActiveBroadcastIdsByUserId(userId);
-    //     Set<Long> processedBroadcastIdSet = new HashSet<>(processedBroadcastIds);
-
-    //     List<String> userRoles = userService.getRolesForUser(userId);
-
-    //     // 2. Fetch broadcasts targeted to the user's specific roles
-    //     List<BroadcastMessage> roleBroadcasts = userRoles.stream()
-    //             .flatMap(role -> getActiveBroadcastsForRole(role).stream())
-    //             .distinct()
-    //             .collect(Collectors.toList());
-
-    //     // 3. Fetch broadcasts targeted to "ALL" users
-    //     List<BroadcastMessage> allUserBroadcasts = getActiveBroadcastsForAll();
-
-    //     // 4. (MODIFIED) Combine, deduplicate, filter out already processed messages, and map to DTO
-    //     return Stream.concat(roleBroadcasts.stream(), allUserBroadcasts.stream())
-    //             .distinct()
-    //             .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId())) // This is the new exclusion logic
-    //             .map(broadcast -> broadcastMapper.toUserBroadcastResponse(null, broadcast))
-    //             .collect(Collectors.toList());
-    // }
-
     @Transactional(readOnly = true)
     public List<UserBroadcastResponse> getActiveBroadcastsForUser(String userId) {
         // 1. Get a list of broadcast IDs the user already has a record for.
@@ -165,9 +140,6 @@ public class UserMessageService {
                 .findByUserIdAndBroadcastId(userId, broadcastId);
 
         if (userMessageOpt.isPresent()) {
-            // --- START: FIX FOR SELECTED USERS ---
-            // UPDATE PATH: A record already exists, so this is a 'SELECTED' user broadcast.
-            // Use the specific, atomic `markAsRead` repository method.
             UserBroadcastMessage existingMessage = userMessageOpt.get();
             if (Constants.ReadStatus.READ.name().equals(existingMessage.getReadStatus())) {
                 log.warn("Message for broadcast {} was already read for user {}. No action taken.", broadcastId, userId);
@@ -180,11 +152,9 @@ public class UserMessageService {
                 log.warn("Message for broadcast {} was already read for user {} (concurrent update). No action taken.", broadcastId, userId);
                 return;
             }
-            // --- END: FIX FOR SELECTED USERS ---
 
         } else {
-            // CREATE PATH: No record exists, so this is an 'ALL' or 'ROLE' broadcast.
-            // Create a new record and save it.
+
             log.info("No existing message record for user {}, broadcast {}. Creating a new one.", userId, broadcastId);
             UserBroadcastMessage newMessage = UserBroadcastMessage.builder()
                     .userId(userId)
@@ -196,7 +166,6 @@ public class UserMessageService {
             userBroadcastRepository.save(newMessage);
         }
         
-        // This part is now common to both paths
         broadcastStatisticsRepository.incrementReadCount(broadcastId);
         cacheService.removeMessageFromUserCache(userId, broadcastId);
         cacheService.removePendingEvent(userId, broadcastId);
