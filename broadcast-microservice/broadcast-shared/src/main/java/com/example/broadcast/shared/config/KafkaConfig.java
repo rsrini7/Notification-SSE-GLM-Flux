@@ -12,7 +12,6 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.RecordDeserializationException;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -101,7 +100,7 @@ public class KafkaConfig {
 
     @Bean
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
-            @Qualifier("dltKafkaTemplate") KafkaTemplate<String, Object> dltKafkaTemplate) {
+           KafkaTemplate<String, Object> kafkaTemplate) {
 
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) -> {
             String workerTopicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
@@ -127,27 +126,12 @@ public class KafkaConfig {
         };
         // ========================= END OF FIX =========================
 
-        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate, destinationResolver);
         recoverer.setFailIfSendResultIsError(true);
         
         return recoverer;
     }
-    
-    @Bean
-    public KafkaTemplate<String, Object> dltKafkaTemplate(
-            @Qualifier("dltProducerFactory") ProducerFactory<String, Object> dltProducerFactory) {
-        return new KafkaTemplate<>(dltProducerFactory);
-    }
-
-    @Bean
-    public ProducerFactory<String, Object> dltProducerFactory() {
-        Map<String, Object> configProps = new HashMap<>();
-        configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
-        return new DefaultKafkaProducerFactory<>(configProps);
-    }
-
+   
     @Bean
     public NewTopic orchestrationTopic() {
         return TopicBuilder.name(appProperties.getKafka().getTopic().getNameOrchestration())

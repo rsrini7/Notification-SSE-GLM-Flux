@@ -1,0 +1,40 @@
+graph TD
+    subgraph "Source Data"
+        A(
+            <strong>broadcast_messages</strong><br/>
+            - id<br/>
+            - status<br/>
+            - content
+        )
+        B(
+            <strong>user_broadcast_messages</strong><br/>
+            - broadcast_id<br/>
+            - user_id
+        )
+    end
+
+    subgraph "Event & Log Data"
+        C(
+            <strong>outbox_events</strong><br/>
+            - aggregate_id<br/>
+            - event_type<br/>
+            - payload
+        )
+        D(
+            <strong>dlt_messages</strong><br/>
+            - broadcast_id<br/>
+            - original_message_payload
+        )
+    end
+
+    A -- "<strong>On Create/Cancel:</strong><br/>outbox_events.aggregate_id ⟵ broadcast_messages.id<br/>outbox_events.event_type ⟵ broadcast_messages.status<br/>outbox_events.payload ⟵ (packages broadcast_messages data)" --> C
+    
+    B -- "<strong>On Read:</strong><br/>outbox_events.aggregate_id ⟵ user_broadcast_messages.user_id<br/>outbox_events.event_type = 'READ'<br/>outbox_events.payload ⟵ (packages user_broadcast_messages data)" --> C
+    
+    C -- "<strong>On Processing Failure:</strong><br/>dlt_messages.original_message_payload ⟵ outbox_events.payload<br/>dlt_messages.broadcast_id ⟵ (extracted from payload)" --> D
+    
+    %% Styling
+    classDef source fill:#e0f2fe,stroke:#0ea5e9,stroke-width:2px;
+    classDef event fill:#fef9c3,stroke:#eab308,stroke-width:2px;
+    class A,B source;
+    class C,D event;

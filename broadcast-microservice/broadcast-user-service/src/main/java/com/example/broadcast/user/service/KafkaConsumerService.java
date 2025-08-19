@@ -34,14 +34,14 @@ public class KafkaConsumerService {
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset) {
         
-        // Log statement now includes full message coordinates.
-        log.debug("Worker received event. [Topic: {}, Partition: {}, Offset: {}] Payload: {}", 
-                  topic, partition, offset, event);
-
         if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
             log.warn("DLT TEST MODE: Simulating failure for broadcast ID: {}", event.getBroadcastId());
             throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
         }
+
+        // Log statement now includes full message coordinates.
+        log.debug("Worker received event. [Topic: {}, Partition: {}, Offset: {}] Payload: {}", 
+                  topic, partition, offset, event);
 
         try {
             // Use a switch to handle all possible event types

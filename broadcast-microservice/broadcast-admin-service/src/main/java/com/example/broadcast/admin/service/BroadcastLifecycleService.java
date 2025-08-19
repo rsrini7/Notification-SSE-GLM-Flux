@@ -61,10 +61,7 @@ public class BroadcastLifecycleService {
             broadcast = broadcastRepository.save(broadcast);
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
-        if (isFailureTest) {
-            testingConfigurationService.markBroadcastForFailure(broadcast.getId());
-            log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
-        }
+       
         cacheService.evictBroadcastContent(broadcast.getId());
         log.info("Evicted broadcast-content cache for ID: {}", broadcast.getId());
 
@@ -92,6 +89,11 @@ public class BroadcastLifecycleService {
         }
         
         broadcast = broadcastRepository.save(broadcast);
+
+        if (isFailureTest) {
+            testingConfigurationService.markBroadcastForFailure(broadcast.getId());
+            log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
+        }
 
         // If it's an immediate broadcast, we MUST publish the single orchestration event to the outbox.
         // This now correctly includes ALL, ROLE, and SELECTED types.
