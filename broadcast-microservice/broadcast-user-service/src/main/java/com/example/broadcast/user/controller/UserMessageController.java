@@ -5,7 +5,6 @@ import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.user.service.UserMessageService;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
-import java.util.stream.Collectors;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

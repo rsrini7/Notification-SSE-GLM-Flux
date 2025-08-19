@@ -4,14 +4,12 @@ import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.admin.BroadcastRequest;
 import com.example.broadcast.shared.dto.admin.BroadcastResponse;
-import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.exception.ResourceNotFoundException;
 import com.example.broadcast.shared.exception.UserServiceUnavailableException;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.BroadcastStatistics;
 import com.example.broadcast.shared.model.OutboxEvent;
-import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.*;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.service.TestingConfigurationService;
@@ -31,11 +29,8 @@ import org.springframework.transaction.annotation.Propagation;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor

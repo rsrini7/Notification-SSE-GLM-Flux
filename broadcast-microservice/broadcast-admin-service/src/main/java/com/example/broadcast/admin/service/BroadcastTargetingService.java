@@ -62,34 +62,6 @@ public class BroadcastTargetingService {
         
         return 0;
     }
-
-    private List<UserBroadcastMessage> createMessagesWithPreferenceFiltering(BroadcastMessage broadcast, List<String> targetUserIds) {
-        Map<String, UserPreferences> preferencesMap = userPreferencesRepository.findByUserIdIn(targetUserIds)
-                .stream()
-                .collect(Collectors.toMap(UserPreferences::getUserId, pref -> pref));
-
-        List<UserBroadcastMessage> userMessages = targetUserIds.stream()
-            .filter(userId -> {
-                UserPreferences preferences = preferencesMap.get(userId);
-                boolean shouldDeliver = shouldDeliverToUser(preferences);
-                if (!shouldDeliver) {
-                    log.debug("Broadcast ID {}: Skipping user {} due to their notification preferences.", broadcast.getId(), userId);
-                }
-                return shouldDeliver;
-            })
-            .map(userId -> UserBroadcastMessage.builder()
-                .broadcastId(broadcast.getId())
-                .userId(userId)
-                .deliveryStatus(DeliveryStatus.PENDING.name())
-                .readStatus(ReadStatus.UNREAD.name())
-                .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .build())
-            .collect(Collectors.toList());
-        
-        log.info("Broadcast ID {}: After filtering by preferences, {} users will receive the message.", broadcast.getId(), userMessages.size());
-        return userMessages;
-    }
     
     public List<UserBroadcastMessage> fallbackCreateUserBroadcastMessagesForBroadcast(BroadcastMessage broadcast, Throwable t) {
         log.error("Circuit breaker opened for user service. Falling back for broadcast ID {}. Error: {}", broadcast.getId(), t.getMessage());
