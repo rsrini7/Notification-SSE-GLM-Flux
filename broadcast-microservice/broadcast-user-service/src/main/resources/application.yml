@@ -104,11 +104,10 @@ resilience4j:
   ratelimiter:
     instances:
       sseConnectLimiter:
-        limitForPeriod: 200
+        limitForPeriod: 500
         limitRefreshPeriod: 1m
         timeoutDuration: 2s
         registerHealthIndicator: true
-
 
 # --- CUSTOM PROPERTIES ---
 

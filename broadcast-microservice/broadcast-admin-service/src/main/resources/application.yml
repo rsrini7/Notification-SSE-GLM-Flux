@@ -115,11 +115,6 @@ resilience4j:
         limitRefreshPeriod: 1m
         timeoutDuration: 0
         registerHealthIndicator: true
-      sseConnectLimiter:
-        limitForPeriod: 200
-        limitRefreshPeriod: 1m
-        timeoutDuration: 2s
-        registerHealthIndicator: true
   circuitbreaker:
     instances:
       userService:
