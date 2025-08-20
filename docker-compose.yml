@@ -1,5 +1,5 @@
 networks:
-  broadcast-net:
+  broadcastnet:
     driver: bridge
 
 # Define reusable base configurations
@@ -9,7 +9,7 @@ x-nginx-base: &nginx_base
   ports:
     - "443:443"
   networks:
-    - broadcast-net
+    - broadcastnet
 
 services:
   # ===================================================================
@@ -48,7 +48,7 @@ services:
       - POD_NAME_PREFIX=broadcast-user-service
     command: ["sh", "-c", "echo 'Waiting 5s for dev Kafka...' && sleep 5 && /tmp/create-kafka-topics.sh"]
     networks:
-      - broadcast-net
+      - broadcastnet
   
   # Kafka service for the 'dev' profile
   kafka-dev:
@@ -70,7 +70,7 @@ services:
     depends_on:
       - zookeeper
     networks:
-      - broadcast-net
+      - broadcastnet
 
   # ===================================================================
   #  PROD PROFILE SERVICES
@@ -110,7 +110,7 @@ services:
       - POD_NAME_PREFIX=broadcast-user-service
     command: ["sh", "-c", "echo 'Waiting 5s for prod Kafka...' && sleep 5 && /tmp/create-kafka-topics.sh"]
     networks:
-      - broadcast-net
+      - broadcastnet
 
   # Kafka service for the 'prod' profile
   kafka-prod:
@@ -132,7 +132,7 @@ services:
     depends_on:
       - zookeeper
     networks:
-      - broadcast-net
+      - broadcastnet
 
   admin-service:
     profiles:
@@ -151,6 +151,8 @@ services:
     volumes:
       - ./logs/admin:/var/log/app
     depends_on:
+      geode-init:
+        condition: service_completed_successfully
       kafka-prod-setup:
         condition: service_completed_successfully
       postgres:
@@ -158,7 +160,7 @@ services:
       geode-server:
         condition: service_started
     networks:
-      - broadcast-net
+      - broadcastnet
 
   user-service:
     profiles:
@@ -179,6 +181,8 @@ services:
     volumes:
       - ./logs/user:/var/log/app
     depends_on:
+      geode-init:
+        condition: service_completed_successfully
       kafka-prod-setup:
         condition: service_completed_successfully
       postgres:
@@ -188,7 +192,7 @@ services:
       admin-service:
         condition: service_started
     networks:
-      - broadcast-net
+      - broadcastnet
 
   # ===================================================================
   #  COMMON INFRASTRUCTURE SERVICES
@@ -205,7 +209,7 @@ services:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_log:/var/lib/zookeeper/log
     networks:
-      - broadcast-net
+      - broadcastnet
 
   postgres:
     image: postgres:15
@@ -221,12 +225,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
     command: ["-c", "max_connections=300"]
     networks:
-      - broadcast-net
+      - broadcastnet
 
   geode-locator:
     image: apachegeode/geode:1.15.1
     container_name: geode-locator    
-    hostname: locator
+    hostname: geode-locator
     mem_reservation: 768m
     mem_limit: 1g 
     expose:
@@ -242,11 +246,11 @@ services:
     - ./geode-scripts/:/geode-scripts/
     command: /geode-scripts/gfshWrapper.sh gfsh start locator --name=locator --mcast-port=0
     networks:
-      - broadcast-net
+      - broadcastnet
 
   geode-server:
     image: apachegeode/geode:1.15.1
-    container_name: geode-server    
+    container_name: geode-server
     mem_reservation: 1g
     mem_limit: 2g
     expose:
@@ -262,7 +266,21 @@ services:
       geode-locator:
         condition: service_started
     networks:
-    - broadcast-net
+    - broadcastnet
+
+  geode-init:
+      image: apachegeode/geode:1.15.1
+      container_name: geode-init
+      volumes:
+      - ./geode-scripts/:/geode-scripts/
+      command: ["sh", "-c", "chmod +x /geode-scripts/geode-init.sh && /geode-scripts/geode-init.sh"]
+      depends_on:
+        geode-locator:
+          condition: service_started
+        geode-server:
+          condition: service_started
+      networks:
+      - broadcastnet
 
 volumes:
   postgres_data:
