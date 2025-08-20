@@ -1,10 +1,12 @@
 #!/bin/bash
-mkdir -p /data/$HOSTNAME
+set -e
 
-# MODIFIED: Connect to the simple name 'locator'
-gfsh start server --name=$HOSTNAME --locators=locator[10334] --dir=/data/$HOSTNAME/ --hostname-for-clients=localhost "$@"
+echo "--> Starting Geode Server..."
+gfsh start server \
+    --name=$HOSTNAME \
+    --locators=locator[10334] \
+    --dir=/data/$HOSTNAME/ \
+    --hostname-for-clients=localhost "$@"
 
-while true;
-  do
-    sleep 10
-  done
+# Keep the process alive
+wait

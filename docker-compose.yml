@@ -153,8 +153,6 @@ services:
     links:
       - geode-locator:locator
     depends_on:
-      geode-init:
-        condition: service_completed_successfully
       kafka-prod-setup:
         condition: service_completed_successfully
       postgres:
@@ -185,8 +183,6 @@ services:
     links:
       - geode-locator:locator
     depends_on:
-      geode-init:
-        condition: service_completed_successfully
       kafka-prod-setup:
         condition: service_completed_successfully
       postgres:
@@ -249,6 +245,11 @@ services:
     volumes:
     - ./geode-scripts/:/geode-scripts/
     command: /geode-scripts/startLocator.sh
+    healthcheck:
+      test: ["CMD", "gfsh", "-e", "connect --locator=localhost[10334]", "-e", "list members"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
     networks:
       - broadcastnet
 
@@ -268,27 +269,16 @@ services:
     volumes:
     - ./geode-scripts/:/geode-scripts/
     command: /geode-scripts/startServer.sh --server-port=40404 --max-heap=1G
+    healthcheck:
+      test: ["CMD", "gfsh", "-e", "connect --locator=locator[10334]", "-e", "list regions"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
     depends_on:
       geode-locator:
         condition: service_started
     networks:
     - broadcastnet
-
-  geode-init:
-      image: apachegeode/geode:1.15.1
-      container_name: geode-init
-      links:
-      - geode-locator:locator
-      volumes:
-      - ./geode-scripts/:/geode-scripts/
-      command: ["sh", "-c", "chmod +x /geode-scripts/geode-init.sh && /geode-scripts/geode-init.sh"]
-      depends_on:
-        geode-locator:
-          condition: service_started
-        geode-server:
-          condition: service_started
-      networks:
-      - broadcastnet
 
 volumes:
   postgres_data:

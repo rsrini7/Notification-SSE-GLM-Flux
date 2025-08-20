@@ -1,10 +1,16 @@
 #!/bin/bash
 set -e
 
-# Wait for server to be ready
-sleep 5
+# Loop until the connection to the locator is successful
+echo "--> Waiting for Geode locator to be ready..."
+until gfsh -e "connect --locator=locator[10334]" -e "list members"; do
+  echo "--> Locator not available yet. Retrying in 5 seconds..."
+  sleep 5
+done
+echo "--> Connected to locator successfully."
 
-# Connect to locator and create regions
+# Now that we're connected, create the regions
+echo "--> Creating regions..."
 gfsh -e "connect --locator=locator[10334]" \
      -e "create region --name=user-connections --type=REPLICATE" \
      -e "create region --name=connection-to-user --type=REPLICATE" \
@@ -19,4 +25,4 @@ gfsh -e "connect --locator=locator[10334]" \
      -e "create region --name=dlt-armed --type=REPLICATE" \
      -e "create region --name=dlt-failure-ids --type=REPLICATE"
 
-echo "All regions created successfully!"
+echo "--> All regions created successfully!"
