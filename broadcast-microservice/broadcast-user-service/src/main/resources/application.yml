@@ -1,6 +1,9 @@
 server:
   port: 8082 # User service port
   shutdown: graceful
+  netty:
+    worker:
+      thread-name-prefix: "http-nio-" # Custom prefix for web threads
   http2:
     enabled: true
   ssl:
@@ -90,7 +93,6 @@ logging:
     '[org.apache.kafka.clients.consumer.ConsumerConfig]': WARN
     '[org.apache.kafka.clients.producer.ProducerConfig]': WARN
     '[org.apache.kafka.common.metrics]': WARN
-    # '[[org.springframework.kafka.KafkaListenerEndpointContainer]': WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

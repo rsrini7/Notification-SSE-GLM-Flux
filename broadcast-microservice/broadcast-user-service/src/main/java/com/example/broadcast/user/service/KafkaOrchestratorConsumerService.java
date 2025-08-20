@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class KafkaBroadcastOrchestratorService {
+public class KafkaOrchestratorConsumerService {
 
     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
     private final OutboxEventPublisher outboxEventPublisher;

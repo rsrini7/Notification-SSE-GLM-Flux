@@ -18,9 +18,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import reactor.core.scheduler.Schedulers;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 
 import java.util.List;
 import java.util.Map;
@@ -32,13 +32,14 @@ import java.util.Optional;
 public class SseService {
 
     private final UserBroadcastRepository userBroadcastRepository;
-    private final ObjectMapper objectMapper;
     private final BroadcastRepository broadcastRepository;
     private final MessageStatusService messageStatusService;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
     private final CacheService cacheService;
     private final UserMessageService userMessageService;
+    private final ObjectMapper objectMapper;
+    private final Scheduler jdbcScheduler;
 
     @Transactional
     public void registerConnection(String userId, String connectionId) {
@@ -73,7 +74,7 @@ public class SseService {
             }
         })
         // Run this blocking JDBC work on a dedicated scheduler
-        .subscribeOn(Schedulers.boundedElastic())
+        .subscribeOn(this.jdbcScheduler)
         .then() // Ignores the result of the Mono and returns an empty Mono<Void> on completion
         .flux(); // Converts the empty Mono<Void> to an empty Flux<ServerSentEvent<String>>
     }
