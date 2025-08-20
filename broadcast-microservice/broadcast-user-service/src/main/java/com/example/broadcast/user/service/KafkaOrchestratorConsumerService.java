@@ -11,7 +11,6 @@ import com.example.broadcast.shared.service.TestingConfigurationService;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.Region;
@@ -37,7 +36,6 @@ import java.util.stream.Collectors;
 public class KafkaOrchestratorConsumerService {
 
     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
-    private final ObjectMapper objectMapper;
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
     private final UserService userService;
