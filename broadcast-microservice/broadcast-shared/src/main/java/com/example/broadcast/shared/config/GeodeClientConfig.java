@@ -24,8 +24,14 @@ public class GeodeClientConfig {
 
     @Bean(destroyMethod = "close")
     public ClientCache geodeClientCache() {
+
+        String durableClientId = appProperties.getClusterName() + "_" + appProperties.getPod().getId();
+
         return new ClientCacheFactory()
                 .addPoolLocator(appProperties.getGeode().getLocator().getHost(), appProperties.getGeode().getLocator().getPort())
+                .setPoolSubscriptionEnabled(true)
+                .set("durable-client-id", durableClientId)
+                .set("durable-client-timeout", "300") // Timeout in seconds
                 .set("log-level", "config")
                 .create();
     }

@@ -4,11 +4,46 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://geode.incubator.apache.org/schema/cache http://geode.incubator.apache.org/schema/cache/cache-1.0.xsd"
     version="1.0">
-    <cache-server hostname-for-clients="192.168.99.100" />
 
-    <region name="exampleRegion">
-      <region-attributes refid="REPLICATE">
-      </region-attributes>
+    <cache-server>
+        <enable-subscription-conflation>true</enable-subscription-conflation>
+    </cache-server>
+
+    <region name="user-connections">
+        <region-attributes refid="REPLICATE"/>
+    </region>
+    <region name="connection-to-user">
+        <region-attributes refid="REPLICATE"/>
+    </region>
+    <region name="online-users">
+        <region-attributes refid="REPLICATE"/>
+    </region>
+    <region name="pod-connections">
+        <region-attributes refid="REPLICATE"/>
+    </region>
+    <region name="heartbeat">
+        <region-attributes refid="REPLICATE"/>
+    </region>
+    <region name="pending-events">
+        <region-attributes refid="REPLICATE"/>
+    </region>
+    <region name="broadcast-content">
+        <region-attributes refid="REPLICATE"/>
+    </region>
+    <region name="active-group-broadcasts">
+        <region-attributes refid="REPLICATE"/>
+    </region>
+    <region name="user-messages">
+        <region-attributes refid="REPLICATE"/>
+    </region>
+    <region name="sse-messages">
+        <region-attributes refid="REPLICATE"/>
+    </region>
+    <region name="dlt-armed">
+        <region-attributes refid="REPLICATE"/>
+    </region>
+    <region name="dlt-failure-ids">
+        <region-attributes refid="REPLICATE"/>
     </region>
 
 </cache>

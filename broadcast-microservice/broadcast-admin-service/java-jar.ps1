@@ -5,6 +5,9 @@ Remove-Item -Path "logs\*" -Recurse -Force -ErrorAction SilentlyContinue
 # Run the Maven build command
 mvn clean package
 
+# $env:GEODE_LOCATOR_HOST = "localhost"
+# $env:GEODE_LOCATOR_PORT = "10334"
+
 # Run the application
 # Note: In PowerShell, quotes around the -D arguments are not needed.
 Write-Host "Starting admin-service..."

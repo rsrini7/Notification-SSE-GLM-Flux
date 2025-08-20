@@ -249,8 +249,6 @@ services:
     container_name: geode-server    
     mem_reservation: 1g
     mem_limit: 2g
-    links:
-    - geode-locator:geode-locator
     expose:
     - "8080"
     - "40404"
@@ -260,6 +258,9 @@ services:
     volumes:
     - ./geode-scripts/:/geode-scripts/
     command: /geode-scripts/startServer.sh --server-port=40404 --max-heap=1G
+    depends_on:
+      geode-locator:
+        condition: service_started
     networks:
     - broadcast-net
 
