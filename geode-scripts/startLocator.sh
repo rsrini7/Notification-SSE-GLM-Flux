@@ -1,17 +1,16 @@
 #!/bin/bash
 set -e
 
-echo "--> Starting Geode Locator in background..."
-# Start the locator process in the background
-gfsh start locator --name=locator --hostname-for-clients=localhost &
+echo "--> Starting Geode Locator..."
+# The 'start locator' command runs and exits, but the gfsh shell stays open.
+# We add a background sleep loop to keep the container from exiting.
+gfsh <<EOF
+start locator --name=locator --hostname-for-clients=localhost
+EOF
 
-# Capture the Process ID of the locator
-LOCATOR_PID=$!
-echo "--> Locator started with PID: $LOCATOR_PID"
-
-# Run the initialization script to create regions
+echo "--> Locator process started. Running init script..."
 /geode-scripts/geode-init.sh
 
-# Wait for the locator process to exit, which keeps the container running
-echo "--> Initialization complete. Tailing locator logs..."
-wait $LOCATOR_PID
+echo "--> Initialization complete. Locator is running."
+# This infinite loop keeps the container alive
+while true; do sleep 10; done

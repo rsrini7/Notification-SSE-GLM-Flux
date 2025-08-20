@@ -1,17 +1,16 @@
 #!/bin/bash
 set -e
 
-# Loop until the connection to the locator is successful
-echo "--> Waiting for Geode locator to be ready..."
-until gfsh -e "connect --locator=locator[10334]" -e "list members"; do
-  echo "--> Locator not available yet. Retrying in 5 seconds..."
+echo "--> Waiting for Geode locator and server to be ready..."
+# Loop until the server member is visible from the locator
+until gfsh -e "connect --locator=localhost[10334]" -e "list members" | grep -q "$HOSTNAME"; do
+  echo "--> Server not available yet. Retrying in 5 seconds..."
   sleep 5
 done
-echo "--> Connected to locator successfully."
+echo "--> Cluster is ready."
 
-# Now that we're connected, create the regions
 echo "--> Creating regions..."
-gfsh -e "connect --locator=locator[10334]" \
+gfsh -e "connect --locator=localhost[10334]" \
      -e "create region --name=user-connections --type=REPLICATE" \
      -e "create region --name=connection-to-user --type=REPLICATE" \
      -e "create region --name=online-users --type=REPLICATE" \

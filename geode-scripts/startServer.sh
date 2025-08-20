@@ -2,11 +2,10 @@
 set -e
 
 echo "--> Starting Geode Server..."
-gfsh start server \
-    --name=$HOSTNAME \
-    --locators=locator[10334] \
-    --dir=/data/$HOSTNAME/ \
-    --hostname-for-clients=localhost "$@"
+gfsh <<EOF
+start server --name=$HOSTNAME --locators=locator[10334] --hostname-for-clients=localhost $@
+EOF
 
-# Keep the process alive
-wait
+echo "--> Server is running."
+# This infinite loop keeps the container alive
+while true; do sleep 10; done
