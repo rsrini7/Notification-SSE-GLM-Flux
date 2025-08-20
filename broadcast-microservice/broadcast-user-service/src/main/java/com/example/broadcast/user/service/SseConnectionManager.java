@@ -73,7 +73,7 @@ public class SseConnectionManager {
             
             // Emit the event directly into the newly created sink
             sink.tryEmitNext(connectedEvent);
-            log.info("Sent initial CONNECTED event for connection {}", connectionId);
+            log.debug("Sent initial CONNECTED event for connection {}", connectionId);
 
         } catch (JsonProcessingException e) {
             log.error("Error creating CONNECTED event payload for connection {}", connectionId, e);
@@ -90,7 +90,7 @@ public class SseConnectionManager {
         String podName = appProperties.getPod().getId();
         String clusterName = appProperties.getClusterName();
         cacheService.registerUserConnection(userId, connectionId, podName, clusterName);
-        log.info("User connection registered for user: {}, connection: {}, cluster: {}, pod: {}", userId, connectionId, clusterName, podName);
+        log.info("[REGISTER] Connection registered for userId='{}', connection='{}', cluster='{}', pod='{}'", userId, connectionId, clusterName, podName);
     }
     
     public void removeEventStream(String userId, String connectionId) {

@@ -52,7 +52,7 @@ public class UserMessageService {
 
         List<PersistentUserMessageInfo> cachedMessages = cacheService.getCachedUserMessages(userId);
         if (cachedMessages != null && !cachedMessages.isEmpty()) {
-            log.info("Cache HIT for user messages: {}", userId);
+            log.debug("[CACHE_HIT] User inbox found in cache for userId='{}'", userId);
             return cachedMessages.stream()
                 .map(this::enrichUserMessageInfo)
                 .filter(Optional::isPresent)
@@ -60,7 +60,7 @@ public class UserMessageService {
                 .collect(Collectors.toList());
         }
 
-        log.info("Cache MISS for user messages: {}. Fetching from database.", userId);
+        log.info("[CACHE_MISS] User inbox not in cache for userId='{}'. Fetching from database.", userId);
         List<UserBroadcastResponse> dbMessages = userBroadcastRepository.findUserMessagesByUserId(userId);
 
         if (!dbMessages.isEmpty()) {
@@ -105,11 +105,11 @@ public class UserMessageService {
         List<BroadcastMessage> cachedBroadcasts = cacheService.getActiveGroupBroadcasts(cacheKey);
         
         if (cachedBroadcasts != null) {
-            log.debug("Cache HIT for active broadcasts for role: {}", role);
+            log.debug("[CACHE_HIT] Active broadcasts for role='{}' found in cache", role);
             return cachedBroadcasts;
         }
 
-        log.warn("Cache MISS for active broadcasts for role: {}. Fetching from DB.", role);
+        log.info("[CACHE_MISS] Active broadcasts for role='{}' not in cache. Fetching from DB.", role);
         List<BroadcastMessage> dbBroadcasts = broadcastRepository.findActiveBroadcastsByTargetTypeAndIds("ROLE", List.of(role));
         cacheService.cacheActiveGroupBroadcasts(cacheKey, dbBroadcasts);
         return dbBroadcasts;
@@ -120,11 +120,11 @@ public class UserMessageService {
         List<BroadcastMessage> cachedBroadcasts = cacheService.getActiveGroupBroadcasts(cacheKey);
 
         if (cachedBroadcasts != null) {
-            log.debug("Cache HIT for active broadcasts for ALL users");
+            log.debug("[CACHE_HIT] Active broadcasts for 'ALL' users found in cache");
             return cachedBroadcasts;
         }
 
-        log.warn("Cache MISS for active broadcasts for ALL users. Fetching from DB.");
+        log.info("[CACHE_MISS] Active broadcasts for 'ALL' users not in cache. Fetching from DB.");
         List<BroadcastMessage> dbBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType("ALL");
         cacheService.cacheActiveGroupBroadcasts(cacheKey, dbBroadcasts);
         return dbBroadcasts;

@@ -31,11 +31,11 @@ public class BroadcastExpirationService {
     @Transactional
     @SchedulerLock(name = "processExpiredBroadcasts", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     public void processExpiredBroadcasts() {
-        log.info("Checking for expired broadcasts to process...");
+        log.debug("Checking for expired broadcasts to process...");
         List<BroadcastMessage> broadcastsToExpire = broadcastRepository.findExpiredBroadcasts(ZonedDateTime.now(ZoneOffset.UTC));
 
         if (broadcastsToExpire.isEmpty()) {
-            log.info("No expired broadcasts to process at this time.");
+            log.trace("No expired broadcasts to process at this time.");
             return;
         }
 
