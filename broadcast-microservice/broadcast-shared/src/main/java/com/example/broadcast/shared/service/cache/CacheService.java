@@ -1,4 +1,3 @@
-// CORRECTED FILE
 package com.example.broadcast.shared.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
@@ -12,8 +11,6 @@ import java.util.Set;
 
 public interface CacheService {
 
-    // --- UNIFIED CONNECTION MANAGEMENT METHODS ---
-    // CORRECTED SIGNATURE: Added clusterName parameter
     void registerUserConnection(String userId, String connectionId, String podId, String clusterName);
 
     void unregisterUserConnection(String userId, String connectionId);
@@ -26,7 +23,6 @@ public interface CacheService {
     long getTotalActiveUsers();
     long getPodActiveUsers(String podId);
 
-    // --- EXISTING CACHE METHODS ---
     List<String> getOnlineUsers();
     void cacheUserMessages(String userId, List<PersistentUserMessageInfo> messages);
     List<PersistentUserMessageInfo> getCachedUserMessages(String userId);

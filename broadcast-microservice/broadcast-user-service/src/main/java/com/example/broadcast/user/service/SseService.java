@@ -59,9 +59,8 @@ public class SseService {
         return Flux.merge(liveStream, initialMessagesStream.thenMany(Flux.empty()));
     }
 
-    // REPLACE the existing getInitialMessagesFlux method with this corrected version
     private Flux<Void> getInitialMessagesFlux(String userId) {
-        // CORRECTED: Use Mono.fromRunnable for broader compatibility. It is the correct operator for void, blocking tasks.
+
         return Mono.fromRunnable(() -> {
             try {
                 log.info("Starting async fetch of initial messages for user: {}", userId);
