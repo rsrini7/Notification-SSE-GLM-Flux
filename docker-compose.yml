@@ -244,7 +244,7 @@ services:
     - "7070:7070"
     volumes:
     - ./geode-scripts/:/geode-scripts/
-    command: /geode-scripts/gfshWrapper.sh gfsh start locator --name=locator --mcast-port=0
+    command: /geode-scripts/startLocator.sh
     networks:
       - broadcastnet
 
