@@ -167,7 +167,6 @@ broadcast:
   kafka:
     topic:
       name-orchestration: broadcast-orchestration
-      name-worker-prefix: broadcast-user-service
       partitions: 1
       replication-factor: 1
     consumer:

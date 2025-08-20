@@ -38,8 +38,7 @@ public class DltKafkaConsumerService {
     // MODIFIED: The @KafkaListener annotation now points to the two new, simplified DLTs.
     @KafkaListener(
             topics = {
-                "${broadcast.kafka.topic.name-orchestration}" + Constants.DLT_SUFFIX,
-                "${broadcast.kafka.topic.name-worker-prefix}" + Constants.DLT_SUFFIX
+                "${broadcast.kafka.topic.name-orchestration}" + Constants.DLT_SUFFIX
             },
             groupId = "${broadcast.kafka.consumer.group-dlt}",
             containerFactory = "kafkaListenerContainerFactory"
