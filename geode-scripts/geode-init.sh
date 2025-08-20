@@ -5,7 +5,7 @@ set -e
 sleep 5
 
 # Connect to locator and create regions
-gfsh -e "connect --locator=geode-locator[10334]" \
+gfsh -e "connect --locator=locator[10334]" \
      -e "create region --name=user-connections --type=REPLICATE" \
      -e "create region --name=connection-to-user --type=REPLICATE" \
      -e "create region --name=online-users --type=REPLICATE" \

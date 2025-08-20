@@ -150,6 +150,8 @@ services:
       - LOGGING_FILE_NAME=/var/log/app/broadcast-admin-service.log
     volumes:
       - ./logs/admin:/var/log/app
+    links:
+      - geode-locator:locator
     depends_on:
       geode-init:
         condition: service_completed_successfully
@@ -180,6 +182,8 @@ services:
       - POD_NAME=broadcast-user-service-0
     volumes:
       - ./logs/user:/var/log/app
+    links:
+      - geode-locator:locator
     depends_on:
       geode-init:
         condition: service_completed_successfully
@@ -230,7 +234,7 @@ services:
   geode-locator:
     image: apachegeode/geode:1.15.1
     container_name: geode-locator    
-    hostname: geode-locator
+    hostname: locator
     mem_reservation: 768m
     mem_limit: 1g 
     expose:
@@ -251,6 +255,8 @@ services:
   geode-server:
     image: apachegeode/geode:1.15.1
     container_name: geode-server
+    links:
+      - geode-locator:locator
     mem_reservation: 1g
     mem_limit: 2g
     expose:
@@ -271,6 +277,8 @@ services:
   geode-init:
       image: apachegeode/geode:1.15.1
       container_name: geode-init
+      links:
+      - geode-locator:locator
       volumes:
       - ./geode-scripts/:/geode-scripts/
       command: ["sh", "-c", "chmod +x /geode-scripts/geode-init.sh && /geode-scripts/geode-init.sh"]
