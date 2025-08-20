@@ -1,0 +1,1 @@
+docker run -it --rm --network host apachegeode/geode:1.15.1 gfsh
