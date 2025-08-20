@@ -11,7 +11,6 @@ import com.example.broadcast.shared.repository.DltRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.service.TestingConfigurationService;
-import com.example.broadcast.shared.config.AppProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +36,6 @@ public class DltService {
     private final BroadcastRepository broadcastRepository;
     private final MessageStatusService messageStatusService;
     private final TestingConfigurationService testingConfigurationService;
-    private final AppProperties appProperties;
     
     public Collection<DltMessage> getDltMessages() {
         return dltRepository.findAll();
