@@ -12,21 +12,17 @@ data:
     
     # This should be the address of your Kafka service within the Kubernetes cluster.
     KAFKA_BROKERS="kafka-service.broadcast-system.svc.cluster.local:9092"
-    # CLUSTER_NAMES=("cluster-a" "cluster-b")
-    CLUSTER_NAMES=("cluster-a")
-    MAX_REPLICAS=3
 
     # --- Wait for Kafka to be ready ---
     echo "Waiting for Kafka broker at $KAFKA_BROKERS to be ready..."
     # Use a loop with kafka-topics to check for connectivity.
-    until kafka-topics --bootstrap-server $KAFKA_BROKERS --list #> /dev/null 2>&1
+    until kafka-topics --bootstrap-server $KAFKA_BROKERS --list 
     do
       echo "Kafka not ready, sleeping for 5 seconds..."
       sleep 5
     done
     echo "Kafka is ready!"
-
-    # --- Create Singleton Topics ---
+    #--- Create Singleton Topics ---
     ORCHESTRATION_TOPIC="broadcast-orchestration"
     ORCHESTRATION_DLT="${ORCHESTRATION_TOPIC}-dlt"
     WORKER_DLT="broadcast-user-service-dlt"
@@ -36,20 +32,6 @@ data:
     kafka-topics --bootstrap-server $KAFKA_BROKERS --create --if-not-exists --topic $ORCHESTRATION_DLT --partitions 1 --replication-factor 3
     kafka-topics --bootstrap-server $KAFKA_BROKERS --create --if-not-exists --topic $WORKER_DLT --partitions 1 --replication-factor 3
 
-    # --- Create Pod-Specific Worker Topics ---
-    echo ""
-    echo "--- Creating Pod-Specific Worker Topics ---"
-    POD_NAME_PREFIX="broadcast-user-service"
-
-    for cluster in "${CLUSTER_NAMES[@]}"; do
-      for ((i=0; i<$MAX_REPLICAS; i++)); do
-        # The pod name from a StatefulSet is stable: <statefulset-name>-<index>
-        # The app logic will combine the prefix with the pod name's index.
-        # Example topic name: cluster-a-broadcast-user-service-0
-        TOPIC_NAME="${cluster}-${POD_NAME_PREFIX}-${i}"
-        echo "Creating topic: $TOPIC_NAME"
-        kafka-topics --bootstrap-server $KAFKA_BROKERS --create --if-not-exists --topic $TOPIC_NAME --partitions 1 --replication-factor 3
-      done
-    done
+    # --- DELETED: The section for creating pod-specific worker topics has been removed ---
 
     echo "--- Topic creation script finished successfully. ---"

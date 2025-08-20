@@ -1,53 +1,42 @@
 package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
-import com.example.broadcast.shared.exception.MessageProcessingException;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.service.TestingConfigurationService;
 import com.example.broadcast.shared.util.Constants;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.support.Acknowledgment;
-import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.messaging.handler.annotation.Header;
-import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.data.redis.connection.Message;
+import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.stereotype.Service;
+
+import java.io.IOException;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class KafkaWorkerConsumerService {
+public class RedisMessageListener implements MessageListener {
 
+    private final ObjectMapper objectMapper;
     private final SseService sseService;
     private final CacheService cacheService;
     private final TestingConfigurationService testingConfigurationService;
 
-    @KafkaListener(
-        topics = "${broadcast.kafka.topic.name}",
-        groupId = "${broadcast.kafka.consumer.group-worker}",
-        containerFactory = "kafkaListenerContainerFactory"
-    )
-    public void processWorkerEvent(@Payload MessageDeliveryEvent event,
-            Acknowledgment acknowledgment,
-            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
-            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
-            @Header(KafkaHeaders.OFFSET) long offset) {
-        
-        if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
-            log.warn("DLT TEST MODE: Simulating failure for broadcast ID: {}", event.getBroadcastId());
-            throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
-        }
-
-        log.info("[WORKER_KAFKA_CONSUME] Processing event for broadcastId='{}', userId='{}', eventType='{}'",
-             event.getBroadcastId(), event.getUserId(), event.getEventType());
-
-        // Log statement now includes full message coordinates.
-        log.debug("Worker received event. [Topic: {}, Partition: {}, Offset: {}] Payload: {}", 
-                  topic, partition, offset, event);
-
+    @Override
+    public void onMessage(Message message, byte[] pattern) {
         try {
-            // Use a switch to handle all possible event types
+            MessageDeliveryEvent event = objectMapper.readValue(message.getBody(), MessageDeliveryEvent.class);
+            
+            if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
+                log.warn("DLT TEST MODE: Simulating failure for broadcast ID via Redis Pub/Sub: {}", event.getBroadcastId());
+                throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
+            }
+
+            log.info("[WORKER_REDIS_CONSUME] Processing event for broadcastId='{}', userId='{}', eventType='{}'",
+                 event.getBroadcastId(), event.getUserId(), event.getEventType());
+            log.debug("Worker received event from Redis channel '{}'. Payload: {}", new String(pattern), event);
+            
             switch (Constants.EventType.valueOf(event.getEventType())) {
                 case CREATED:
                     handleBroadcastCreated(event);
@@ -62,12 +51,14 @@ public class KafkaWorkerConsumerService {
                     handleBroadcastExpired(event);
                     break;
                 default:
-                    log.warn("Unhandled event type on worker topic: {}", event.getEventType());
+                    log.warn("Unhandled event type on worker channel: {}", event.getEventType());
             }
-            acknowledgment.acknowledge();
+        } catch (IOException e) {
+            log.error("Failed to deserialize message from Redis Pub/Sub. Raw message: {}", new String(message.getBody()), e);
         } catch (Exception e) {
-            log.error("Failed to process worker event. Root cause: {}", e.getMessage(), e);
-            throw new MessageProcessingException("Failed to process worker event", e, event);
+            log.error("Failed to process worker event from Redis Pub/Sub. Root cause: {}", e.getMessage(), e);
+            // In a production system, you might add more robust error handling here,
+            // but since Redis Pub/Sub is fire-and-forget, there's no acknowledgment or DLT.
         }
     }
 

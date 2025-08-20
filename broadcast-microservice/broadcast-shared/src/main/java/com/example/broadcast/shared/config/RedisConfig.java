@@ -9,10 +9,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import java.util.List;
+import java.util.concurrent.Executor; 
 
 @Configuration
 public class RedisConfig {
@@ -22,6 +25,35 @@ public class RedisConfig {
         StringRedisTemplate template = new StringRedisTemplate();
         template.setConnectionFactory(connectionFactory);
         return template;
+    }
+
+    // ADDED: A dedicated RedisTemplate for Pub/Sub using String serializers for simplicity
+    @Bean("pubSubRedisTemplate")
+    public RedisTemplate<String, String> pubSubRedisTemplate(RedisConnectionFactory connectionFactory) {
+        StringRedisTemplate template = new StringRedisTemplate();
+        template.setConnectionFactory(connectionFactory);
+        return template;
+    }
+
+    // ADDED: The listener container that manages subscriptions and message dispatching
+    @Bean
+    public RedisMessageListenerContainer redisMessageListenerContainer(RedisConnectionFactory connectionFactory, Executor redisTaskExecutor) {
+        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
+        container.setConnectionFactory(connectionFactory);
+        container.setTaskExecutor(redisTaskExecutor);
+        return container;
+    }
+
+    // ADDED: A dedicated thread pool for the Redis listeners to prevent blocking
+    @Bean
+    public Executor redisTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(10);
+        executor.setMaxPoolSize(20);
+        executor.setQueueCapacity(1000);
+        executor.setThreadNamePrefix("redis-listener-");
+        executor.initialize();
+        return executor;
     }
 
     @Bean

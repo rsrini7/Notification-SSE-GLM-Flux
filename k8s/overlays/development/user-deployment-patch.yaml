@@ -1,13 +1,9 @@
 # Patches for the user service deployment
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: broadcast-user-service
 spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: broadcast-user-service
   template:
     spec:
       containers:

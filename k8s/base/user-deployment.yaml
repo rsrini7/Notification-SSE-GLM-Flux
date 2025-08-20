@@ -1,12 +1,18 @@
-# file: k8s/base/user-statefulset.yaml
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: broadcast-user-service
   namespace: broadcast-system
+  labels:
+    app: broadcast-user-service
+    version: v1
 spec:
-  serviceName: "broadcast-user-service"
   replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: "25%"
+      maxUnavailable: "25%"
   selector:
     matchLabels:
       app: broadcast-user-service

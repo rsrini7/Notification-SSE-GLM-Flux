@@ -2,9 +2,7 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
-import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
-import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.model.BroadcastMessage;
@@ -17,6 +15,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.RedisTemplate; 
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
@@ -26,8 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.stream.Collectors;
@@ -38,12 +36,14 @@ import java.util.stream.Collectors;
 public class KafkaOrchestratorConsumerService {
 
     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
-    private final OutboxEventPublisher outboxEventPublisher;
     private final ObjectMapper objectMapper;
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
     private final UserService userService;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
+
+    @Qualifier("pubSubRedisTemplate")
+    private final RedisTemplate<String, String> pubSubRedisTemplate;
 
     @KafkaListener(
         topics = "${broadcast.kafka.topic.name-orchestration}",
@@ -58,7 +58,6 @@ public class KafkaOrchestratorConsumerService {
             Acknowledgment acknowledgment) {
 
         log.info("Orchestration event received for type '{}' on broadcast ID: {}. [Topic: {}, Partition: {}, Offset: {}]", event.getEventType(), event.getBroadcastId(), topic, partition, offset);
-
         BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId()).orElse(null);
 
         if (broadcast == null) {
@@ -67,8 +66,7 @@ public class KafkaOrchestratorConsumerService {
             return;
         }
 
-        final List<String> targetUsers = determineTargetUsers(broadcast,event);
-
+        final List<String> targetUsers = determineTargetUsers(broadcast, event);
         if (targetUsers.isEmpty()) {
             log.warn("Orchestrator found no target users for broadcast ID {}. No events will be scattered.", broadcast.getId());
         } else {
@@ -78,25 +76,27 @@ public class KafkaOrchestratorConsumerService {
                 initializeStatistics(broadcast.getId(), targetUsers.size());
             }
 
-            log.info("Scattering {} user-specific '{}' events to worker topics for broadcast ID {}", targetUsers.size(), event.getEventType(), broadcast.getId());
-            List<OutboxEvent> eventsToPublish = targetUsers.stream()
-                .map(userId -> {
-                    Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
-                    if (!userConnections.isEmpty()) {
-                        UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
-                        String workerTopicName = connectionInfo.getClusterName() + "-" + connectionInfo.getPodId();
-                        return createWorkerOutboxEvent(event, userId, workerTopicName);
-                    } else {
-                        log.debug("User {} is offline. Caching pending event for broadcast {}.", userId, event.getBroadcastId());
-                        cacheService.cachePendingEvent(event.toBuilder().userId(userId).build());
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+            log.info("Scattering {} user-specific '{}' events to Redis channels for broadcast ID {}", targetUsers.size(), event.getEventType(), broadcast.getId());
             
-            if (!eventsToPublish.isEmpty()) {
-                outboxEventPublisher.publishBatch(eventsToPublish);
+            // MODIFIED: This entire block is changed to publish to Redis
+            for (String userId : targetUsers) {
+                Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
+                if (!userConnections.isEmpty()) {
+                    UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
+                    String channelName = "notifications:" + connectionInfo.getClusterName() + ":" + connectionInfo.getPodId();
+                    
+                    MessageDeliveryEvent userSpecificEvent = event.toBuilder().userId(userId).build();
+                    
+                    try {
+                        String payloadJson = objectMapper.writeValueAsString(userSpecificEvent);
+                        pubSubRedisTemplate.convertAndSend(channelName, payloadJson);
+                    } catch (JsonProcessingException e) {
+                        log.error("Could not serialize payload for user {}. Event will be skipped.", userId, e);
+                    }
+                } else {
+                    log.debug("User {} is offline. Caching pending event for broadcast {}.", userId, event.getBroadcastId());
+                    cacheService.cachePendingEvent(event.toBuilder().userId(userId).build());
+                }
             }
         }
         
@@ -137,28 +137,6 @@ public class KafkaOrchestratorConsumerService {
             return broadcast.getTargetIds();
         }
         return Collections.emptyList();
-    }
-
-    private OutboxEvent createWorkerOutboxEvent(MessageDeliveryEvent originalEvent, String userId, String topicName) {
-        MessageDeliveryEvent userSpecificEvent = originalEvent.toBuilder()
-                .eventId(UUID.randomUUID().toString())
-                .userId(userId)
-                .build();
-        try {
-            String payloadJson = objectMapper.writeValueAsString(userSpecificEvent);
-            return OutboxEvent.builder()
-                    .id(UUID.fromString(userSpecificEvent.getEventId()))
-                    .aggregateType(userSpecificEvent.getClass().getSimpleName())
-                    .aggregateId(userSpecificEvent.getUserId())
-                    .eventType(userSpecificEvent.getEventType())
-                    .topic(topicName)
-                    .payload(payloadJson)
-                    .createdAt(userSpecificEvent.getTimestamp())
-                    .build();
-        } catch (JsonProcessingException e) {
-            log.error("Could not serialize payload for user {}. Event will be skipped.", userId, e);
-            return null;
-        }
     }
 
     private void initializeStatistics(Long broadcastId, int totalTargeted) {
