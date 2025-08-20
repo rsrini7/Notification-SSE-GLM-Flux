@@ -144,7 +144,7 @@ services:
       - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g
       - SPRING_PROFILES_ACTIVE=dev-pg,admin-only
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
-      - SPRING_DATA_REDIS_HOST=redis
+      - GEODE_HOST=geode-locator
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-admin-service.log
     volumes:
@@ -154,7 +154,7 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_started
-      redis:
+      geode-server:
         condition: service_started
     networks:
       - broadcast-net
@@ -169,7 +169,7 @@ services:
       - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g    
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
-      - SPRING_DATA_REDIS_HOST=redis
+      - GEODE_HOST=geode-locator
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-user-service.log
       - CLUSTER_NAME=cluster-a
@@ -181,7 +181,7 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_started
-      redis:
+      geode-server:
         condition: service_started
       admin-service:
         condition: service_started
@@ -221,19 +221,44 @@ services:
     networks:
       - broadcast-net
 
-  redis:
-    image: redis:7-alpine
-    container_name: redis_cache
+  geode-locator:
+    image: apachegeode/geode:1.15.1
+    hostname: locator
+    mem_limit: 512m
+    expose:
+    - "10334"
+    - "1099"
+    - "7575"
     ports:
-      - "6379:6379"
+    - "1099:1099"
+    - "10334:10334"
+    - "7575:7575"
+    - "7070:7070"
     volumes:
-      - redis_data:/data
+    - ./geode-scripts/:/geode-scripts/
+    command: /geode-scripts/gfshWrapper.sh gfsh start locator --name=locator --mcast-port=0
     networks:
       - broadcast-net
 
+  geode-server:
+    image: apachegeode/geode:1.15.1
+    mem_limit: 2g
+    links:
+    - geode-locator:geode-locator
+    expose:
+    - "8080"
+    - "40404"
+    - "1099"
+    ports:
+    - "40404"
+    volumes:
+    - ./geode-scripts/:/geode-scripts/
+    command: /geode-scripts/startServer.sh --server-port=40404 --max-heap=1G
+    networks:
+    - broadcast-net
+
 volumes:
   postgres_data:
-  redis_data:
   zookeeper_data:
   zookeeper_log:
   kafka_data_dev:

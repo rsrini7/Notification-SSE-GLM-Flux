@@ -35,10 +35,6 @@ spring:
       mode: always
       schema-locations: classpath:sql/schema.sql
       data-locations: classpath:sql/data.sql
-  data:
-    redis:
-      host: localhost
-      port: 6379
 
   # Kafka Configuration
   kafka:
@@ -75,7 +71,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,env,metrics,prometheus,circuitbreakers,bulkheads,ratelimiters,redis-cache-stats
+        include: health,info,env,metrics,prometheus,circuitbreakers,bulkheads,ratelimiters
   endpoint:
     health:
       show-details: always
@@ -84,7 +80,7 @@ management:
       validate-group-membership: false
       group:
         readiness:
-          include: db,kafka,redis
+          include: db,kafka
         liveness:
           include: ping
 
@@ -136,6 +132,7 @@ resilience4j:
 broadcast:
   service:
     name: broadcast-admin-service
+
   h2-console:
     web-port: "8084" # Admin H2 Console on port 8084
     tcp-port: "9094"
@@ -147,18 +144,6 @@ broadcast:
   sse:
     timeout: 300000
     heartbeat-interval: 30000
-
-  # Redis Cache Configuration
-  cache:
-    user-connections:
-      maximum-size: 50000
-      expire-after-access: PT1H
-    user-messages:
-      maximum-size: 100000
-      expire-after-write: PT24H
-    pending-events:
-      maximum-size: 50000
-      expire-after-write: PT6H
 
   # Database Configuration
   db:
@@ -173,6 +158,12 @@ broadcast:
       replication-factor: 1
     consumer:
       group-dlt: "broadcast-dlt-group"
+  
+  geode:
+    locator:
+      host: localhost
+      port: 10334
+      
 
 ---
 # PostgreSQL-specific profile

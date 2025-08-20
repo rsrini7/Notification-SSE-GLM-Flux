@@ -1,61 +1,47 @@
 package com.example.broadcast.shared.service;
 
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.geode.cache.Region;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
 @Slf4j
 public class TestingConfigurationService {
 
-    private final RedisTemplate<String, String> dltTestRedisTemplate;
+    private final Region<String, Boolean> dltArmedRegion;
+    private final Region<Long, Boolean> dltFailureIdsRegion;
+    
+    private static final String DLT_ARMED_KEY = "DLT_SYSTEM_ARMED";
 
-    private static final String DLT_FAILURE_IDS_KEY = "dlt-failure:broadcast-ids";
-    private static final String DLT_ARMED_KEY = "dlt-failure:armed";
-
-    public TestingConfigurationService(@Qualifier("dltTestRedisTemplate") RedisTemplate<String, String> dltTestRedisTemplate) {
-        this.dltTestRedisTemplate = dltTestRedisTemplate;
-    }
-
-    @PostConstruct
-    public void checkBean() {
-        // This log will run once on startup and tell us exactly what kind of bean was injected.
-        log.debug("[DEBUG-REDIS] Injected RedisTemplate bean of class: {}", dltTestRedisTemplate.getClass().getName());
+    public TestingConfigurationService(
+            @Qualifier("dltArmedRegion") Region<String, Boolean> dltArmedRegion,
+            @Qualifier("dltFailureIdsRegion") Region<Long, Boolean> dltFailureIdsRegion) {
+        this.dltArmedRegion = dltArmedRegion;
+        this.dltFailureIdsRegion = dltFailureIdsRegion;
     }
 
     public void setArm(boolean shouldArm) {
-        log.info("[DEBUG-REDIS] Attempting to set 'armed' status to: {}", shouldArm);
         if (shouldArm) {
-            dltTestRedisTemplate.opsForValue().set(DLT_ARMED_KEY, "true");
-            // VERIFICATION STEP: Immediately read the key back
-            String verification = dltTestRedisTemplate.opsForValue().get(DLT_ARMED_KEY);
-            log.debug("[DEBUG-REDIS] Read-after-write verification for 'armed' key. Result: '{}'", verification);
+            dltArmedRegion.put(DLT_ARMED_KEY, true);
         } else {
-            dltTestRedisTemplate.delete(DLT_ARMED_KEY);
-            log.debug("[DEBUG-REDIS] Deleted 'armed' key.");
+            dltArmedRegion.remove(DLT_ARMED_KEY);
         }
     }
 
     public boolean isArmed() {
-        return Boolean.TRUE.equals(dltTestRedisTemplate.hasKey(DLT_ARMED_KEY));
+        return dltArmedRegion.containsKey(DLT_ARMED_KEY);
     }
 
     public boolean consumeArmedState() {
-        log.debug("[DEBUG-REDIS] Attempting to consume 'armed' key...");
-        boolean wasArmed = dltTestRedisTemplate.opsForValue().getAndDelete(DLT_ARMED_KEY) != null;
-        log.debug("[DEBUG-REDIS] Consumed 'armed' key. Was present: {}", wasArmed);
-        return wasArmed;
+        // region.remove(key, value) is an atomic check-and-remove operation.
+        // It returns true only if the key was present and its value was equal to the specified value.
+        return dltArmedRegion.remove(DLT_ARMED_KEY, true);
     }
 
     public void markBroadcastForFailure(Long broadcastId) {
         if (broadcastId != null) {
-            log.debug("[DEBUG-REDIS] Attempting to mark broadcast ID {} for failure...", broadcastId);
-            dltTestRedisTemplate.opsForSet().add(DLT_FAILURE_IDS_KEY, String.valueOf(broadcastId));
-            // VERIFICATION STEP: Immediately check if the member was added
-            boolean isMember = Boolean.TRUE.equals(dltTestRedisTemplate.opsForSet().isMember(DLT_FAILURE_IDS_KEY, String.valueOf(broadcastId)));
-            log.debug("[DEBUG-REDIS] Read-after-write verification for broadcast ID {}. Is member: {}", broadcastId, isMember);
+            dltFailureIdsRegion.put(broadcastId, true);
         }
     }
 
@@ -63,12 +49,12 @@ public class TestingConfigurationService {
         if (broadcastId == null) {
             return false;
         }
-        return Boolean.TRUE.equals(dltTestRedisTemplate.opsForSet().isMember(DLT_FAILURE_IDS_KEY, String.valueOf(broadcastId)));
+        return dltFailureIdsRegion.containsKey(broadcastId);
     }
 
     public void clearFailureMark(Long broadcastId) {
         if (broadcastId != null) {
-            dltTestRedisTemplate.opsForSet().remove(DLT_FAILURE_IDS_KEY, String.valueOf(broadcastId));
+            dltFailureIdsRegion.remove(broadcastId);
         }
     }
 }

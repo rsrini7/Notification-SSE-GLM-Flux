@@ -17,7 +17,7 @@ import org.springframework.context.annotation.ComponentScan;
  * - Real-time SSE delivery for online users
  * - Persistent message storage in h2 Database
  * - Kafka-based event streaming for fan-out
- * - Redis caching for low-latency operations
+ * - Geode caching for low-latency operations
  * - Support for 400K+ users with 30K+ concurrent connections
  */
 @SpringBootApplication

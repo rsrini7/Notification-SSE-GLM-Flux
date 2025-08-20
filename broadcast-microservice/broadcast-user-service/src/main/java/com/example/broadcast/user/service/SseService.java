@@ -162,7 +162,7 @@ public class SseService {
     }
 
     private void sendPendingMessages(String userId) {
-        // 1. First, check the Redis cache for any recently missed messages.
+        // 1. First, check the Geode cache for any recently missed messages.
         List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
         
         if (pendingEvents != null && !pendingEvents.isEmpty()) { 
