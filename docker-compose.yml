@@ -266,8 +266,8 @@ services:
     - "1099"
     ports:
     - "40404"
-    environment:
-      - GEODE_OPTS=-Dgemfire.subscription-conflation-enabled=true
+    # environment:
+    #   - GEODE_OPTS=-Dgemfire.subscription-conflation-enabled=true
     volumes:
     - ./geode-scripts/:/geode-scripts/
     command: /geode-scripts/startServer.sh --server-port=40404 --max-heap=1G
