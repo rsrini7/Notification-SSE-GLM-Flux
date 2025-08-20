@@ -144,7 +144,8 @@ services:
       - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g
       - SPRING_PROFILES_ACTIVE=dev-pg,admin-only
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
-      - GEODE_HOST=geode-locator
+      - GEODE_LOCATOR_HOST=geode-locator
+      - GEODE_LOCATOR_PORT=10334
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-admin-service.log
     volumes:
@@ -169,7 +170,8 @@ services:
       - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g    
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
-      - GEODE_HOST=geode-locator
+      - GEODE_LOCATOR_HOST=geode-locator
+      - GEODE_LOCATOR_PORT=10334
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-user-service.log
       - CLUSTER_NAME=cluster-a
@@ -223,8 +225,10 @@ services:
 
   geode-locator:
     image: apachegeode/geode:1.15.1
+    container_name: geode-locator    
     hostname: locator
-    mem_limit: 512m
+    mem_reservation: 768m
+    mem_limit: 1g 
     expose:
     - "10334"
     - "1099"
@@ -242,6 +246,8 @@ services:
 
   geode-server:
     image: apachegeode/geode:1.15.1
+    container_name: geode-server    
+    mem_reservation: 1g
     mem_limit: 2g
     links:
     - geode-locator:geode-locator
