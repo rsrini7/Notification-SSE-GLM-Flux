@@ -2,7 +2,6 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.service.cache.CacheService;
-import com.example.broadcast.shared.service.TestingConfigurationService;
 import com.example.broadcast.shared.util.Constants;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -21,18 +20,12 @@ public class RedisMessageListener implements MessageListener {
     private final ObjectMapper objectMapper;
     private final SseService sseService;
     private final CacheService cacheService;
-    private final TestingConfigurationService testingConfigurationService;
 
     @Override
     public void onMessage(Message message, byte[] pattern) {
         try {
             MessageDeliveryEvent event = objectMapper.readValue(message.getBody(), MessageDeliveryEvent.class);
             
-            if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
-                log.warn("DLT TEST MODE: Simulating failure for broadcast ID via Redis Pub/Sub: {}", event.getBroadcastId());
-                throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
-            }
-
             log.info("[WORKER_REDIS_CONSUME] Processing event for broadcastId='{}', userId='{}', eventType='{}'",
                  event.getBroadcastId(), event.getUserId(), event.getEventType());
             log.debug("Worker received event from Redis channel '{}'. Payload: {}", new String(pattern), event);

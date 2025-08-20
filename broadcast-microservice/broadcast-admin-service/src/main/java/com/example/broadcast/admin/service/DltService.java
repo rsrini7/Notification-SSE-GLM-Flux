@@ -169,11 +169,6 @@ public class DltService {
      * @return The correct DLT topic name.
      */
     private String resolveDltTopicName(String originalTopic) {
-        String workerTopicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
-        if (originalTopic != null && originalTopic.contains(workerTopicPrefix)) {
-            return workerTopicPrefix + Constants.DLT_SUFFIX;
-        }
-        // Fallback for orchestration topic or other potential topics
         return originalTopic + Constants.DLT_SUFFIX;
     }
 }

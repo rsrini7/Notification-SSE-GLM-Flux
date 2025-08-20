@@ -4,15 +4,11 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
-// import org.springframework.boot.context.properties.ConfigurationProperties;
-// import org.springframework.context.annotation.Configuration;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Duration;
 
-// @Configuration
-// @ConfigurationProperties(prefix = "broadcast")
 @Data
 @Validated
 public class AppProperties {
@@ -102,8 +98,6 @@ public class AppProperties {
         public static class Topic {
             @NotBlank
             private String nameOrchestration = "broadcast-orchestration";
-            @NotBlank
-            private String nameWorkerPrefix = "broadcast-user-service"; // Prefix for pod-specific topics
             @Positive
             private int partitions = 1;
             @Positive
@@ -114,8 +108,6 @@ public class AppProperties {
         public static class Consumer {
             @NotBlank
             private String groupOrchestration = "broadcast-orchestration-group"; // Static group for the leader
-            @NotBlank
-            private String groupWorker = "broadcast-worker-group"; // Static group for workers
             @NotBlank
             private String groupDlt = "broadcast-dlt-group";
         }

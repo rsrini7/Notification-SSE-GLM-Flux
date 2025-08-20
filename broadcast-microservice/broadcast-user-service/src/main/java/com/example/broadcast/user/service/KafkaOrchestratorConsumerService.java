@@ -10,6 +10,7 @@ import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.model.BroadcastStatistics;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.service.UserService;
+import com.example.broadcast.shared.service.TestingConfigurationService;
 import java.util.Collections;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,6 +42,7 @@ public class KafkaOrchestratorConsumerService {
     private final BroadcastRepository broadcastRepository;
     private final UserService userService;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
+    private final TestingConfigurationService testingConfigurationService;
 
     @Qualifier("pubSubRedisTemplate")
     private final RedisTemplate<String, String> pubSubRedisTemplate;
@@ -58,6 +60,12 @@ public class KafkaOrchestratorConsumerService {
             Acknowledgment acknowledgment) {
 
         log.info("Orchestration event received for type '{}' on broadcast ID: {}. [Topic: {}, Partition: {}, Offset: {}]", event.getEventType(), event.getBroadcastId(), topic, partition, offset);
+       
+        if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
+            log.warn("DLT TEST MODE: Simulating failure for broadcast ID via Redis Pub/Sub: {}", event.getBroadcastId());
+            throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
+        }
+
         BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId()).orElse(null);
 
         if (broadcast == null) {
