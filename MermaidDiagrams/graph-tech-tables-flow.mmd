@@ -1,0 +1,36 @@
+graph TD
+    subgraph "1- Action & Transaction"
+        direction LR
+        A[Admin creates/updates a broadcast] --> B(broadcast_messages Table);
+        B -- "Triggers" --> C{Transactional Outbox Logic};
+        C --> D(outbox_events Table);
+        D -- "Stores a serialized<br/>MessageDeliveryEvent" --> C;
+    end
+
+    subgraph "2- Event Publishing"
+        E[Outbox Poller Service] -- "Reads from" --> D;
+        E -- "Publishes to" --> F[Kafka Broker];
+    end
+
+    subgraph "3- Event Consumption & Outcome"
+        F -- "Delivers to" --> G[User Service Consumer];
+        G --> H{"Process Event"};
+        H -- "Success" --> I["Update user_broadcast_messages<br/>(e.g., status = DELIVERED)"];
+        H -- "Failure after retries" --> J[Message sent to DLT Topic];
+    end
+
+    subgraph "4- DLT Persistence"
+        J -- "Consumed by DLT Listener" --> K[dlt_messages Table];
+        K -- "Stores the original failed<br/>MessageDeliveryEvent payload" --> J;
+    end
+
+    %% Styling
+    classDef table fill:#e0f2fe,stroke:#0ea5e9,stroke-width:2px;
+    classDef logic fill:#fef9c3,stroke:#eab308,stroke-width:2px;
+    classDef service fill:#dcfce7,stroke:#22c55e,stroke-width:2px;
+    classDef kafka fill:#f3e8ff,stroke:#a855f7,stroke-width:2px;
+
+    class B,D,I,K table;
+    class C,H logic;
+    class A,E,G service;
+    class F,J kafka;

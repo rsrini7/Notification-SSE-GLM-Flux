@@ -34,10 +34,11 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                 ...prev,
                 category: 'Force Logoff',
                 priority: 'URGENT',
+                content: 'FireAndForget',
                 scheduledAt: '',
                 expiresAt: '' // Clear expiresAt initially; it will be set on submit
             }));
-        } else if ((formData.targetType === 'ALL' || formData.targetType === 'ROLE') && formData.scheduleType === 'fireAndForget') {
+        } else if ((formData.targetType === 'ALL' || formData.targetType === 'ROLE' || formData.targetType === 'PRODUCT') && formData.scheduleType === 'fireAndForget') {
              setFormData(prev => ({
                 ...prev,
                 scheduleType: 'immediate' // Reset to default
@@ -62,7 +63,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
         // Calculate expiresAt for Fire and Forget at the moment of submission
         let finalExpiresAt = formData.expiresAt ? new Date(formData.expiresAt).toISOString() : undefined;
         if (formData.scheduleType === 'fireAndForget') {
-            finalExpiresAt = new Date(Date.now() + 30000).toISOString();
+            finalExpiresAt = new Date(Date.now() + 10000).toISOString();
         }
 
         const payload: BroadcastRequest = {
@@ -128,6 +129,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                                     <SelectItem value="ALL" disabled={formData.scheduleType === 'fireAndForget'}>All Users</SelectItem>
                                     <SelectItem value="SELECTED">Selected Users</SelectItem>
                                     <SelectItem value="ROLE" disabled={formData.scheduleType === 'fireAndForget'}>By Role</SelectItem>
+                                    <SelectItem value="PRODUCT" disabled={formData.scheduleType === 'fireAndForget'}>By Product</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -149,9 +151,13 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                         </div>
                     </div>
 
-                    {(formData.targetType === 'SELECTED' || formData.targetType === 'ROLE') && (
+                    {(formData.targetType === 'SELECTED' || formData.targetType === 'ROLE' || formData.targetType === 'PRODUCT') && (
                         <div className="grid gap-1.5">
-                            <Label htmlFor="targetIds">{formData.targetType === 'SELECTED' ? 'User IDs (comma-separated)' : 'Role IDs (comma-separated)'}</Label>
+                            <Label htmlFor="targetIds">{
+                                formData.targetType === 'SELECTED' ? 'User IDs (comma-separated)' :
+                                formData.targetType === 'ROLE' ? 'Role IDs (comma-separated)' :
+                                'Product IDs (e.g., Payments)'
+                            }</Label>
                             <Input id="targetIds" placeholder={formData.targetType === 'SELECTED' ? 'user-001, user-002' : 'admin, moderator'} value={formData.targetIds} onChange={(e) => setFormData(prev => ({ ...prev, targetIds: e.target.value }))} required />
                         </div>
                     )}
@@ -164,7 +170,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
                                 <SelectContent position="popper" sideOffset={20}>
                                     <SelectItem value="immediate">Publish Immediately</SelectItem>
                                     <SelectItem value="scheduled">Schedule for Later</SelectItem>
-                                    <SelectItem value="fireAndForget" disabled={formData.targetType === 'ALL' || formData.targetType === 'ROLE'}>Fire and Forget</SelectItem>
+                                    <SelectItem value="fireAndForget" disabled={formData.targetType === 'ALL' || formData.targetType === 'ROLE' || formData.targetType === 'PRODUCT'}>Fire and Forget</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

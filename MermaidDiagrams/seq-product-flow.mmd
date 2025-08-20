@@ -1,0 +1,28 @@
+sequenceDiagram
+    participant AdminUI as Admin UI
+    participant AdminSvc as BroadcastLifecycleService
+    participant TargetingSvc as BroadcastTargetingService (Async)
+    participant DB as PostgreSQL DB
+    participant Scheduler as BroadcastSchedulingService
+
+    AdminUI->>+AdminSvc: 1- POST /broadcasts (targetType=PRODUCT)
+    AdminSvc->>+DB: 2- INSERT broadcast_message (status='PREPARING')
+    DB-->>-AdminSvc: Returns new Broadcast ID
+    AdminSvc-->>-AdminUI: 3- Returns 202 Accepted (Immediately)
+    
+    AdminSvc-)+TargetingSvc: 4- precomputeAndStoreTargetUsers() [Async Call]
+    Note over TargetingSvc, DB: 5- Long-running user fetch starts...
+
+    TargetingSvc->>DB: 6- INSERT user list into broadcast_user_targets
+    TargetingSvc->>DB: 7- UPDATE broadcast_message SET status='READY'
+    
+    deactivate TargetingSvc
+    
+    Note over Scheduler, DB: ...Time passes...
+    
+    Scheduler->>+DB: 8- Finds READY broadcasts
+    DB-->>-Scheduler: Returns the broadcast
+    
+    Scheduler->>+AdminSvc: 9- processReadyBroadcast()
+    AdminSvc->>DB: 10- UPDATE status to 'ACTIVE' & Write to Outbox
+    Note over AdminSvc: 11- Fan-out to Kafka via Orchestrator begins...

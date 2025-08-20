@@ -1,89 +1,68 @@
 graph TD
     subgraph "Frontend"
-        AdminUser[Admin User]
-        ReactUI[React Frontend App]
+        AdminUI[Admin UI]
     end
 
-    subgraph "Admin Service"
-        direction LR
-        AdminAPI["API Layer"]
+    subgraph "Admin Service (Control Plane)"
+        AdminAPI["1- API Layer"]
+        LifecycleSvc["2- BroadcastLifecycleService"]
         
-        subgraph "Business Logic & Schedulers"
-            LifecycleSvc[BroadcastLifecycleService]
-            TargetingSvc["TargetingService <br/> (Async User Fetch)"]
-            PrecompScheduler["Pre-computation Scheduler <br/> (SCHEDULED -> PREPARING)"]
-            ActivationScheduler["Activation Scheduler <br/> (READY -> ACTIVE)"]
-            OutboxPoller[Outbox Poller]
+        subgraph "Background Processing Schedulers"
+            direction TB
+            PrecomputationScheduler["4a- Precomputation Scheduler<br/>(Runs every minute for PRODUCT)"]
+            ActivationScheduler["6- Activation Scheduler<br/>(Runs every minute)"]
+            OutboxPoller["8- Outbox Polling Service<br/>(Runs every 2s)"]
         end
+        AsyncPrecomputation["5a- Async Precomputation<br/>(TargetingService)"]
     end
     
-    subgraph "User Service"
-        direction LR
-        subgraph "Kafka Consumers"
-            OrchestratorConsumer["Orchestrator Consumer (Leader)"]
-            WorkerConsumer[Worker Consumer]
-        end
-        SseService[SseService]
+    subgraph "User Service (Delivery Plane)"
+        OrchestratorConsumer["10- Orchestrator Consumer"]
+        WorkerConsumer["12- Worker Consumer"]
+        SseService["13- SSE Service"]
     end
 
     subgraph "Shared Infrastructure"
-        Kafka[Kafka Broker]
-        Postgres["PostgreSQL DB <br/> - broadcast_messages <br/> - broadcast_user_targets <br/> - outbox_events"]
-        Redis["Redis Cache <br/> - online-users <br/> - pending-events"]
+        Postgres["PostgreSQL DB"]
+        Kafka["Kafka Broker"]
+        Redis["Redis Cache"]
     end
 
-    %% Define Styles
-    classDef frontend fill:#d4edff,stroke:#333
-    classDef admin fill:#fff2cc,stroke:#333
-    classDef user fill:#e2f0d9,stroke:#333
-    classDef infra fill:#cce5ff,stroke:#333
+    %% --- 1- CREATION & TRIAGE ---
+    AdminUI --> AdminAPI --> LifecycleSvc --> CreationLogic{"3- Creation Logic"}
+
+    CreationLogic -- "Immediate ALL/ROLE/SELECTED" --> SaveActiveAndOutbox["DB: status=ACTIVE<br/>INSERT into outbox_events"]
+    CreationLogic -- "Immediate PRODUCT" --> SavePreparing["DB: status=PREPARING"]
+    CreationLogic -- "Scheduled PRODUCT" --> SaveScheduledProduct["DB: status=SCHEDULED<br/>targetType=PRODUCT"]
+    CreationLogic -- "Scheduled ALL/ROLE/SELECTED" --> SaveScheduledOther["DB: status=SCHEDULED<br/>targetType=ALL/ROLE/SELECTED"]
+
+    SaveActiveAndOutbox --> Postgres
+    SavePreparing --> Postgres
+    SaveScheduledProduct --> Postgres
+    SaveScheduledOther --> Postgres
     
-    class AdminUser,ReactUI frontend
-    class AdminAPI,LifecycleSvc,TargetingSvc,PrecompScheduler,ActivationScheduler,OutboxPoller admin
-    class OrchestratorConsumer,WorkerConsumer,SseService user
-    class Kafka,Postgres,Redis infra
-
-    %% --- Start of Flow ---
-    AdminUser -- "Creates Broadcast" --> ReactUI
-    ReactUI -- "1- POST /broadcasts" --> AdminAPI
-    AdminAPI --> LifecycleSvc
-
-    %% --- Path A: Scheduled Broadcast ---
-    LifecycleSvc -- "2a- (If Scheduled)" --> SaveAsScheduled("DB: status = SCHEDULED")
-    SaveAsScheduled --> Postgres
-    PrecompScheduler -- "3- Polls for due broadcasts" --> Postgres
-    PrecompScheduler -- "4- Claims broadcast" --> UpdateToPreparing("DB: status = PREPARING")
-    UpdateToPreparing --> LifecycleSvc
-    LifecycleSvc -- "5- Triggers async fetch" --> TargetingSvc
-    TargetingSvc -- "6- Fetches users & stores targets" --> Postgres
-    TargetingSvc -- "7- Marks as ready" --> UpdateToReady("DB: status = READY")
-    UpdateToReady --> Postgres
-    ActivationScheduler -- "8- Polls for READY broadcasts" --> Postgres
-    ActivationScheduler -- "9- Activates & writes Outbox Event" --> FinalSave("DB: status = ACTIVE")
+    %% --- 2- ASYNC & SCHEDULED PROCESSING ---
+    SavePreparing -- "Triggers" --> AsyncPrecomputation
     
-    %% --- Path B: Immediate Broadcast ---
-    LifecycleSvc -- "2b- (If Immediate)" --> UpdateToPreparing
+    PrecomputationScheduler -- "Polls for due SCHEDULED PRODUCT" --> Postgres
+    PrecomputationScheduler -- "DB: status=PREPARING" --> Postgres
+    Postgres -- "status=PREPARING" --> AsyncPrecomputation
+
+    AsyncPrecomputation -- "Fetches users & saves to 'broadcast_user_targets'" --> Postgres
+    AsyncPrecomputation -- "DB: status=READY" --> Postgres
+
+    ActivationScheduler -- "Polls for READY (from Product) OR<br/>due SCHEDULED (from All/Role/Selected)" --> Postgres
+    ActivationScheduler -- "7- DB: status=ACTIVE<br/>INSERT into outbox_events" --> Postgres
     
-    %% --- Common Path: Publishing ---
-    FinalSave --> Postgres
-    OutboxPoller -- "10- Polls outbox_events table" --> Postgres
-    OutboxPoller -- "11- Publishes event to Kafka" --> Kafka
+    %% --- 3- PUBLISHING (CONVERGENCE POINT) ---
+    Postgres -- "Event waits in 'outbox_events'" --> OutboxPoller
+    OutboxPoller -- "Polls & Locks Event" --> Postgres
+    OutboxPoller -- "Publishes ONE Orchestration Event" --> Kafka
 
-    %% --- Kafka to User Service Fan-Out ---
-    Kafka -- "12a- (Group) Single Orchestration Event" --> OrchestratorConsumer
-    OrchestratorConsumer -- "13- Reads pre-computed user list" --> Postgres
-    OrchestratorConsumer -- "14- Scatters User-Specific Events" --> Kafka
-
-    Kafka -- "12b- (Selected) Publishes User-Specific Event" --> WorkerConsumer
-
-    %% --- Final Delivery ---
-    Kafka -- "15- Worker receives User-Specific Event" --> WorkerConsumer
-    WorkerConsumer -- "16- Checks Redis for User Status" --> Redis
-    Redis -- "17a- (Online)" --> WorkerConsumer
-    WorkerConsumer -- "18- Forwards to SSE Service for delivery" --> SseService
-    SseService -- "19- Pushes Message via SSE" --> ReactUI
-    SseService -- "20a- (If 'SELECTED')<br/>Updates user_broadcast_messages" --> Postgres
-    SseService -- "20b- (If 'GROUP')<br/>Increments broadcast_statistics" --> Postgres
-
-    Redis -- "17b- (Offline)" --> WorkerConsumer
-    WorkerConsumer -- "18b- Caches Pending Event in Redis" --> Redis
+    %% --- 4- ORCHESTRATION & DELIVERY ---
+    Kafka -- "9- Orchestration Topic" --> OrchestratorConsumer
+    OrchestratorConsumer -- "Determines Final Audience" --> Postgres
+    OrchestratorConsumer -- "11- 'Scatters' User-Specific Events" --> Kafka
+    Kafka -- "Worker Topics" --> WorkerConsumer
+    WorkerConsumer --> SseService
+    SseService -- "Pushes via SSE" --> User[User Browser]

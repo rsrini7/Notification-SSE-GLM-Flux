@@ -12,7 +12,6 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.RecordDeserializationException;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,6 +26,8 @@ import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.util.backoff.FixedBackOff;
+import org.springframework.core.task.AsyncTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -77,13 +78,14 @@ public class KafkaConfig {
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory(
         ConsumerFactory<String, Object> consumerFactory,
-        DefaultErrorHandler errorHandler) {
+        DefaultErrorHandler errorHandler, AsyncTaskExecutor kafkaListenerExecutor) {
         
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
         factory.setConcurrency(3);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         factory.setCommonErrorHandler(errorHandler);
+        factory.getContainerProperties().setListenerTaskExecutor(kafkaListenerExecutor); 
         return factory;
     }
 
@@ -101,15 +103,13 @@ public class KafkaConfig {
 
     @Bean
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
-            @Qualifier("dltKafkaTemplate") KafkaTemplate<String, Object> dltKafkaTemplate) {
+           KafkaTemplate<String, Object> kafkaTemplate) {
 
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) -> {
             String workerTopicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
             String orchestrationTopic = appProperties.getKafka().getTopic().getNameOrchestration();
 
-            // CORRECTED LOGIC: Check if the topic name CONTAINS the worker prefix,
-            // which accounts for the cluster name at the beginning.
-            if (cr.topic().contains(workerTopicPrefix)) {
+             if (cr.topic().contains(workerTopicPrefix)) {
                 String sharedDltTopic = workerTopicPrefix + Constants.DLT_SUFFIX;
                 log.info("Routing failed record from worker topic {} to shared DLT {}", cr.topic(), sharedDltTopic);
                 return new TopicPartition(sharedDltTopic, 0);
@@ -121,33 +121,16 @@ public class KafkaConfig {
                 return new TopicPartition(orchestrationDltTopic, 0);
             }
             
-            // This fallback should ideally not be hit.
-            log.warn("Unrecognized topic '{}' in DLT resolver. Using default fallback DLT name.", cr.topic());
+             log.warn("Unrecognized topic '{}' in DLT resolver. Using default fallback DLT name.", cr.topic());
             return new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
         };
-        // ========================= END OF FIX =========================
-
-        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(dltKafkaTemplate, destinationResolver);
+ 
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate, destinationResolver);
         recoverer.setFailIfSendResultIsError(true);
         
         return recoverer;
     }
-    
-    @Bean
-    public KafkaTemplate<String, Object> dltKafkaTemplate(
-            @Qualifier("dltProducerFactory") ProducerFactory<String, Object> dltProducerFactory) {
-        return new KafkaTemplate<>(dltProducerFactory);
-    }
-
-    @Bean
-    public ProducerFactory<String, Object> dltProducerFactory() {
-        Map<String, Object> configProps = new HashMap<>();
-        configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
-        return new DefaultKafkaProducerFactory<>(configProps);
-    }
-
+   
     @Bean
     public NewTopic orchestrationTopic() {
         return TopicBuilder.name(appProperties.getKafka().getTopic().getNameOrchestration())
@@ -157,7 +140,6 @@ public class KafkaConfig {
                 .build();
     }
 
-    // NEW: Bean for the orchestration DLT
     @Bean
     public NewTopic orchestrationDeadLetterTopic() {
         return TopicBuilder.name(appProperties.getKafka().getTopic().getNameOrchestration() + Constants.DLT_SUFFIX)
@@ -167,11 +149,8 @@ public class KafkaConfig {
             .build();
     }
     
-    // NEW: Bean for the SHARED worker DLT
     @Bean
     public NewTopic workerEventsDeadLetterTopic() {
-        // All pod-specific topics will use this single DLT.
-        // The original topic is preserved in the DLT message headers.
         return TopicBuilder.name(appProperties.getKafka().getTopic().getNameWorkerPrefix() + Constants.DLT_SUFFIX)
             .partitions(1)
             .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
@@ -185,4 +164,14 @@ public class KafkaConfig {
         configs.put(org.apache.kafka.clients.admin.AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         return new KafkaAdmin(configs);
     }
+
+    @Bean
+    public AsyncTaskExecutor kafkaListenerExecutor() { // CHANGED: Return type is now AsyncTaskExecutor
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(10);
+        executor.setThreadNamePrefix("kafka-consumer-");
+        executor.initialize();
+        return executor;
+    }
+
 }

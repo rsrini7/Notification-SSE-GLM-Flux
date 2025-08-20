@@ -29,7 +29,6 @@ kafka-topics --bootstrap-server $KAFKA_BROKERS --create --if-not-exists --topic 
 # --- Create Pod-Specific Worker Topics ---
 echo "--- Creating Worker Topics for Cluster: $CLUSTER_NAME ---"
 for ((i=0; i<$MAX_REPLICAS; i++)); do
-  # CORRECTED: Add the hyphen here to match the application.yml logic
   TOPIC_NAME="${CLUSTER_NAME}-${POD_NAME_PREFIX}-${i}"
   echo "Creating topic: $TOPIC_NAME"
   kafka-topics --bootstrap-server $KAFKA_BROKERS --create --if-not-exists --topic $TOPIC_NAME --partitions 1 --replication-factor 1

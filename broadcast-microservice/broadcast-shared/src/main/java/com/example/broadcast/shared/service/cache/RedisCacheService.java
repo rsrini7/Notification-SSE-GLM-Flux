@@ -1,4 +1,3 @@
-// CORRECTED FILE
 package com.example.broadcast.shared.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
@@ -6,7 +5,6 @@ import com.example.broadcast.shared.dto.cache.*;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -15,6 +13,7 @@ import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
+import org.springframework.core.env.Environment;
 
 import java.time.ZonedDateTime;
 import java.time.ZoneOffset;
@@ -23,18 +22,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
-public class RedisCacheService implements CacheService {
-
-    private final RedisConnectionFactory redisConnectionFactory;
-    private final RedisTemplate<String, String> stringRedisTemplate;
-    private final RedisTemplate<String, Object> genericRedisTemplate;
-    private final RedisTemplate<String, List<PersistentUserMessageInfo>> persistentUserMessagesRedisTemplate;
-    private final RedisTemplate<String, List<PendingEventInfo>> pendingEventsRedisTemplate;
-    private final RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate;
-    private final RedisTemplate<String, List<BroadcastMessage>> activeGroupBroadcastsRedisTemplate;
-    private final ObjectMapper objectMapper;
+public class RedisCacheService implements CacheService{
 
     private static final String USER_CONNECTION_KEY_PREFIX = "user-conn:";
     private static final String CONN_TO_USER_KEY_PREFIX = "conn-to-user:";
@@ -48,10 +37,53 @@ public class RedisCacheService implements CacheService {
 
     private static final long CONNECTION_TTL_MINUTES = 30;
 
+    private final RedisConnectionFactory redisConnectionFactory;
+    private final RedisTemplate<String, String> stringRedisTemplate;
+    private final RedisTemplate<String, Object> genericRedisTemplate;
+    private final RedisTemplate<String, List<PersistentUserMessageInfo>> persistentUserMessagesRedisTemplate;
+    private final RedisTemplate<String, List<PendingEventInfo>> pendingEventsRedisTemplate;
+    private final RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate;
+    private final RedisTemplate<String, List<BroadcastMessage>> activeGroupBroadcastsRedisTemplate;
+    private final ObjectMapper objectMapper;
+
+    public RedisCacheService(RedisConnectionFactory redisConnectionFactory,
+                             RedisTemplate<String, String> stringRedisTemplate,
+                             RedisTemplate<String, Object> genericRedisTemplate,
+                             RedisTemplate<String, List<PersistentUserMessageInfo>> persistentUserMessagesRedisTemplate,
+                             RedisTemplate<String, List<PendingEventInfo>> pendingEventsRedisTemplate,
+                             RedisTemplate<String, BroadcastMessage> broadcastMessageRedisTemplate,
+                             RedisTemplate<String, List<BroadcastMessage>> activeGroupBroadcastsRedisTemplate,
+                             ObjectMapper objectMapper, Environment environment) {
+        this.redisConnectionFactory = redisConnectionFactory;
+        this.stringRedisTemplate = stringRedisTemplate;
+        this.genericRedisTemplate = genericRedisTemplate;
+        this.persistentUserMessagesRedisTemplate = persistentUserMessagesRedisTemplate;
+        this.pendingEventsRedisTemplate = pendingEventsRedisTemplate;
+        this.broadcastMessageRedisTemplate = broadcastMessageRedisTemplate;
+        this.activeGroupBroadcastsRedisTemplate = activeGroupBroadcastsRedisTemplate;
+        this.objectMapper = objectMapper;
+
+        // Register a JVM shutdown hook to ensure cache is cleared
+        // Only register the shutdown hook if the "admin-only" profile is active
+        if (environment.matchesProfiles("admin-only")) {
+            Runtime.getRuntime().addShutdownHook(new Thread(this::cleanupCacheOnShutdown));
+        }
+    }
+
+    private void cleanupCacheOnShutdown() {
+        log.info("JVM Shutdown Hook: flushing the entire Redis database...");
+        try (RedisConnection connection = redisConnectionFactory.getConnection()) {
+            connection.serverCommands().flushDb();
+            log.info("Redis database flushed successfully via shutdown hook.");
+        } catch (Exception e) {
+            // Log as a warning since the app is shutting down anyway
+            log.warn("Error during Redis DB flush via shutdown hook: {}", e.getMessage());
+        }
+    }
+
     @Override
-    public void registerUserConnection(String userId, String connectionId, String podId, String clusterName) { // CORRECTED SIGNATURE
+    public void registerUserConnection(String userId, String connectionId, String podId, String clusterName) {
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
-        // CORRECTED LOGIC: Pass clusterName to the constructor
         UserConnectionInfo connectionInfo = new UserConnectionInfo(userId, connectionId, podId, clusterName, now, now);
 
         String userKey = USER_CONNECTION_KEY_PREFIX + userId;
@@ -72,7 +104,6 @@ public class RedisCacheService implements CacheService {
         }
     }
     
-    // ... The rest of the file is unchanged from the previous version ...
     @Override
     public void unregisterUserConnection(String userId, String connectionId) {
         Optional<UserConnectionInfo> details = getConnectionDetails(connectionId);

@@ -39,9 +39,9 @@ public class SseController {
             @RequestParam(required = false) String connectionId,
             ServerWebExchange exchange) {
 
-        log.info("SSE connection request from user: {}, connectionId: {}, IP: {}",
-                 userId, connectionId,
-                 exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
+        log.info("[CONNECT_START] SSE connection request for userId='{}', connectionId='{}', IP='{}'",
+          userId, connectionId,
+          exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
 
         if (connectionId == null || connectionId.trim().isEmpty()) {
             connectionId = UUID.randomUUID().toString();
@@ -49,7 +49,7 @@ public class SseController {
 
         sseService.registerConnection(userId, connectionId);
         Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, connectionId);
-        log.info("SSE connection established for user: {}, connection: {}", userId, connectionId);
+        log.info("[CONNECT_SUCCESS] SSE connection established for userId='{}', connection='{}'", userId, connectionId);
         return eventStream;
     }
 

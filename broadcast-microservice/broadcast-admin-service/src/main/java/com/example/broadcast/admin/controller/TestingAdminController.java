@@ -19,7 +19,7 @@ public class TestingAdminController {
     @PostMapping("/kafka-consumer-failure")
     public ResponseEntity<Void> setKafkaConsumerFailure(@RequestBody Map<String, Boolean> request) {
         boolean enabled = request.getOrDefault("enabled", false);
-        log.info("Received request to set DLT Test Mode. Enabled: {}", enabled);
+        log.debug("Received request to set DLT Test Mode. Enabled: {}", enabled);
         testingConfigurationService.setArm(enabled);
         return ResponseEntity.ok().build();
     }
@@ -27,7 +27,7 @@ public class TestingAdminController {
     @GetMapping("/kafka-consumer-failure")
     public ResponseEntity<Map<String, Boolean>> getKafkaConsumerFailure() {
         boolean isEnabled = testingConfigurationService.isArmed();
-        log.info("Received request to get DLT Test Mode status. Currently Enabled: {}", isEnabled);
+        log.debug("Received request to get DLT Test Mode status. Currently Enabled: {}", isEnabled);
         return ResponseEntity.ok(Map.of("enabled", isEnabled));
     }
 }

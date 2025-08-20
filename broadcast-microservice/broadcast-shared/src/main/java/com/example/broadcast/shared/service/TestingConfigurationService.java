@@ -22,7 +22,7 @@ public class TestingConfigurationService {
     @PostConstruct
     public void checkBean() {
         // This log will run once on startup and tell us exactly what kind of bean was injected.
-        log.info("[DEBUG-REDIS] Injected RedisTemplate bean of class: {}", dltTestRedisTemplate.getClass().getName());
+        log.debug("[DEBUG-REDIS] Injected RedisTemplate bean of class: {}", dltTestRedisTemplate.getClass().getName());
     }
 
     public void setArm(boolean shouldArm) {
@@ -31,10 +31,10 @@ public class TestingConfigurationService {
             dltTestRedisTemplate.opsForValue().set(DLT_ARMED_KEY, "true");
             // VERIFICATION STEP: Immediately read the key back
             String verification = dltTestRedisTemplate.opsForValue().get(DLT_ARMED_KEY);
-            log.info("[DEBUG-REDIS] Read-after-write verification for 'armed' key. Result: '{}'", verification);
+            log.debug("[DEBUG-REDIS] Read-after-write verification for 'armed' key. Result: '{}'", verification);
         } else {
             dltTestRedisTemplate.delete(DLT_ARMED_KEY);
-            log.info("[DEBUG-REDIS] Deleted 'armed' key.");
+            log.debug("[DEBUG-REDIS] Deleted 'armed' key.");
         }
     }
 
@@ -43,19 +43,19 @@ public class TestingConfigurationService {
     }
 
     public boolean consumeArmedState() {
-        log.info("[DEBUG-REDIS] Attempting to consume 'armed' key...");
+        log.debug("[DEBUG-REDIS] Attempting to consume 'armed' key...");
         boolean wasArmed = dltTestRedisTemplate.opsForValue().getAndDelete(DLT_ARMED_KEY) != null;
-        log.info("[DEBUG-REDIS] Consumed 'armed' key. Was present: {}", wasArmed);
+        log.debug("[DEBUG-REDIS] Consumed 'armed' key. Was present: {}", wasArmed);
         return wasArmed;
     }
 
     public void markBroadcastForFailure(Long broadcastId) {
         if (broadcastId != null) {
-            log.info("[DEBUG-REDIS] Attempting to mark broadcast ID {} for failure...", broadcastId);
+            log.debug("[DEBUG-REDIS] Attempting to mark broadcast ID {} for failure...", broadcastId);
             dltTestRedisTemplate.opsForSet().add(DLT_FAILURE_IDS_KEY, String.valueOf(broadcastId));
             // VERIFICATION STEP: Immediately check if the member was added
             boolean isMember = Boolean.TRUE.equals(dltTestRedisTemplate.opsForSet().isMember(DLT_FAILURE_IDS_KEY, String.valueOf(broadcastId)));
-            log.info("[DEBUG-REDIS] Read-after-write verification for broadcast ID {}. Is member: {}", broadcastId, isMember);
+            log.debug("[DEBUG-REDIS] Read-after-write verification for broadcast ID {}. Is member: {}", broadcastId, isMember);
         }
     }
 

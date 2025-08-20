@@ -1,0 +1,28 @@
+graph TD
+    subgraph "Start"
+        A["Admin Creates an Immediate Broadcast <br/> (ALL, ROLE, or SELECTED)"]
+    end
+
+    A --> C[Admin Service publishes ONE <br/> orchestration event via the Outbox Pattern];
+
+    subgraph "Orchestration (Fan-out on Read)"
+        C --> D[Kafka: broadcast-orchestration topic];
+        D --> E["User Service (Orchestrator/Leader Pod) <br/> consumes the single event"];
+        E --> F["Dynamically determines target user list <br/> from DB or broadcast's targetIds"];
+        F --> G["'Scatters' N user-specific events <br/> to appropriate worker topics based on Redis cache"];
+    end
+    
+    subgraph "Delivery (Worker Pods)"
+        G --> J["Kafka: Worker Topics <br/> (e.g., cluster-a-broadcast-user-service-0)"];
+        J --> K["User Service (Worker Pods) <br/> consume user-specific events in parallel"];
+        K --> L[Push message to online user via SSE <br/> or cache for offline user in Redis];
+    end
+
+    %% Styles
+    classDef admin fill:#fff2cc,stroke:#333;
+    classDef user fill:#e2f0d9,stroke:#333;
+    classDef kafka fill:#cce5ff,stroke:#333;
+
+    class C admin;
+    class E,F,G,K,L user;
+    class D,J kafka;

@@ -260,5 +260,37 @@ public class BroadcastRepository {
         return jdbcTemplate.query(sql, broadcastRowMapper, cutoff.toOffsetDateTime());
     }
 
+    /**
+     * Finds active broadcasts of type 'SELECTED' where the target_ids list contains the given userId.
+     * WARNING: This query uses a LIKE pattern which is not performant and can cause full table scans.
+     * For a production system, the data model should be normalized with a dedicated join table
+     * and an index on the user_id column to make this lookup efficient.
+     * @param userId The ID of the user to check for.
+     * @return A list of matching broadcast messages.
+     */
+    public List<BroadcastMessage> findActiveSelectedBroadcastsForUser(String userId) {
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = 'SELECTED' AND target_ids LIKE ?";
+        // The '%' wildcards are necessary to find the userId within the JSON array string `["user-a", "user-b"]`
+        String searchTerm = "%\"" + userId + "\"%"; 
+        return jdbcTemplate.query(sql, broadcastRowMapper, searchTerm);
+    }
+
+    // For BroadcastPrecomputationService
+    public List<BroadcastMessage> findScheduledProductBroadcastsWithinWindow(ZonedDateTime cutoffTime) {
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'SCHEDULED' AND target_type = 'PRODUCT' AND scheduled_at <= ?";
+        return jdbcTemplate.query(sql, broadcastRowMapper, cutoffTime.toOffsetDateTime());
+    }
+
+    // For BroadcastSchedulingService
+    public List<BroadcastMessage> findAndLockScheduledFanOutOnReadBroadcasts(ZonedDateTime now, int limit) {
+        String sql = """
+            SELECT * FROM broadcast_messages
+            WHERE status = 'SCHEDULED' AND target_type IN ('ALL', 'ROLE', 'SELECTED') AND scheduled_at <= ?
+            ORDER BY scheduled_at
+            LIMIT ?
+            FOR UPDATE SKIP LOCKED
+            """;
+        return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime(), limit);
+    }
     
 }

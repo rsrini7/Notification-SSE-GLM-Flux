@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class KafkaConsumerService {
+public class KafkaWorkerConsumerService {
 
     private final SseService sseService;
     private final CacheService cacheService;
@@ -28,20 +28,23 @@ public class KafkaConsumerService {
         groupId = "${broadcast.kafka.consumer.group-worker}",
         containerFactory = "kafkaListenerContainerFactory"
     )
-    public void processWorkerEvent(  @Payload MessageDeliveryEvent event,
+    public void processWorkerEvent(@Payload MessageDeliveryEvent event,
             Acknowledgment acknowledgment,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset) {
         
-        // Log statement now includes full message coordinates.
-        log.debug("Worker received event. [Topic: {}, Partition: {}, Offset: {}] Payload: {}", 
-                  topic, partition, offset, event);
-
         if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
             log.warn("DLT TEST MODE: Simulating failure for broadcast ID: {}", event.getBroadcastId());
             throw new RuntimeException("Simulating DLT failure for broadcast ID: " + event.getBroadcastId());
         }
+
+        log.info("[WORKER_KAFKA_CONSUME] Processing event for broadcastId='{}', userId='{}', eventType='{}'",
+             event.getBroadcastId(), event.getUserId(), event.getEventType());
+
+        // Log statement now includes full message coordinates.
+        log.debug("Worker received event. [Topic: {}, Partition: {}, Offset: {}] Payload: {}", 
+                  topic, partition, offset, event);
 
         try {
             // Use a switch to handle all possible event types

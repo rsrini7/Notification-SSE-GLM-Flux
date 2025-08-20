@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant AdminSvc as Admin Service (Lifecycle)
+    participant DB as PostgreSQL DB
+    participant ActivationScheduler as Activation Scheduler
+    participant OutboxPoller as Outbox Poller
+    participant KafkaOrchestration as Kafka (Orchestration Topic)
+    participant Orchestrator as User Service (Leader)
+
+    AdminSvc->>+DB: 1- INSERT broadcast (status=SCHEDULED, targetType=ALL)
+    DB-->>-AdminSvc: ...
+
+    Note over ActivationScheduler, DB: ...Scheduled time arrives...
+
+    ActivationScheduler->>+DB: 2- Find due SCHEDULED broadcasts (type=ALL/ROLE/SELECTED)
+    DB-->>-ActivationScheduler: Returns the "ALL" broadcast
+    
+    ActivationScheduler->>+AdminSvc: 3- activateAndPublishFanOutOnReadBroadcast()
+    AdminSvc->>+DB: 4- UPDATE status to 'ACTIVE' & INSERT to Outbox
+    DB-->>-AdminSvc: ...
+
+    OutboxPoller->>+KafkaOrchestration: 5- Polls Outbox & Publishes ONE event
+    KafkaOrchestration-->>-OutboxPoller: ...
+
+    KafkaOrchestration->>+Orchestrator: 6- Leader pod consumes event
+    Note over Orchestrator: 7- Dynamically fetches 'ALL' users & "Scatters" events...

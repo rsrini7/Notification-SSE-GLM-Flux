@@ -1,0 +1,36 @@
+sequenceDiagram
+    participant AdminSvc as Admin Service
+    participant DB as DB (Outbox Table)
+    participant OutboxPoller as AdminSvc (Outbox Poller)
+    participant KafkaOrchestration as Kafka (broadcast-orchestration)
+    participant Orchestrator as UserSvc (Leader/Orchestrator)
+    participant KafkaWorkers as Kafka (Worker Topics)
+    participant WorkerConsumer as UserSvc (Worker Pod)
+    participant SseSvc as UserSvc (SSE Service)
+
+    AdminSvc->>+DB: 1- Writes ONE orchestration event to Outbox table
+    DB-->>-AdminSvc: (Transaction commits)
+
+    OutboxPoller->>+DB: 2- Polls for and locks new events from Outbox
+    DB-->>-OutboxPoller: Returns event
+
+    OutboxPoller->>+KafkaOrchestration: 3- Publishes single orchestration event
+    KafkaOrchestration-->>-OutboxPoller: ...
+
+    OutboxPoller->>+DB: 4- Deletes event from Outbox
+    DB-->>-OutboxPoller: ...
+
+    KafkaOrchestration->>+Orchestrator: 5- Leader pod consumes the orchestration event
+    Note over Orchestrator: 6- Determines full user list for<br/>ALL, ROLE, or SELECTED targets.
+    
+    loop For each target user
+        Orchestrator->>+KafkaWorkers: 7- "Scatters" user-specific event to correct worker topic
+    end
+    KafkaWorkers-->>-Orchestrator: ... 
+    Orchestrator-->>-KafkaOrchestration: 8- Acknowledges orchestration event
+
+    KafkaWorkers->>+WorkerConsumer: 9- Worker pod consumes its assigned user event
+    WorkerConsumer->>+SseSvc: 10- Forwards event for real-time delivery
+    SseSvc->>SseSvc: Pushes message via SSE to user
+    SseSvc-->>-WorkerConsumer: ...
+    WorkerConsumer-->>-KafkaWorkers: 11- Acknowledges worker event

@@ -17,6 +17,7 @@ import com.example.broadcast.shared.mapper.BroadcastMapper;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -51,7 +52,7 @@ public class UserMessageService {
 
         List<PersistentUserMessageInfo> cachedMessages = cacheService.getCachedUserMessages(userId);
         if (cachedMessages != null && !cachedMessages.isEmpty()) {
-            log.info("Cache HIT for user messages: {}", userId);
+            log.debug("[CACHE_HIT] User inbox found in cache for userId='{}'", userId);
             return cachedMessages.stream()
                 .map(this::enrichUserMessageInfo)
                 .filter(Optional::isPresent)
@@ -59,7 +60,7 @@ public class UserMessageService {
                 .collect(Collectors.toList());
         }
 
-        log.info("Cache MISS for user messages: {}. Fetching from database.", userId);
+        log.info("[CACHE_MISS] User inbox not in cache for userId='{}'. Fetching from database.", userId);
         List<UserBroadcastResponse> dbMessages = userBroadcastRepository.findUserMessagesByUserId(userId);
 
         if (!dbMessages.isEmpty()) {
@@ -73,27 +74,29 @@ public class UserMessageService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserBroadcastResponse> getGroupMessagesForUser(String userId) {
-        // 1. (NEW) First, get a list of broadcast IDs the user already has a specific record for.
+    public List<BroadcastMessage> getActiveBroadcastsForUser(String userId) {
+        // 1. Get a list of broadcast IDs the user has already interacted with.
         List<Long> processedBroadcastIds = userBroadcastRepository.findActiveBroadcastIdsByUserId(userId);
         Set<Long> processedBroadcastIdSet = new HashSet<>(processedBroadcastIds);
 
+        // 2. Fetch broadcasts targeted to the user's roles.
         List<String> userRoles = userService.getRolesForUser(userId);
-
-        // 2. Fetch broadcasts targeted to the user's specific roles
         List<BroadcastMessage> roleBroadcasts = userRoles.stream()
-                .flatMap(role -> getActiveBroadcastsForRole(role).stream())
-                .distinct()
-                .collect(Collectors.toList());
+            .flatMap(role -> getActiveBroadcastsForRole(role).stream())
+            .distinct()
+            .collect(Collectors.toList());
 
-        // 3. Fetch broadcasts targeted to "ALL" users
+        // 3. Fetch broadcasts targeted to "ALL" users.
         List<BroadcastMessage> allUserBroadcasts = getActiveBroadcastsForAll();
 
-        // 4. (MODIFIED) Combine, deduplicate, filter out already processed messages, and map to DTO
-        return Stream.concat(roleBroadcasts.stream(), allUserBroadcasts.stream())
+        // 4. Fetch broadcasts where this specific user was 'SELECTED'.
+        List<BroadcastMessage> selectedBroadcasts = broadcastRepository.findActiveSelectedBroadcastsForUser(userId);
+
+        // 5. Combine all lists, deduplicate, and filter out already processed messages.
+        return Stream.of(roleBroadcasts, allUserBroadcasts, selectedBroadcasts)
+                .flatMap(List::stream)
                 .distinct()
-                .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId())) // This is the new exclusion logic
-                .map(broadcast -> broadcastMapper.toUserBroadcastResponse(null, broadcast))
+                .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId()))
                 .collect(Collectors.toList());
     }
 
@@ -102,11 +105,11 @@ public class UserMessageService {
         List<BroadcastMessage> cachedBroadcasts = cacheService.getActiveGroupBroadcasts(cacheKey);
         
         if (cachedBroadcasts != null) {
-            log.debug("Cache HIT for active broadcasts for role: {}", role);
+            log.debug("[CACHE_HIT] Active broadcasts for role='{}' found in cache", role);
             return cachedBroadcasts;
         }
 
-        log.warn("Cache MISS for active broadcasts for role: {}. Fetching from DB.", role);
+        log.info("[CACHE_MISS] Active broadcasts for role='{}' not in cache. Fetching from DB.", role);
         List<BroadcastMessage> dbBroadcasts = broadcastRepository.findActiveBroadcastsByTargetTypeAndIds("ROLE", List.of(role));
         cacheService.cacheActiveGroupBroadcasts(cacheKey, dbBroadcasts);
         return dbBroadcasts;
@@ -117,11 +120,11 @@ public class UserMessageService {
         List<BroadcastMessage> cachedBroadcasts = cacheService.getActiveGroupBroadcasts(cacheKey);
 
         if (cachedBroadcasts != null) {
-            log.debug("Cache HIT for active broadcasts for ALL users");
+            log.debug("[CACHE_HIT] Active broadcasts for 'ALL' users found in cache");
             return cachedBroadcasts;
         }
 
-        log.warn("Cache MISS for active broadcasts for ALL users. Fetching from DB.");
+        log.info("[CACHE_MISS] Active broadcasts for 'ALL' users not in cache. Fetching from DB.");
         List<BroadcastMessage> dbBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType("ALL");
         cacheService.cacheActiveGroupBroadcasts(cacheKey, dbBroadcasts);
         return dbBroadcasts;
@@ -140,9 +143,6 @@ public class UserMessageService {
                 .findByUserIdAndBroadcastId(userId, broadcastId);
 
         if (userMessageOpt.isPresent()) {
-            // --- START: FIX FOR SELECTED USERS ---
-            // UPDATE PATH: A record already exists, so this is a 'SELECTED' user broadcast.
-            // Use the specific, atomic `markAsRead` repository method.
             UserBroadcastMessage existingMessage = userMessageOpt.get();
             if (Constants.ReadStatus.READ.name().equals(existingMessage.getReadStatus())) {
                 log.warn("Message for broadcast {} was already read for user {}. No action taken.", broadcastId, userId);
@@ -155,11 +155,9 @@ public class UserMessageService {
                 log.warn("Message for broadcast {} was already read for user {} (concurrent update). No action taken.", broadcastId, userId);
                 return;
             }
-            // --- END: FIX FOR SELECTED USERS ---
 
         } else {
-            // CREATE PATH: No record exists, so this is an 'ALL' or 'ROLE' broadcast.
-            // Create a new record and save it.
+
             log.info("No existing message record for user {}, broadcast {}. Creating a new one.", userId, broadcastId);
             UserBroadcastMessage newMessage = UserBroadcastMessage.builder()
                     .userId(userId)
@@ -171,7 +169,6 @@ public class UserMessageService {
             userBroadcastRepository.save(newMessage);
         }
         
-        // This part is now common to both paths
         broadcastStatisticsRepository.incrementReadCount(broadcastId);
         cacheService.removeMessageFromUserCache(userId, broadcastId);
         cacheService.removePendingEvent(userId, broadcastId);
@@ -226,4 +223,28 @@ public class UserMessageService {
 
         return Optional.of(broadcastMapper.toUserBroadcastResponse(messageStub, broadcast));
     }
+
+    /**
+     * Centralized method to process the delivery of a fan-out-on-read (group) message.
+     * It idempotently creates a user-specific record and increments the central delivery counter
+     * only if this is the first time this user has received this message.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void processAndCountGroupMessageDelivery(String userId, BroadcastMessage broadcast) {
+        if (broadcast == null || userId == null) {
+            return;
+        }
+        
+        // The createIfNotExists method is atomic. It returns 1 only if a new row was inserted.
+        int newRows = userBroadcastRepository.createIfNotExists(broadcast.getId(), userId, ZonedDateTime.now(ZoneOffset.UTC));
+
+        if (newRows > 0) {
+            // Only if a new record was created, we increment the master counter.
+            broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
+            log.info("Recorded and counted first-time delivery of group broadcast {} to user {}", broadcast.getId(), userId);
+        } else {
+            log.debug("Ignoring duplicate delivery of group broadcast {} to user {}", broadcast.getId(), userId);
+        }
+    }
+
 }

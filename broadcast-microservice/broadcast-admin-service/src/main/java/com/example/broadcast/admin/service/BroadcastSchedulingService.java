@@ -29,24 +29,17 @@ public class BroadcastSchedulingService {
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     @SchedulerLock(name = "processScheduledBroadcasts", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     public void processScheduledBroadcasts() {
-        log.info("Checking for READY broadcasts to activate...");
-        List<BroadcastMessage> broadcastsToProcess = broadcastRepository.findAndLockReadyBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
-
-        if (broadcastsToProcess.isEmpty()) {
-            log.info("No ready broadcasts are due for activation at this time.");
-            return;
+        // 1. Process 'READY' broadcasts (The existing logic, which now only applies to PRODUCT type)
+        List<BroadcastMessage> readyBroadcasts = broadcastRepository.findAndLockReadyBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
+        for (BroadcastMessage broadcast : readyBroadcasts) {
+            broadcastLifecycleService.processReadyBroadcast(broadcast.getId());
         }
 
-        log.info("Found and locked {} ready broadcasts to activate.", broadcastsToProcess.size());
-        for (BroadcastMessage broadcast : broadcastsToProcess) {
-            try {
-
-                log.info("Activating and fanning out scheduled broadcast ID: {}", broadcast.getId());
-                broadcastLifecycleService.processReadyBroadcast(broadcast.getId());
-
-            } catch (Exception e) {
-                log.error("Error activating scheduled broadcast with ID: {}", broadcast.getId(), e);
-            }
+        // 2. NEW: Process due 'SCHEDULED' fan-out-on-read broadcasts
+        List<BroadcastMessage> scheduledFanOutOnRead = broadcastRepository.findAndLockScheduledFanOutOnReadBroadcasts(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
+        for (BroadcastMessage broadcast : scheduledFanOutOnRead) {
+            // This new method will update status directly to ACTIVE and create the outbox event
+            broadcastLifecycleService.activateAndPublishFanOutOnReadBroadcast(broadcast.getId());
         }
     }
 }

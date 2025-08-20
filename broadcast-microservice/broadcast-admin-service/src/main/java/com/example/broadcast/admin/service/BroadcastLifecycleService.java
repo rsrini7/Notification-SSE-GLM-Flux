@@ -4,14 +4,12 @@ import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.admin.BroadcastRequest;
 import com.example.broadcast.shared.dto.admin.BroadcastResponse;
-import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.exception.ResourceNotFoundException;
 import com.example.broadcast.shared.exception.UserServiceUnavailableException;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.BroadcastStatistics;
 import com.example.broadcast.shared.model.OutboxEvent;
-import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.*;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.service.TestingConfigurationService;
@@ -31,11 +29,8 @@ import org.springframework.transaction.annotation.Propagation;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -54,46 +49,6 @@ public class BroadcastLifecycleService {
     private final TestingConfigurationService testingConfigurationService;
     private final ApplicationEventPublisher eventPublisher;
 
-    private void publishEventsToWorkerTopics(BroadcastMessage broadcast, List<String> userIds, Constants.EventType eventType, String message) {
-        List<OutboxEvent> eventsToPublish = new ArrayList<>();
-
-        if (eventType == Constants.EventType.CREATED) {
-            List<UserBroadcastMessage> userBroadcasts = userIds.stream()
-                .map(userId -> UserBroadcastMessage.builder()
-                    .broadcastId(broadcast.getId())
-                    .userId(userId)
-                    .deliveryStatus(Constants.DeliveryStatus.PENDING.name())
-                    .readStatus(Constants.ReadStatus.UNREAD.name())
-                    .build())
-                .collect(Collectors.toList());
-            userBroadcastRepository.batchInsert(userBroadcasts);
-        }
-
-        for (String userId : userIds) {
-            MessageDeliveryEvent eventPayload = createLifecycleEvent(broadcast, userId, eventType, message);
-
-            // *** THIS IS THE FIX ***
-            // The logic is updated to handle the map of connections returned by the new cache service method.
-            Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
-
-            if (!userConnections.isEmpty()) {
-                // User is online, get podId from the first available connection.
-                UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
-                String topicName = connectionInfo.getClusterName() + "-" + connectionInfo.getPodId();
-                log.info("Broadcast Lifecycle sending message to the topic: {}", topicName);
-                eventsToPublish.add(createOutboxEvent(eventPayload, topicName, userId));
-            } else {
-                // User is offline, cache a pending event.
-                cacheService.cachePendingEvent(eventPayload);
-            }
-        }
-
-        if (!eventsToPublish.isEmpty()) {
-            outboxEventPublisher.publishBatch(eventsToPublish);
-        }
-    }
-
-    // ... [ The rest of the methods from the original file are unchanged and go here ] ...
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         boolean isFailureTest = testingConfigurationService.consumeArmedState();
@@ -106,34 +61,53 @@ public class BroadcastLifecycleService {
             broadcast = broadcastRepository.save(broadcast);
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
+       
+        cacheService.evictBroadcastContent(broadcast.getId());
+        log.info("Evicted broadcast-content cache for ID: {}", broadcast.getId());
 
+        // ONLY the 'PRODUCT' type requires the intensive user list preparation (Fan-out-on-Write).
+        if (Constants.TargetType.PRODUCT.name().equals(request.getTargetType())) {
+            log.info("Broadcast is for PRODUCT users. Saving with PREPARING status to trigger user pre-computation.", broadcast.getId());
+            broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
+            broadcast = broadcastRepository.save(broadcast);
+            
+            eventPublisher.publishEvent(new BroadcastCreatedEvent(broadcast.getId()));
+            return broadcastMapper.toBroadcastResponse(broadcast, 0); // Target count is unknown until preparation is complete.
+        }
+
+        // ALL, ROLE, and SELECTED are handled as immediate Fan-out-on-Read types.
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
         long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
         ZonedDateTime precomputationThreshold = now.plus(fetchDelayMs, ChronoUnit.MILLIS);
+        boolean isImmediatelyActive = true;
 
         if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(precomputationThreshold)) {
             broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
-            broadcast = broadcastRepository.save(broadcast);
-            log.info("Broadcast ID: {} is a true scheduled broadcast. Saving with SCHEDULED status.", broadcast.getId());
-            return broadcastMapper.toBroadcastResponse(broadcast, 0);
+            isImmediatelyActive = false; // It's not active yet, the scheduler will handle it.
+        } else {
+            broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
         }
-
-        log.info("Broadcast is immediate or scheduled too close. Treating as immediate. Saving with PREPARING status.");
-        broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
+        
         broadcast = broadcastRepository.save(broadcast);
 
-        cacheService.evictBroadcastContent(broadcast.getId());
-        log.info("Evicted broadcast-content cache for ID: {}", broadcast.getId());
-        
         if (isFailureTest) {
             testingConfigurationService.markBroadcastForFailure(broadcast.getId());
             log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
         }
 
-        log.info("Triggering async (BroadcastEventListener) user pre-computation for immediate broadcast ID: {}", broadcast.getId());
-        eventPublisher.publishEvent(new BroadcastCreatedEvent(broadcast.getId()));
+        // If it's an immediate broadcast, we MUST publish the single orchestration event to the outbox.
+        // This now correctly includes ALL, ROLE, and SELECTED types.
+        if (isImmediatelyActive) {
+            publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
+        }
 
-        return broadcastMapper.toBroadcastResponse(broadcast, 0);
+        // This is for display purposes only on the API response.
+        int totalTargeted = Constants.TargetType.SELECTED.name().equals(request.getTargetType()) ? request.getTargetIds().size() : 0;
+        
+        // Evict cache so newly connecting users see the latest group broadcasts.
+        cacheService.evictActiveGroupBroadcastsCache();
+
+        return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
     }
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
@@ -196,24 +170,13 @@ public class BroadcastLifecycleService {
         }
 
         initializeStatistics(broadcast.getId(), totalTargeted);
-
-        if (Constants.TargetType.SELECTED.name().equals(broadcast.getTargetType())) {
-            publishEventsToWorkerTopics(broadcast, targetUserIds, Constants.EventType.CREATED, broadcast.getContent());
-        } else {
-            publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
-        }
-
+        publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
         return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
     }
 
     private void triggerCancelOrExpireBroadcastEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
-        String targetType = broadcast.getTargetType();
-        if (Constants.TargetType.SELECTED.name().equals(targetType)) {
-            List<String> targetUserIds = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
-            publishEventsToWorkerTopics(broadcast, targetUserIds, eventType, message);
-        } else {
-            publishSingleOrchestrationEvent(broadcast, eventType, message);
-        }
+        log.info("Publishing single orchestration event for broadcast ID {} with type {}", broadcast.getId(), eventType);
+        publishSingleOrchestrationEvent(broadcast, eventType, message);
     }
     
     private void publishSingleOrchestrationEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
@@ -245,19 +208,6 @@ public class BroadcastLifecycleService {
                 .build();
     }
     
-    private MessageDeliveryEvent createLifecycleEvent(BroadcastMessage broadcast, String userId, Constants.EventType eventType, String message) {
-        return MessageDeliveryEvent.builder()
-                .eventId(UUID.randomUUID().toString())
-                .broadcastId(broadcast.getId())
-                .userId(userId)
-                .eventType(eventType.name())
-                .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
-                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-                .message(message)
-                .isFireAndForget(broadcast.isFireAndForget())
-                .build();
-    }
-
     private OutboxEvent createOutboxEvent(MessageDeliveryEvent eventPayload, String topicName, String aggregateId) {
         try {
             String payloadJson = objectMapper.writeValueAsString(eventPayload);
@@ -300,6 +250,20 @@ public class BroadcastLifecycleService {
         broadcastRepository.updateStatus(broadcastId, Constants.BroadcastStatus.FAILED.name());
         cacheService.evictActiveGroupBroadcastsCache();
         log.warn("Marked entire BroadcastMessage {} as FAILED in a new transaction and evicted cache.", broadcastId);
+    }
+
+    @Transactional
+    public void activateAndPublishFanOutOnReadBroadcast(Long broadcastId) {
+        BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
+                .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found: " + broadcastId));
+
+        // Directly update status to ACTIVE
+        broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
+        broadcastRepository.update(broadcast);
+
+        // Publish the single orchestration event to the outbox to start the fan-out-on-read process
+        publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
+        log.info("Activated scheduled fan-out-on-read broadcast ID: {}", broadcastId);
     }
 
 
