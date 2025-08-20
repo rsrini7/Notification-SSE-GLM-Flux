@@ -1,0 +1,33 @@
+sequenceDiagram
+    participant AdminSvc as Admin Service
+    participant OrchestrationTopic as Kafka Topic <br/> (broadcast-orchestration)
+    participant LeaderConsumer as User Service (Leader Pod)
+    participant DB as PostgreSQL DB
+    participant Redis as Redis (Pub/Sub)
+    participant WorkerConsumers as User Service (Worker Pods)
+    participant UserUI as User UI (Browser)
+
+    AdminSvc->>+OrchestrationTopic: 1- Publishes ONE event for the group broadcast
+    OrchestrationTopic-->>-AdminSvc: 
+
+    OrchestrationTopic->>+LeaderConsumer: 2- Delivers orchestration event
+    LeaderConsumer->>+DB: 3- Fetches the full list of ALL/ROLE users
+    DB-->>-LeaderConsumer: Returns user list
+
+    Note over LeaderConsumer, Redis: 4- "Scatters" the work by publishing to pod-specific Redis channels.
+    loop For each user
+        LeaderConsumer->>+Redis: Publishes event to that user's pod channel
+    end
+    Redis-->>-LeaderConsumer: 
+    LeaderConsumer-->>OrchestrationTopic: 5- Acknowledges the orchestration event
+
+    Note over Redis, WorkerConsumers: 6- Redis instantly delivers messages to all subscribed worker pods.
+    Redis->>+WorkerConsumers: 7- Each worker receives events from its subscribed channel
+    
+    par Parallel Processing
+        WorkerConsumers->>WorkerConsumers: 8a- Process event for User A, D, G...
+    and
+        WorkerConsumers->>WorkerConsumers: 8b- Process event for User B, E, H...
+    end
+
+    WorkerConsumers->>+UserUI: 9- Push real-time message via SSE

@@ -1,0 +1,48 @@
+sequenceDiagram
+    autonumber
+
+    box "Backend Services"
+        participant AdminSvc as Admin Service
+        participant OutboxPoller as Outbox Poller
+        participant Orchestrator as Orchestrator Consumer (Pod A)
+        participant SSEHolder as SSE Holder (user-service-blue-pod-b)
+    end
+
+    box "Infrastructure"
+        participant OutboxDB as Outbox DB
+        participant Kafka as Kafka (Orchestration Topic)
+        participant Redis as Redis (Cache & Pub/Sub)
+    end
+    
+    box "Client"
+        participant UserUI as User UI
+    end
+
+    Note over SSEHolder: On Startup
+    SSEHolder->>+Redis: Subscribes to its unique channel 'notifications:user-service-blue-pod-b'
+    Redis-->>-SSEHolder: Acknowledges subscription
+
+    AdminSvc->>+OutboxDB: Writes broadcast and event in a single DB transaction
+    OutboxDB-->>-AdminSvc: 
+
+    OutboxPoller->>+OutboxDB: Polls for new, unprocessed events
+    OutboxDB-->>-OutboxPoller: Returns event for broadcast
+
+    OutboxPoller->>+Kafka: Publishes event to 'broadcast-orchestration' topic
+    Kafka-->>-OutboxPoller: 
+
+    Kafka->>+Orchestrator: Kafka delivers event to an orchestrator consumer
+    Note over Orchestrator: This pod (Pod A) does NOT have the SSE connection for user-123.
+
+    Orchestrator->>+Redis: LOOKUP connection info for user-123
+    Redis-->>-Orchestrator: Returns { pod: 'user-service-blue-pod-b' }
+
+    Orchestrator->>+Redis: PUBLISH message to channel 'notifications:user-service-blue-pod-b'
+    Redis-->>-Orchestrator: 
+
+    Redis-->>+SSEHolder: Pushes message to the subscribed pod
+
+    SSEHolder->>+UserUI: Pushes message to user-123 via persistent SSE connection
+    UserUI-->>-SSEHolder: 
+
+    Orchestrator-->>-Kafka: Acknowledges Kafka message

@@ -1,0 +1,33 @@
+sequenceDiagram
+    participant UserUI as User UI
+    participant UserSvc as UserMessageService
+    participant DB as DB (Outbox)
+    participant KafkaOrch as Kafka (broadcast-orchestration)
+    participant Orchestrator as UserSvc (Orchestrator)
+    participant Redis as Redis (Pub/Sub)
+    participant Worker as UserSvc (Worker Pod)
+    participant DLT as Kafka (broadcast-orchestration-dlt)
+    participant DLTConsumer as AdminSvc (DLT Consumer)
+
+    UserUI->>+UserSvc: 1- POST /messages/read (user-xxx)
+    UserSvc->>+DB: 2- Writes READ event to Outbox
+    DB-->>-UserSvc: 
+    UserSvc-->>-UserUI: 3- Returns 200 OK
+
+    Note right of KafkaOrch: Outbox Poller publishes the event...
+    KafkaOrch->>+Orchestrator: 4- Orchestrator consumes READ event
+
+    alt Happy Path
+        Orchestrator->>+Redis: 5a- Forwards event to correct pod's Redis channel
+        Redis-->>-Orchestrator: 
+        Orchestrator-->>-KafkaOrch: 6a- Acknowledges orchestration event
+
+        Redis->>+Worker: 7a- Worker for user-xxx consumes event from channel
+        Worker->>Worker: 8a- Sends 'MESSAGE_REMOVED' via SSE
+    else DLT Path (Orchestrator Fails)
+        Orchestrator-->>+KafkaOrch: 5b- Throws exception after retries
+        Note over KafkaOrch, DLT: Spring Kafka Error Handler routes to DLT
+        KafkaOrch->>+DLT: 6b- Publishes failed orchestration message
+        DLT->>+DLTConsumer: 7b- Admin service consumes from DLT
+        DLTConsumer->>+DB: 8b- Saves DLT message for review
+    end

@@ -9,60 +9,45 @@ graph TD
         
         subgraph "Background Processing Schedulers"
             direction TB
-            PrecomputationScheduler["4a- Precomputation Scheduler<br/>(Runs every minute for PRODUCT)"]
-            ActivationScheduler["6- Activation Scheduler<br/>(Runs every minute)"]
-            OutboxPoller["8- Outbox Polling Service<br/>(Runs every 2s)"]
+            PrecomputationScheduler["4a- Precomputation Scheduler"]
+            ActivationScheduler["6- Activation Scheduler"]
+            OutboxPoller["8- Outbox Polling Service"]
         end
-        AsyncPrecomputation["5a- Async Precomputation<br/>(TargetingService)"]
+        AsyncPrecomputation["5a- Async Precomputation"]
     end
     
     subgraph "User Service (Delivery Plane)"
-        OrchestratorConsumer["10- Orchestrator Consumer"]
-        WorkerConsumer["12- Worker Consumer"]
+        OrchestratorConsumer["10- Orchestrator Consumer (Kafka)"]
+        WorkerRedisListener["12- Worker Redis Listener"]
         SseService["13- SSE Service"]
     end
 
     subgraph "Shared Infrastructure"
         Postgres["PostgreSQL DB"]
         Kafka["Kafka Broker"]
-        Redis["Redis Cache"]
+        Redis["Redis (Cache & Pub/Sub)"]
     end
 
-    %% --- 1- CREATION & TRIAGE ---
+    %% --- Flow ---
     AdminUI --> AdminAPI --> LifecycleSvc --> CreationLogic{"3- Creation Logic"}
 
     CreationLogic -- "Immediate ALL/ROLE/SELECTED" --> SaveActiveAndOutbox["DB: status=ACTIVE<br/>INSERT into outbox_events"]
     CreationLogic -- "Immediate PRODUCT" --> SavePreparing["DB: status=PREPARING"]
-    CreationLogic -- "Scheduled PRODUCT" --> SaveScheduledProduct["DB: status=SCHEDULED<br/>targetType=PRODUCT"]
-    CreationLogic -- "Scheduled ALL/ROLE/SELECTED" --> SaveScheduledOther["DB: status=SCHEDULED<br/>targetType=ALL/ROLE/SELECTED"]
-
     SaveActiveAndOutbox --> Postgres
     SavePreparing --> Postgres
-    SaveScheduledProduct --> Postgres
-    SaveScheduledOther --> Postgres
     
-    %% --- 2- ASYNC & SCHEDULED PROCESSING ---
     SavePreparing -- "Triggers" --> AsyncPrecomputation
-    
-    PrecomputationScheduler -- "Polls for due SCHEDULED PRODUCT" --> Postgres
-    PrecomputationScheduler -- "DB: status=PREPARING" --> Postgres
-    Postgres -- "status=PREPARING" --> AsyncPrecomputation
+    AsyncPrecomputation -- "Saves targets & sets status=READY" --> Postgres
 
-    AsyncPrecomputation -- "Fetches users & saves to 'broadcast_user_targets'" --> Postgres
-    AsyncPrecomputation -- "DB: status=READY" --> Postgres
-
-    ActivationScheduler -- "Polls for READY (from Product) OR<br/>due SCHEDULED (from All/Role/Selected)" --> Postgres
+    ActivationScheduler -- "Polls for READY" --> Postgres
     ActivationScheduler -- "7- DB: status=ACTIVE<br/>INSERT into outbox_events" --> Postgres
     
-    %% --- 3- PUBLISHING (CONVERGENCE POINT) ---
     Postgres -- "Event waits in 'outbox_events'" --> OutboxPoller
-    OutboxPoller -- "Polls & Locks Event" --> Postgres
     OutboxPoller -- "Publishes ONE Orchestration Event" --> Kafka
 
-    %% --- 4- ORCHESTRATION & DELIVERY ---
     Kafka -- "9- Orchestration Topic" --> OrchestratorConsumer
-    OrchestratorConsumer -- "Determines Final Audience" --> Postgres
-    OrchestratorConsumer -- "11- 'Scatters' User-Specific Events" --> Kafka
-    Kafka -- "Worker Topics" --> WorkerConsumer
-    WorkerConsumer --> SseService
+    OrchestratorConsumer -- "Determines Audience & Pod Location" --> Redis
+    OrchestratorConsumer -- "11- Publishes to Redis Channels" --> Redis
+    Redis -- "Delivers to correct Pod" --> WorkerRedisListener
+    WorkerRedisListener --> SseService
     SseService -- "Pushes via SSE" --> User[User Browser]

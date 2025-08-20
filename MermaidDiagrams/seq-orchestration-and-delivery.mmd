@@ -1,0 +1,35 @@
+sequenceDiagram
+    participant AdminSvc as Admin Service
+    participant DB as DB (Outbox Table)
+    participant OutboxPoller as AdminSvc (Outbox Poller)
+    participant KafkaOrchestration as Kafka (broadcast-orchestration)
+    participant Orchestrator as UserSvc (Orchestrator)
+    participant Redis as Redis (Pub/Sub)
+    participant Worker as UserSvc (Worker Pod)
+    participant SseSvc as UserSvc (SSE Service)
+
+    AdminSvc->>+DB: 1- Writes ONE orchestration event to Outbox table
+    DB-->>-AdminSvc: (Transaction commits)
+
+    OutboxPoller->>+DB: 2- Polls for and locks new events from Outbox
+    DB-->>-OutboxPoller: Returns event
+
+    OutboxPoller->>+KafkaOrchestration: 3- Publishes single orchestration event
+    KafkaOrchestration-->>-OutboxPoller: 
+
+    OutboxPoller->>+DB: 4- Deletes event from Outbox
+    DB-->>-OutboxPoller: 
+
+    KafkaOrchestration->>+Orchestrator: 5- Pod consumes the orchestration event
+    Orchestrator->>+Redis: 6- Looks up user's pod location
+    Redis-->>-Orchestrator: Returns pod name
+    
+    loop For each target user
+        Orchestrator->>+Redis: 7- "Scatters" user-specific event to correct Redis channel
+    end
+    Redis-->>-Orchestrator: 
+    Orchestrator-->>-KafkaOrchestration: 8- Acknowledges orchestration event
+
+    Redis->>+Worker: 9- Worker pod receives message from its channel subscription
+    Worker->>+SseSvc: 10- Forwards event for real-time delivery
+    SseSvc->>SseSvc: Pushes message via SSE to user
