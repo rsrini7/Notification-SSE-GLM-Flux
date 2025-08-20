@@ -1,9 +1,6 @@
 server:
   port: 8082 # User service port
   shutdown: graceful
-  netty:
-    worker:
-      thread-name-prefix: "http-nio-" # Custom prefix for web threads
   http2:
     enabled: true
   ssl:
@@ -47,7 +44,6 @@ spring:
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      # group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
       auto-offset-reset: earliest
       properties:
         '[spring.json.trusted.packages]': "*"
@@ -112,6 +108,8 @@ resilience4j:
 # --- CUSTOM PROPERTIES ---
 
 broadcast:
+  service:
+    name: broadcast-user-service
   h2-console:
     web-port: "8085" # Admin H2 Console on port 8085
     tcp-port: "9095"
@@ -143,8 +141,6 @@ broadcast:
       replication-factor: 1
     consumer:
       group-orchestration: "broadcast-orchestration-group"
-      group-worker: "broadcast-worker-group"
-      # group-dlt: "broadcast-dlt-group" # Included for consistency, though not used by a listener in this service
     retry:
       max-attempts: 3
       backoff-delay: 1000

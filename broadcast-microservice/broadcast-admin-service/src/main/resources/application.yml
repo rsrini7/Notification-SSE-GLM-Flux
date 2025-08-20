@@ -134,6 +134,8 @@ resilience4j:
 # --- CUSTOM PROPERTIES ---
    
 broadcast:
+  service:
+    name: broadcast-admin-service
   h2-console:
     web-port: "8084" # Admin H2 Console on port 8084
     tcp-port: "9094"
