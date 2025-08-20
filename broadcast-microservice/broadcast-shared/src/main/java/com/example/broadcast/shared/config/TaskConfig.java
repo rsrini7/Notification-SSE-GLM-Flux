@@ -38,7 +38,15 @@ public class TaskConfig {
 
     @Bean
     public Scheduler jdbcScheduler() {
-        // Creates a dedicated, named thread pool for blocking (JDBC) reactive tasks
-        return Schedulers.newBoundedElastic(10, Schedulers.DEFAULT_BOUNDED_ELASTIC_QUEUESIZE, "jdbc-io-");
+        /// Set a thread cap of 100 and a task queue cap for backpressure
+        // int threadCap = 100;
+        // int queuedTaskCap = 100000; // A high capacity for queued tasks
+        // return Schedulers.newBoundedElastic(threadCap, queuedTaskCap, "jdbc-io-");
+
+        // Schedulers.newParallel creates a fixed-size pool of standard platform threads.
+        // This is ideal for I/O-bound tasks that need guaranteed parallelism,
+        // bypassing the default Loom integration where it's causing serialization.
+        int parallelism = 10; // Start with 10 parallel threads for DB operations
+        return Schedulers.newParallel("jdbc-io-", parallelism);
     }
 }
