@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: geode-locator-service
+  namespace: broadcast-system
+spec:
+  type: ClusterIP
+  selector:
+    app: geode-locator
+  ports:
+    - name: locator-port
+      port: 10334
+      targetPort: 10334

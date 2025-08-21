@@ -34,8 +34,10 @@ resources:
   - kafka-simple/zookeeper-deployment.yaml
   - kafka-simple/kafka-service.yaml
   - kafka-simple/kafka-deployment.yaml
-  - redis/redis-deployment.yaml
-  - redis/redis-service.yaml
+  - geode/geode-locator-deployment.yaml
+  - geode/geode-locator-service.yaml
+  - geode/geode-server-deployment.yaml
+  - geode/geode-server-service.yaml
   - nginx/nginx-secret.yaml
   - nginx/nginx-deployment.yaml
   - nginx/nginx-service.yaml

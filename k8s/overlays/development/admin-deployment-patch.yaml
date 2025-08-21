@@ -31,8 +31,12 @@ spec:
                   key: postgres-password
             - name: SPRING_SQL_INIT_MODE
               value: "always"
-            - name: SPRING_DATA_REDIS_HOST
-              value: "redis-service"
+            # - name: GEODE_LOCATOR_HOST
+            #   value: "geode-locator-service"
+            # - name: GEODE_LOCATOR_PORT
+            #   value: "10334"
+            - name: BROADCAST_GEODE_LOCATOR_HOST
+              value: "geode-locator-service"
             - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
               value: "kafka-service:9092"
             - name: JAVA_OPTS

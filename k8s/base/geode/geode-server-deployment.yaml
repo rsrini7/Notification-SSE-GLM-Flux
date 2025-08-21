@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: geode-server
+  namespace: broadcast-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: geode-server
+  template:
+    metadata:
+      labels:
+        app: geode-server
+    spec:
+      containers:
+        - name: geode-server
+          image: custom-geode:1.0
+          imagePullPolicy: IfNotPresent
+          command: ["/geode-scripts/startServer.sh"]
+          ports:
+            - name: server-port
+              containerPort: 40404
