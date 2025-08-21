@@ -46,13 +46,13 @@ public class SseMessageCqListener extends CqListenerAdapter {
 
     @Override
     public void onEvent(CqEvent aCqEvent) {
-        // This method is triggered when a 'put' in the orchestrator matches our query
-        // CORRECTED: Use the isCreate() method on the Operation object.
-        log.info("cqEvent {}", aCqEvent.toString());
-        if (aCqEvent.getQueryOperation().isCreate()) {
+        log.info("CQ Event received. Operation: {}", aCqEvent.getQueryOperation());
+
+        // Handle both new entries and updates to existing entries
+        if (aCqEvent.getQueryOperation().isCreate() || aCqEvent.getQueryOperation().isUpdate()) {
             Object newValue = aCqEvent.getNewValue();
             if (newValue instanceof GeodeSsePayload payload) {
-                log.info("CQ Event Received for pod {}: {}", appProperties.getPod().getId(), payload.getEvent());
+                log.info("Processing CQ payload for pod {}: {}", appProperties.getPod().getId(), payload.getEvent());
                 sseService.handleMessageEvent(payload.getEvent());
             } else {
                 log.warn("Received unexpected payload type from CQ event: {}", (newValue != null) ? newValue.getClass().getName() : "null");
