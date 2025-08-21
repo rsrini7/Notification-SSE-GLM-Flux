@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-echo "--> Starting Geode Server..."
+echo "--> Starting Geode Server for Kubernetes..."
 gfsh <<EOF
-start server --name=$HOSTNAME --locators=geode-locator-service[10334] --dir=/data/$HOSTNAME/ --hostname-for-clients=localhost --J=-Dgemfire.subscription-conflation-enabled=true --classpath=/geode-server/classpath/app.jar $@
+start server --name=$HOSTNAME --locators=geode-locator-service[10334] --dir=/data/$HOSTNAME/ --hostname-for-clients=geode-server-service --J=-Dgemfire.subscription-conflation-enabled=true --classpath=/geode-server/classpath/app.jar $@
 EOF
 
 echo "--> Server is running."

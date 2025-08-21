@@ -18,6 +18,7 @@ spec:
           image: custom-geode:1.0
           imagePullPolicy: IfNotPresent
           command: ["/geode-scripts/startK8sServer.sh"]
+          args: ["--server-port=40404"]
           ports:
             - name: server-port
               containerPort: 40404
