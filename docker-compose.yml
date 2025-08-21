@@ -269,7 +269,7 @@ services:
     # environment:
     #   - GEODE_OPTS=-Dgemfire.subscription-conflation-enabled=true
     volumes:
-    - ./broadcast-microservice/broadcast-shared/target/broadcast-shared-1.0.0.jar:/geode-server/deploy/app.jar
+    - ./broadcast-microservice/broadcast-shared/target/broadcast-shared-1.0.0.jar:/geode-server/classpath/app.jar
     - ./geode-scripts/:/geode-scripts/
     command: /geode-scripts/startServer.sh --server-port=40404 --max-heap=1G
     # healthcheck:

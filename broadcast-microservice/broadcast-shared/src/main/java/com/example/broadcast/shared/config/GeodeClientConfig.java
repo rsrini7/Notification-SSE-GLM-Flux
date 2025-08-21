@@ -5,6 +5,7 @@ import com.example.broadcast.shared.dto.cache.PersistentUserMessageInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.ClientCache;
@@ -18,6 +19,7 @@ import java.util.Set;
 
 @Configuration
 @RequiredArgsConstructor
+@Slf4j
 public class GeodeClientConfig {
 
     private final AppProperties appProperties;
@@ -26,6 +28,8 @@ public class GeodeClientConfig {
     public ClientCache geodeClientCache() {
 
         String durableClientId = appProperties.getClusterName() + "_" + appProperties.getPod().getId();
+
+        log.info("Durable Client ID: {}",durableClientId);
 
         return new ClientCacheFactory()
                 .addPoolLocator(appProperties.getGeode().getLocator().getHost(), appProperties.getGeode().getLocator().getPort())
