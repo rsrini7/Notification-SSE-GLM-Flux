@@ -10,7 +10,7 @@
 #>
 
 # --- Configuration ---
-$DockerImage = "apachegeode/geode:1.15.1"
+$DockerImage = "custom-geode:1.0"
 $LocatorAddress = "localhost[10334]"
 
 # List of all regions to be cleared

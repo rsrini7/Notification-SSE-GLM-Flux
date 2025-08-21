@@ -70,44 +70,54 @@ public class SseService {
 
     public void handleMessageEvent(MessageDeliveryEvent event) {
         log.debug("Orchestrating message event: {} for user: {}", event.getEventType(), event.getUserId());
-        if (!event.getEventType().equals(Constants.EventType.CREATED.name())) {
-            handleLifecycleEvent(event);
-            return;
-        }
-        Optional<BroadcastMessage> broadcastOpt = broadcastRepository.findById(event.getBroadcastId());
-        if (broadcastOpt.isEmpty()) {
-            log.error("Cannot process event. BroadcastMessage with ID {} not found.", event.getBroadcastId());
-            return;
-        }
-        deliverFanOutOnReadMessage(event.getUserId(), broadcastOpt.get());
-    }
-
-    private void handleLifecycleEvent(MessageDeliveryEvent event) {
-        try {
-            String payload = objectMapper.writeValueAsString(Map.of("broadcastId", event.getBroadcastId()));
-            sseConnectionManager.sendEvent(event.getUserId(), ServerSentEvent.<String>builder()
-                .event(SseEventType.MESSAGE_REMOVED.name())
-                .data(payload).build());
-        } catch (JsonProcessingException e) {
-            log.error("Error processing lifecycle event for SSE", e);
+        
+        // --- REFACTORED to use switch statement ---
+        switch (Constants.EventType.valueOf(event.getEventType())) {
+            case CREATED:
+                broadcastRepository.findById(event.getBroadcastId()).ifPresentOrElse(
+                    broadcast -> deliverFanOutOnReadMessage(event.getUserId(), broadcast),
+                    () -> log.error("Cannot process CREATED event. BroadcastMessage with ID {} not found.", event.getBroadcastId())
+                );
+                break;
+            case CANCELLED:
+            case EXPIRED:
+                sendRemoveMessageEvent(event.getUserId(), event.getBroadcastId());
+                break;
+            default:
+                log.warn("Unhandled event type from Kafka orchestrator: {}", event.getEventType());
+                break;
         }
     }
 
     private void deliverFanOutOnReadMessage(String userId, BroadcastMessage broadcast) {
         log.info("Delivering fan-out-on-read broadcast {} to online user {}", broadcast.getId(), userId);
         UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
-        sendSseEvent(userId, response);
+        sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
         userMessageService.processAndCountGroupMessageDelivery(userId, broadcast);
     }
-
+    
+    // --- REFACTORED to handle different pending event types ---
     private void sendPendingMessages(String userId) {
         List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
         if (pendingEvents != null && !pendingEvents.isEmpty()) {
-            log.info("Found {} pending messages in cache for user: {}", pendingEvents.size(), userId);
+            log.info("Found {} pending events in cache for user: {}", pendingEvents.size(), userId);
             for (MessageDeliveryEvent event : pendingEvents) {
-                broadcastRepository.findById(event.getBroadcastId()).ifPresent(broadcast -> {
-                    deliverFanOutOnReadMessage(event.getUserId(), broadcast);
-                });
+                switch (Constants.EventType.valueOf(event.getEventType())) {
+                    case CREATED:
+                        broadcastRepository.findById(event.getBroadcastId()).ifPresent(broadcast -> {
+                            log.info("Processing pending CREATED event for user {} and broadcast {}", userId, event.getBroadcastId());
+                            deliverFanOutOnReadMessage(event.getUserId(), broadcast);
+                        });
+                        break;
+                    case CANCELLED:
+                    case EXPIRED:
+                        log.info("Processing pending CANCELLED/EXPIRED event for user {} and broadcast {}", userId, event.getBroadcastId());
+                        sendRemoveMessageEvent(userId, event.getBroadcastId());
+                        break;
+                    default:
+                        log.warn("Unhandled pending event type: {}", event.getEventType());
+                        break;
+                }
             }
             cacheService.clearPendingEvents(userId);
         }
@@ -121,27 +131,34 @@ public class SseService {
                     log.info("Delivering {} active group messages to user: {}", groupMessages.size(), userId);
                     for (BroadcastMessage broadcast : groupMessages) {
                         UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
-                        sendSseEvent(userId, response);
+                        sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
                         userMessageService.processAndCountGroupMessageDelivery(userId, broadcast);
                     }
                 }
             }, error -> log.error("Failed to fetch active group messages for user {}", userId, error));
     }
 
-    private void sendSseEvent(String userId, UserBroadcastResponse response) {
+    // --- NEW HELPER METHOD to send a remove event ---
+    private void sendRemoveMessageEvent(String userId, Long broadcastId) {
+        Map<String, Long> payload = Map.of("broadcastId", broadcastId);
+        sendSseEvent(userId, SseEventType.MESSAGE_REMOVED, broadcastId.toString(), payload);
+    }
+
+    // --- REFACTORED to be a generic event sender ---
+    private void sendSseEvent(String userId, SseEventType eventType, String eventId, Object data) {
         try {
-            String payload = objectMapper.writeValueAsString(response);
+            String payload = objectMapper.writeValueAsString(data);
             ServerSentEvent<String> sse = ServerSentEvent.<String>builder()
-                .event(SseEventType.MESSAGE.name())
+                .event(eventType.name())
                 .data(payload)
-                .id(String.valueOf(response.getId()))
+                .id(eventId)
                 .build();
             sseConnectionManager.sendEvent(userId, sse);
         } catch (JsonProcessingException e) {
-            log.error("Error delivering message to user as SSE", e);
+            log.error("Error serializing payload for SSE event type {}: {}", eventType, e.getMessage());
         }
     }
-
+    
     public int getConnectedUserCount() {
         return sseConnectionManager.getConnectedUserCount();
     }
