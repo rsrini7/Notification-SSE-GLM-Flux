@@ -1,5 +1,15 @@
 package com.example.broadcast.shared.dto;
 
 import java.io.Serializable;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 
-public record GeodeSsePayload(String targetPodId, MessageDeliveryEvent event) implements Serializable {}
+
+@Getter
+@ToString
+@RequiredArgsConstructor
+public class GeodeSsePayload implements Serializable {
+    private final String targetPodId;
+    private final MessageDeliveryEvent event;
+}

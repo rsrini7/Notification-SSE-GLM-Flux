@@ -33,8 +33,7 @@ public class SseMessageCqListener extends CqListenerAdapter {
             cqf.addCqListener(this);
             CqAttributes cqa = cqf.create();
 
-            String query = "SELECT * FROM /sse-messages s WHERE s.targetPodId = '" + uniquePodId + "'";
-
+            String query = "SELECT * FROM /sse-messages s WHERE s.getTargetPodId = '" + uniquePodId + "'";
             CqQuery cq = queryService.newCq("SseMessageCQ_" + uniquePodId.replace(":", "_"), query, cqa);
 
             cq.execute();
@@ -53,8 +52,8 @@ public class SseMessageCqListener extends CqListenerAdapter {
         if (aCqEvent.getQueryOperation().isCreate()) {
             Object newValue = aCqEvent.getNewValue();
             if (newValue instanceof GeodeSsePayload payload) {
-                log.info("CQ Event Received for pod {}: {}", appProperties.getPod().getId(), payload.event());
-                sseService.handleMessageEvent(payload.event());
+                log.info("CQ Event Received for pod {}: {}", appProperties.getPod().getId(), payload.getEvent());
+                sseService.handleMessageEvent(payload.getEvent());
             } else {
                 log.warn("Received unexpected payload type from CQ event: {}", (newValue != null) ? newValue.getClass().getName() : "null");
             }
