@@ -144,8 +144,7 @@ services:
       - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g
       - SPRING_PROFILES_ACTIVE=dev-pg,admin-only
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
-      - GEODE_LOCATOR_HOST=geode-locator
-      - GEODE_LOCATOR_PORT=10334
+      - BROADCAST_GEODE_LOCATOR_HOST=geode-locator
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-admin-service.log
     volumes:
@@ -172,8 +171,7 @@ services:
       - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g    
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
-      - GEODE_LOCATOR_HOST=geode-locator
-      - GEODE_LOCATOR_PORT=10334
+      - BROADCAST_GEODE_LOCATOR_HOST=geode-locator
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-user-service.log
       - CLUSTER_NAME=cluster-a
