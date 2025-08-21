@@ -202,7 +202,7 @@ public class BroadcastLifecycleService {
                 .eventId(UUID.randomUUID().toString())
                 .broadcastId(broadcast.getId())
                 .eventType(eventType.name())
-                .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                .podId(System.getenv().getOrDefault("POD_NAME", "broadcast-user-service-0"))
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .message(message)
                 .build();
