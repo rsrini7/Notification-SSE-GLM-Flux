@@ -18,7 +18,6 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
-
 import java.time.ZonedDateTime;
 import java.util.UUID;
 
@@ -50,10 +49,6 @@ public class SseController {
                 exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
 
         // MODIFIED: This entire block is now a reactive chain
-        // 1. Wrap the blocking call in a Mono.
-        // 2. Use subscribeOn() to move its execution to the blocking-safe jdbcScheduler.
-        // 3. Use .then() to proceed only after the blocking call is complete.
-        // 4. Use .flatMapMany() to switch to the SSE Flux.
         return Mono.fromRunnable(() -> sseService.registerConnection(userId, connectionId))
                 .subscribeOn(jdbcScheduler)
                 .doOnSuccess(v -> log.info("[CONNECT_SUCCESS] SSE connection established for userId='{}', connection='{}'", userId, connectionId))
@@ -72,9 +67,7 @@ public class SseController {
     @PostMapping("/disconnect")
     public ResponseEntity<String> disconnect(
             @RequestParam String userId,
-            // CHANGED: Renamed parameter
             @RequestParam String connectionId) {
-
         log.info("Disconnect request from user: {}, connection: {}", userId, connectionId);
         sseService.removeEventStream(userId, connectionId);
         return ResponseEntity.ok("Disconnected successfully");
@@ -83,7 +76,7 @@ public class SseController {
     @GetMapping("/stats")
     public ResponseEntity<java.util.Map<String, Object>> getStats() {
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
-        stats.put("totalActiveUsers", cacheService.getTotalActiveUsers()); 
+        stats.put("totalActiveUsers", cacheService.getTotalActiveUsers());
         stats.put("podActiveUsers", cacheService.getPodActiveUsers(appProperties.getPod().getId()));
         stats.put("sseConnectedUsers", sseService.getConnectedUserCount());
         stats.put("podId", appProperties.getPod().getId());
