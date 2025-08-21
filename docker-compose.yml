@@ -228,7 +228,11 @@ services:
       - broadcastnet
 
   geode-locator:
-    image: apachegeode/geode:1.15.1
+    build:
+      context: ./geode-scripts
+      dockerfile: Dockerfile
+    # image: apachegeode/geode:1.15.1
+    # image: custom-geode:1.15.2-java21
     container_name: geode-locator    
     hostname: locator
     mem_reservation: 1g
@@ -254,7 +258,11 @@ services:
       - broadcastnet
 
   geode-server:
-    image: apachegeode/geode:1.15.1
+    build:
+      context: ./geode-scripts
+      dockerfile: Dockerfile
+    # image: apachegeode/geode:1.15.1
+    # image: custom-geode:1.15.2-java21
     container_name: geode-server
     links:
       - geode-locator:locator
