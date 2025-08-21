@@ -103,22 +103,17 @@ public class KafkaConfig {
 
     @Bean
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
-           KafkaTemplate<String, Object> kafkaTemplate) {
+       KafkaTemplate<String, Object> kafkaTemplate) {
 
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) -> {
             String orchestrationTopic = appProperties.getKafka().getTopic().getNameOrchestration();
-
-            // SINCE ONLY THE ORCHESTRATION TOPIC IS CONSUMED, THIS IS THE ONLY PATH
-            if (cr.topic().equals(orchestrationTopic)) {
-                String orchestrationDltTopic = orchestrationTopic + Constants.DLT_SUFFIX;
-                log.info("Routing failed record from orchestration topic {} to its DLT {}", cr.topic(), orchestrationDltTopic);
-                return new TopicPartition(orchestrationDltTopic, 0);
-            }
+            // ALWAYS use the primary orchestration DLT name.
+            String dltTopic = orchestrationTopic + Constants.DLT_SUFFIX;
             
-            log.warn("Unrecognized topic '{}' in DLT resolver. Using default fallback DLT name.", cr.topic());
-            return new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
+            log.info("Routing failed record from original topic {} to DLT {}", cr.topic(), dltTopic);
+            return new TopicPartition(dltTopic, 0);
         };
- 
+
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate, destinationResolver);
         recoverer.setFailIfSendResultIsError(true);
         

@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 
 import java.time.ZonedDateTime;
 import java.util.UUID;
@@ -30,27 +32,33 @@ public class SseController {
     private final UserMessageService userMessageService;
     private final CacheService cacheService;
     private final AppProperties appProperties;
+    private final Scheduler jdbcScheduler;
 
     @GetMapping(value = "/connect", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RateLimiter(name = "sseConnectLimiter", fallbackMethod = "connectFallback")
     public Flux<ServerSentEvent<String>> connect(
             @RequestParam String userId,
-            // CHANGED: Renamed parameter
-            @RequestParam(required = false) String connectionId,
+            @RequestParam(required = false) String connectionIdParam,
             ServerWebExchange exchange) {
 
+        final String connectionId = (connectionIdParam == null || connectionIdParam.trim().isEmpty())
+                ? UUID.randomUUID().toString()
+                : connectionIdParam;
+
         log.info("[CONNECT_START] SSE connection request for userId='{}', connectionId='{}', IP='{}'",
-          userId, connectionId,
-          exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
+                userId, connectionId,
+                exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
 
-        if (connectionId == null || connectionId.trim().isEmpty()) {
-            connectionId = UUID.randomUUID().toString();
-        }
-
-        sseService.registerConnection(userId, connectionId);
-        Flux<ServerSentEvent<String>> eventStream = sseService.createEventStream(userId, connectionId);
-        log.info("[CONNECT_SUCCESS] SSE connection established for userId='{}', connection='{}'", userId, connectionId);
-        return eventStream;
+        // MODIFIED: This entire block is now a reactive chain
+        // 1. Wrap the blocking call in a Mono.
+        // 2. Use subscribeOn() to move its execution to the blocking-safe jdbcScheduler.
+        // 3. Use .then() to proceed only after the blocking call is complete.
+        // 4. Use .flatMapMany() to switch to the SSE Flux.
+        return Mono.fromRunnable(() -> sseService.registerConnection(userId, connectionId))
+                .subscribeOn(jdbcScheduler)
+                .doOnSuccess(v -> log.info("[CONNECT_SUCCESS] SSE connection established for userId='{}', connection='{}'", userId, connectionId))
+                .then(Mono.defer(() -> Mono.just(sseService.createEventStream(userId, connectionId))))
+                .flatMapMany(flux -> flux);
     }
 
     public Flux<ServerSentEvent<String>> connectFallback(String userId, String connectionId, ServerWebExchange exchange, RequestNotPermitted ex) {

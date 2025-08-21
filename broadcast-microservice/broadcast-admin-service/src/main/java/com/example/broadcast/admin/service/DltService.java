@@ -167,6 +167,9 @@ public class DltService {
      * @return The correct DLT topic name.
      */
     private String resolveDltTopicName(String originalTopic) {
-        return originalTopic + Constants.DLT_SUFFIX;
+        // MODIFIED: This logic should not be recursive. It should always derive the DLT name
+        // from the primary orchestration topic, not from another DLT.
+        String orchestrationTopic = appProperties.getKafka().getTopic().getNameOrchestration();
+        return orchestrationTopic + Constants.DLT_SUFFIX;
     }
 }
