@@ -271,11 +271,11 @@ services:
     volumes:
     - ./geode-scripts/:/geode-scripts/
     command: /geode-scripts/startServer.sh --server-port=40404 --max-heap=1G
-    healthcheck:
-      test: ["CMD", "gfsh", "-e", "connect --locator=locator[10334]", "-e", "list regions"]
-      interval: 5s
-      timeout: 10s
-      retries: 12
+    # healthcheck:
+    #   test: ["CMD", "gfsh", "-e", "connect --locator=locator[10334]", "-e", "list regions"]
+    #   interval: 5s
+    #   timeout: 10s
+    #   retries: 12
     depends_on:
       geode-locator:
         condition: service_started
