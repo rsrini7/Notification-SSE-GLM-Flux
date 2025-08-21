@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.broadcast.shared.config.AppProperties;
 
 import java.util.Collection;
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ public class DltService {
     private final BroadcastRepository broadcastRepository;
     private final MessageStatusService messageStatusService;
     private final TestingConfigurationService testingConfigurationService;
+    private final AppProperties appProperties;
     
     public Collection<DltMessage> getDltMessages() {
         return dltRepository.findAll();
