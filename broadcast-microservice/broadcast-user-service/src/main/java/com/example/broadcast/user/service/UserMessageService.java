@@ -23,8 +23,6 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.Set;
@@ -43,8 +41,6 @@ public class UserMessageService {
     private final CacheService cacheService;
     private final UserService userService;
     private final BroadcastMapper broadcastMapper;
-
-    private final ConcurrentHashMap<Long, ReentrantLock> broadcastContentLocks = new ConcurrentHashMap<>();
 
     @Transactional(readOnly = true)
     public List<UserBroadcastResponse> getUserMessages(String userId) {
@@ -191,18 +187,11 @@ public class UserMessageService {
         Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
 
         if (broadcastOpt.isEmpty()) {
-            ReentrantLock lock = broadcastContentLocks.computeIfAbsent(info.getBroadcastId(), k -> new ReentrantLock());
-            lock.lock();
-            try {
-                broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
-                if (broadcastOpt.isEmpty()) {
-                    log.warn("Broadcast content for ID {} was not in cache. Fetching from DB.", info.getBroadcastId());
-                    broadcastOpt = broadcastRepository.findById(info.getBroadcastId());
-                    broadcastOpt.ifPresent(cacheService::cacheBroadcastContent);
-                }
-            } finally {
-                lock.unlock();
-                broadcastContentLocks.remove(info.getBroadcastId(), lock);
+            broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
+            if (broadcastOpt.isEmpty()) {
+                log.warn("Broadcast content for ID {} was not in cache. Fetching from DB.", info.getBroadcastId());
+                broadcastOpt = broadcastRepository.findById(info.getBroadcastId());
+                broadcastOpt.ifPresent(cacheService::cacheBroadcastContent);
             }
         }
 
