@@ -48,6 +48,7 @@ public class SseMessageCqListener extends CqListenerAdapter {
     public void onEvent(CqEvent aCqEvent) {
         // This method is triggered when a 'put' in the orchestrator matches our query
         // CORRECTED: Use the isCreate() method on the Operation object.
+        log.info("cqEvent {}", aCqEvent.toString());
         if (aCqEvent.getQueryOperation().isCreate()) {
             Object newValue = aCqEvent.getNewValue();
             if (newValue instanceof GeodeSsePayload payload) {

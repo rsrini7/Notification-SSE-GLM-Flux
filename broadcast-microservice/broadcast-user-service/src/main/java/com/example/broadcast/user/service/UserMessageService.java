@@ -69,7 +69,7 @@ public class UserMessageService {
             return dbMessages;
         }).subscribeOn(jdbcScheduler);
     }
-    
+
     @Transactional(readOnly = true)
     public Mono<List<BroadcastMessage>> getActiveBroadcastsForUser(String userId) {
         return Mono.fromCallable(() -> {
@@ -81,7 +81,6 @@ public class UserMessageService {
                 .flatMap(role -> getActiveBroadcastsForRole(role).stream())
                 .distinct()
                 .collect(Collectors.toList());
-            
             List<BroadcastMessage> allUserBroadcasts = getActiveBroadcastsForAll();
             List<BroadcastMessage> selectedBroadcasts = broadcastRepository.findActiveSelectedBroadcastsForUser(userId);
             

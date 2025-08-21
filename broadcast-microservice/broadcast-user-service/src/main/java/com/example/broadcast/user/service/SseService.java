@@ -4,10 +4,7 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
-import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
-import com.example.broadcast.shared.repository.UserBroadcastRepository;
-import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.SseEventType;
@@ -31,9 +28,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class SseService {
 
-    private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
-    private final MessageStatusService messageStatusService;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
     private final CacheService cacheService;
@@ -58,7 +53,6 @@ public class SseService {
             try {
                 log.info("Starting async fetch of initial messages for user: {}", userId);
                 sendPendingMessages(userId);
-                // MODIFIED: This now subscribes to the Mono to execute the logic
                 sendActiveGroupMessages(userId);
             } catch (Exception e) {
                 log.error("Error during async initial message delivery for user: {}", userId, e);
@@ -119,7 +113,6 @@ public class SseService {
         }
     }
 
-    // MODIFIED: This method now handles the reactive type from the service
     private void sendActiveGroupMessages(String userId) {
         log.info("Checking for active group (ALL/ROLE) messages for newly connected user: {}", userId);
         userMessageService.getActiveBroadcastsForUser(userId)
