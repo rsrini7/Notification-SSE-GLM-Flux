@@ -9,6 +9,7 @@ import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
 import com.example.broadcast.shared.service.TestingConfigurationService;
 import com.example.broadcast.shared.service.UserService;
+import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
@@ -41,10 +42,6 @@ public class KafkaOrchestratorConsumerService {
     private final UserService userService;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final TestingConfigurationService testingConfigurationService;
-
-    // A simple record to act as the payload for the Geode Region.
-    // It must be public or in its own file to be accessible by the SseMessageCqListener.
-    public record GeodeSsePayload(String targetPodId, MessageDeliveryEvent event) {}
 
     @Qualifier("sseMessagesRegion")
     private final Region<String, Object> sseMessagesRegion;

@@ -1,4 +1,3 @@
-// file: broadcast-microservice/broadcast-admin-service/src/main/java/com/example/broadcast/admin/service/DltKafkaConsumerService.java
 package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
@@ -41,12 +40,12 @@ public class DltKafkaConsumerService {
                 "${broadcast.kafka.topic.name-orchestration}" + Constants.DLT_SUFFIX
             },
             groupId = "${broadcast.kafka.consumer.group-dlt}",
-            containerFactory = "kafkaListenerContainerFactory"
+            containerFactory = "dltListenerContainerFactory"
     )
     @Transactional
     public void listenToDlt(
-            @Payload MessageDeliveryEvent failedEvent,
-            @Header(KafkaHeaders.RECEIVED_KEY) String key,
+            @Payload(required = false) String payload,
+            @Header(name = KafkaHeaders.RECEIVED_KEY, required = false) String key,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.DLT_ORIGINAL_TOPIC) String originalTopic,
             @Header(KafkaHeaders.DLT_ORIGINAL_PARTITION) int originalPartition,
@@ -55,16 +54,24 @@ public class DltKafkaConsumerService {
             @Header(KafkaHeaders.DLT_EXCEPTION_STACKTRACE) String exceptionStacktrace,
             Acknowledgment acknowledgment) {
 
-        log.info("DLT Received Message. FailedEvent: {}, Key: {}, Original Topic: {}, Reason: {}.", failedEvent, key, originalTopic, exceptionMessage);
+        log.info("DLT Received Message. Failed Payload: {}, Key: {}, Original Topic: {}, Reason: {}.", payload, key, originalTopic, exceptionMessage);
+
+        if (payload == null) {
+            log.info("Received tombstone record from DLT for key: {}. Acknowledging and discarding.", key);
+            acknowledgment.acknowledge();
+            return;
+        }
 
         String displayTitle;
-        String payloadJson;
+        MessageDeliveryEvent failedEvent = null;
 
         try {
-            payloadJson = objectMapper.writeValueAsString(failedEvent);
+            failedEvent = objectMapper.readValue(payload, MessageDeliveryEvent.class);
         } catch (JsonProcessingException e) {
-            log.error("Critical: Could not re-serialize failed event for DLT storage.", e);
-            payloadJson = "{\"error\":\"Could not serialize payload\"}";
+            log.error("CRITICAL: Could not deserialize DLT message payload. Storing as raw string. Payload: {}", payload, e);
+            // If deserialization fails, we create a placeholder event.
+            failedEvent = new MessageDeliveryEvent();
+            failedEvent.setMessage("POISON PILL: UNABLE TO DESERIALIZE PAYLOAD");
         }
 
         if (failedEvent.getUserId() != null) {
@@ -89,7 +96,7 @@ public class DltKafkaConsumerService {
                 .exceptionMessage(displayTitle)
                 .exceptionStackTrace(exceptionStacktrace)
                 .failedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .originalMessagePayload(payloadJson)
+                .originalMessagePayload(payload)
                 .build();
         
          try {

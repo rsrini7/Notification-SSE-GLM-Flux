@@ -1,6 +1,5 @@
-package com.example.broadcast.user.service;
+package com.example.broadcast.shared.dto;
 
-import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import java.io.Serializable;
 
 public record GeodeSsePayload(String targetPodId, MessageDeliveryEvent event) implements Serializable {}

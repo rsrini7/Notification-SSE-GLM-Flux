@@ -1,6 +1,8 @@
 package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.config.AppProperties;
+import com.example.broadcast.shared.dto.GeodeSsePayload;
+
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

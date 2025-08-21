@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.KafkaException;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.listener.CommonLoggingErrorHandler;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.listener.ContainerProperties;
@@ -86,6 +87,19 @@ public class KafkaConfig {
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         factory.setCommonErrorHandler(errorHandler);
         factory.getContainerProperties().setListenerTaskExecutor(kafkaListenerExecutor); 
+        return factory;
+    }
+
+    @Bean("dltListenerContainerFactory")
+    public ConcurrentKafkaListenerContainerFactory<String, Object> dltListenerContainerFactory(
+        ConsumerFactory<String, Object> consumerFactory, AsyncTaskExecutor kafkaListenerExecutor) {
+        
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        // Use a simple logging error handler instead of the one that sends to a DLT
+        factory.setCommonErrorHandler(new CommonLoggingErrorHandler());
+        factory.getContainerProperties().setListenerTaskExecutor(kafkaListenerExecutor);
         return factory;
     }
 
