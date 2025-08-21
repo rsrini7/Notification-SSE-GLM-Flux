@@ -231,8 +231,8 @@ services:
     image: apachegeode/geode:1.15.1
     container_name: geode-locator    
     hostname: locator
-    mem_reservation: 768m
-    mem_limit: 1g 
+    mem_reservation: 1g
+    mem_limit: 2g 
     expose:
     - "10334"
     - "1099"
@@ -265,7 +265,7 @@ services:
     - "40404"
     - "1099"
     ports:
-    - "40404"
+    - "40404:40404"
     # environment:
     #   - GEODE_OPTS=-Dgemfire.subscription-conflation-enabled=true
     volumes:

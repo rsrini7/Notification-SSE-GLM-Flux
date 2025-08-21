@@ -129,6 +129,7 @@ broadcast:
     retry:
       max-attempts: 3
       backoff-delay: 1000
+
   geode:
     locator:
       host: localhost

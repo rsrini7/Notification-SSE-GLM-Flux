@@ -36,6 +36,7 @@ public class SseMessageCqListener extends CqListenerAdapter {
             CqQuery cq = queryService.newCq("SseMessageCQ_" + uniquePodId.replace(":", "_"), query, cqa);
 
             cq.execute();
+            clientCache.readyForEvents();
             log.info("Continuous Query registered for pod '{}' with query: {}", uniquePodId, query);
         } catch (CqException | RegionNotFoundException | CqExistsException e) {
             log.error("Failed to create Continuous Query", e);

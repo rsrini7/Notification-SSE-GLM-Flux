@@ -30,6 +30,8 @@ public class GeodeClientConfig {
         return new ClientCacheFactory()
                 .addPoolLocator(appProperties.getGeode().getLocator().getHost(), appProperties.getGeode().getLocator().getPort())
                 .setPoolSubscriptionEnabled(true)
+                .setPoolSubscriptionRedundancy(1)
+                .setPoolMinConnections(1)
                 .set("durable-client-id", durableClientId)
                 .set("durable-client-timeout", "300") // Timeout in seconds
                 .set("log-level", "config")
