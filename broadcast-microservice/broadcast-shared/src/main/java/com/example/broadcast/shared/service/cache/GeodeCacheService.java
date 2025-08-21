@@ -65,16 +65,19 @@ public class GeodeCacheService implements CacheService {
         UserConnectionInfo info = new UserConnectionInfo(userId, connectionId, podId, clusterName, now, now);
         try {
             String infoJson = objectMapper.writeValueAsString(info);
-            // This mapping is simplified: one user has one connection info object.
-            // For multiple connections per user, the value would need to be a Map or List.
             userConnectionsRegion.put(userId, infoJson);
             connectionToUserRegion.put(connectionId, userId);
             onlineUsersRegion.put(userId, true);
-            podConnectionsRegion.compute(podId, (k, v) -> {
-                if (v == null) v = new HashSet<>();
-                v.add(connectionId);
-                return v;
-            });
+
+            // --- REFACTORED to remove .compute() ---
+            Set<String> podConnections = podConnectionsRegion.get(podId);
+            if (podConnections == null) {
+                podConnections = new HashSet<>();
+            }
+            podConnections.add(connectionId);
+            podConnectionsRegion.put(podId, podConnections);
+            // --- END REFACTOR ---
+
             heartbeatRegion.put(connectionId, now.toEpochSecond());
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize UserConnectionInfo", e);
@@ -83,21 +86,82 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public void unregisterUserConnection(String userId, String connectionId) {
-        // Find the podId *before* removing other records
         getConnectionInfo(connectionId).ifPresent(info -> {
             String podId = info.getPodId();
-            podConnectionsRegion.computeIfPresent(podId, (k, v) -> {
-                v.remove(connectionId);
-                // If the set becomes empty, remove the key from the region
-                return v.isEmpty() ? null : v;
-            });
+            // --- REFACTORED to remove .computeIfPresent() ---
+            Set<String> podConnections = podConnectionsRegion.get(podId);
+            if (podConnections != null) {
+                podConnections.remove(connectionId);
+                if (podConnections.isEmpty()) {
+                    podConnectionsRegion.remove(podId);
+                } else {
+                    podConnectionsRegion.put(podId, podConnections);
+                }
+            }
+            // --- END REFACTOR ---
         });
-
         userConnectionsRegion.remove(userId);
         connectionToUserRegion.remove(connectionId);
         onlineUsersRegion.remove(userId);
         heartbeatRegion.remove(connectionId);
     }
+
+    @Override
+    public void addMessageToUserCache(String userId, PersistentUserMessageInfo message) {
+        // --- REFACTORED to remove .compute() ---
+        List<PersistentUserMessageInfo> messages = userMessagesRegion.get(userId);
+        if (messages == null) {
+            messages = new ArrayList<>();
+        }
+        messages.add(0, message);
+        userMessagesRegion.put(userId, messages);
+        // --- END REFACTOR ---
+    }
+
+    @Override
+    public void removeMessageFromUserCache(String userId, Long broadcastId) {
+        // --- REFACTORED to remove .computeIfPresent() ---
+        List<PersistentUserMessageInfo> messages = userMessagesRegion.get(userId);
+        if (messages != null) {
+            messages.removeIf(msg -> msg.getBroadcastId().equals(broadcastId));
+            if (messages.isEmpty()) {
+                userMessagesRegion.remove(userId);
+            } else {
+                userMessagesRegion.put(userId, messages);
+            }
+        }
+        // --- END REFACTOR ---
+    }
+
+    @Override
+    public void cachePendingEvent(MessageDeliveryEvent event) {
+        // --- REFACTORED to remove .compute() ---
+        String key = event.getUserId();
+        List<MessageDeliveryEvent> pendingEvents = pendingEventsRegion.get(key);
+        if (pendingEvents == null) {
+            pendingEvents = new ArrayList<>();
+        }
+        pendingEvents.add(event);
+        pendingEventsRegion.put(key, pendingEvents);
+        // --- END REFACTOR ---
+    }
+
+    @Override
+    public void removePendingEvent(String userId, Long broadcastId) {
+        // --- REFACTORED to remove .computeIfPresent() ---
+        List<MessageDeliveryEvent> pendingEvents = pendingEventsRegion.get(userId);
+        if (pendingEvents != null) {
+            pendingEvents.removeIf(evt -> evt.getBroadcastId().equals(broadcastId));
+            if (pendingEvents.isEmpty()) {
+                pendingEventsRegion.remove(userId);
+            } else {
+                pendingEventsRegion.put(userId, pendingEvents);
+            }
+        }
+        // --- END REFACTOR ---
+    }
+
+    // --- Methods below this line are unchanged ---
 
     @Override
     public Map<String, UserConnectionInfo> getConnectionsForUser(String userId) {
@@ -120,8 +184,6 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public Set<String> getStaleConnectionIds(long thresholdTimestamp) {
-        // NOTE: This is a client-side filter, which is less efficient than Redis's ZRANGEBYSCORE.
-        // For very large numbers of connections, a server-side Geode Function would be more performant.
         return heartbeatRegion.entrySet().stream()
                 .filter(entry -> entry.getValue() < thresholdTimestamp)
                 .map(Map.Entry::getKey)
@@ -171,42 +233,8 @@ public class GeodeCacheService implements CacheService {
     }
 
     @Override
-    public void addMessageToUserCache(String userId, PersistentUserMessageInfo message) {
-        userMessagesRegion.compute(userId, (k, v) -> {
-            if (v == null) v = new ArrayList<>();
-            v.add(0, message);
-            return v;
-        });
-    }
-
-    @Override
-    public void removeMessageFromUserCache(String userId, Long broadcastId) {
-        userMessagesRegion.computeIfPresent(userId, (k, v) -> {
-            v.removeIf(msg -> msg.getBroadcastId().equals(broadcastId));
-            return v.isEmpty() ? null : v;
-        });
-    }
-
-    @Override
-    public void cachePendingEvent(MessageDeliveryEvent event) {
-        pendingEventsRegion.compute(event.getUserId(), (k, v) -> {
-            if (v == null) v = new ArrayList<>();
-            v.add(event);
-            return v;
-        });
-    }
-
-    @Override
     public List<MessageDeliveryEvent> getPendingEvents(String userId) {
         return pendingEventsRegion.getOrDefault(userId, Collections.emptyList());
-    }
-
-    @Override
-    public void removePendingEvent(String userId, Long broadcastId) {
-        pendingEventsRegion.computeIfPresent(userId, (k, v) -> {
-            v.removeIf(evt -> evt.getBroadcastId().equals(broadcastId));
-            return v.isEmpty() ? null : v;
-        });
     }
 
     @Override

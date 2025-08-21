@@ -4,12 +4,13 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
 
+import java.io.Serializable;
 import java.time.ZonedDateTime;
 
 @Getter
 @ToString
 @AllArgsConstructor
-public class UserConnectionInfo {
+public class UserConnectionInfo implements Serializable{
     private final String userId;
     private final String connectionId;
     private final String podId;

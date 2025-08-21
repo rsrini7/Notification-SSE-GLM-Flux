@@ -39,10 +39,10 @@ public class SseController {
             @RequestParam String userId,
             @RequestParam(required = false) String connectionIdParam,
             ServerWebExchange exchange) {
-
+        
         final String connectionId = (connectionIdParam == null || connectionIdParam.trim().isEmpty())
-                ? UUID.randomUUID().toString()
-                : connectionIdParam;
+                                    ? UUID.randomUUID().toString()
+                                    : connectionIdParam;
 
         log.info("[CONNECT_START] SSE connection request for userId='{}', connectionId='{}', IP='{}'",
                 userId, connectionId,
