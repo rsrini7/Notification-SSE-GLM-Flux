@@ -41,9 +41,7 @@ public final class Constants {
         READ,
         CANCELLED,
         EXPIRED,
-        CACHE_EVICT_BROADCAST_ACTIVEGROUP,
-        CACHE_EVICT_BROADCAST,
-        CACHE_EVICT_ACTIVEGROUP
+        FAILED
     }
 
     public enum SseEventType {

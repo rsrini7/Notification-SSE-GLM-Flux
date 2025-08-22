@@ -71,14 +71,12 @@ public class GeodeCacheService implements CacheService {
             connectionToUserRegion.put(connectionId, userId);
             onlineUsersRegion.put(userId, true);
 
-            // --- REFACTORED to remove .compute() ---
             Set<String> podConnections = podConnectionsRegion.get(podId);
             if (podConnections == null) {
                 podConnections = new HashSet<>();
             }
             podConnections.add(connectionId);
             podConnectionsRegion.put(podId, podConnections);
-            // --- END REFACTOR ---
 
             heartbeatRegion.put(connectionId, now.toEpochSecond());
         } catch (JsonProcessingException e) {
@@ -100,7 +98,6 @@ public class GeodeCacheService implements CacheService {
                     podConnectionsRegion.put(podId, podConnections);
                 }
             }
-            // --- END REFACTOR ---
         });
         userConnectionsRegion.remove(userId);
         connectionToUserRegion.remove(connectionId);
@@ -110,19 +107,16 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public void addMessageToUserCache(String userId, PersistentUserMessageInfo message) {
-        // --- REFACTORED to remove .compute() ---
         List<PersistentUserMessageInfo> messages = userMessagesRegion.get(userId);
         if (messages == null) {
             messages = new ArrayList<>();
         }
         messages.add(0, message);
         userMessagesRegion.put(userId, messages);
-        // --- END REFACTOR ---
     }
 
     @Override
     public void removeMessageFromUserCache(String userId, Long broadcastId) {
-        // --- REFACTORED to remove .computeIfPresent() ---
         List<PersistentUserMessageInfo> messages = userMessagesRegion.get(userId);
         if (messages != null) {
             messages.removeIf(msg -> msg.getBroadcastId().equals(broadcastId));
@@ -132,12 +126,10 @@ public class GeodeCacheService implements CacheService {
                 userMessagesRegion.put(userId, messages);
             }
         }
-        // --- END REFACTOR ---
     }
 
     @Override
     public void cachePendingEvent(MessageDeliveryEvent event) {
-        // --- REFACTORED to remove .compute() ---
         String key = event.getUserId();
         List<MessageDeliveryEvent> pendingEvents = pendingEventsRegion.get(key);
         if (pendingEvents == null) {
@@ -145,12 +137,10 @@ public class GeodeCacheService implements CacheService {
         }
         pendingEvents.add(event);
         pendingEventsRegion.put(key, pendingEvents);
-        // --- END REFACTOR ---
     }
 
     @Override
     public void removePendingEvent(String userId, Long broadcastId) {
-        // --- REFACTORED to remove .computeIfPresent() ---
         List<MessageDeliveryEvent> pendingEvents = pendingEventsRegion.get(userId);
         if (pendingEvents != null) {
             pendingEvents.removeIf(evt -> evt.getBroadcastId().equals(broadcastId));
@@ -160,10 +150,7 @@ public class GeodeCacheService implements CacheService {
                 pendingEventsRegion.put(userId, pendingEvents);
             }
         }
-        // --- END REFACTOR ---
     }
-
-    // --- Methods below this line are unchanged ---
 
     @Override
     public Map<String, UserConnectionInfo> getConnectionsForUser(String userId) {
@@ -285,8 +272,6 @@ public class GeodeCacheService implements CacheService {
         keysToClear.forEach(activeGroupBroadcastsRegion::remove);
         log.warn("Cleared all entries from activeGroupBroadcastsRegion from client-side.");
     }
-
-    // --- Private Helper Methods ---
 
     private Optional<UserConnectionInfo> getConnectionInfo(String connectionId) {
         String userId = connectionToUserRegion.get(connectionId);

@@ -70,7 +70,6 @@ public class SseService {
     public void handleMessageEvent(MessageDeliveryEvent event) {
         log.debug("Orchestrating message event: {} for user: {}", event.getEventType(), event.getUserId());
         
-        // --- REFACTORED to use switch statement ---
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
                 broadcastRepository.findById(event.getBroadcastId()).ifPresentOrElse(
@@ -95,7 +94,6 @@ public class SseService {
         userMessageService.processAndCountGroupMessageDelivery(userId, broadcast);
     }
     
-    // --- REFACTORED to handle different pending event types ---
     private void sendPendingMessages(String userId) {
         List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
         if (pendingEvents != null && !pendingEvents.isEmpty()) {
@@ -137,13 +135,11 @@ public class SseService {
             }, error -> log.error("Failed to fetch active group messages for user {}", userId, error));
     }
 
-    // --- NEW HELPER METHOD to send a remove event ---
     private void sendRemoveMessageEvent(String userId, Long broadcastId) {
         Map<String, Long> payload = Map.of("broadcastId", broadcastId);
         sendSseEvent(userId, SseEventType.MESSAGE_REMOVED, broadcastId.toString(), payload);
     }
 
-    // --- REFACTORED to be a generic event sender ---
     private void sendSseEvent(String userId, SseEventType eventType, String eventId, Object data) {
         try {
             String payload = objectMapper.writeValueAsString(data);

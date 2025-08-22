@@ -69,25 +69,17 @@ public class KafkaOrchestratorConsumerService {
             return;
         }
 
-        // --- REFACTORED LOGIC WITH SWITCH STATEMENT ---
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
             case CANCELLED:
             case EXPIRED:
+                cacheService.evictActiveGroupBroadcastsCache();
+                cacheService.evictBroadcastContent(event.getBroadcastId());
                 handleBroadcastLifecycleEvent(broadcast, event);
                 break;
-            case CACHE_EVICT_BROADCAST:
-                log.info("Processing cache eviction from broadcast content ID: {}", event.getBroadcastId());
-                cacheService.evictBroadcastContent(event.getBroadcastId());
-            case CACHE_EVICT_ACTIVEGROUP:
-                log.info("Processing cache eviction from active group broadcast ID: {}", event.getBroadcastId());
+            case FAILED:
                 cacheService.evictActiveGroupBroadcastsCache();
-            case CACHE_EVICT_BROADCAST_ACTIVEGROUP:
-                log.info("Processing cache eviction to activegroup and broadcast content ID: {}", event.getBroadcastId());
-                cacheService.evictActiveGroupBroadcastsCache();
-                cacheService.evictBroadcastContent(event.getBroadcastId());
                 break;
-
             case READ:
                 handleReadEvent(event);
                 break;
