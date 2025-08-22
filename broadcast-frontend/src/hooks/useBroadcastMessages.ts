@@ -82,6 +82,9 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
       
       case 'READ_RECEIPT':
         console.log(`Read receipt for broadcast ${payload.broadcastId} acknowledged.`);
+        if (payload && payload.broadcastId) {
+            setMessages(prev => prev.filter(msg => msg.broadcastId !== payload.broadcastId));
+        }
         break;
       
       case 'MESSAGE_REMOVED':

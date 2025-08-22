@@ -82,6 +82,9 @@ public class SseService {
             case EXPIRED:
                 sendRemoveMessageEvent(event.getUserId(), event.getBroadcastId());
                 break;
+            case READ:
+                sendReadReceiptEvent(event.getUserId(), event.getBroadcastId());
+                break;
             default:
                 log.warn("Unhandled event type from Kafka orchestrator: {}", event.getEventType());
                 break;
@@ -119,6 +122,11 @@ public class SseService {
             }
             cacheService.clearPendingEvents(userId);
         }
+    }
+
+    private void sendReadReceiptEvent(String userId, Long broadcastId) {
+        Map<String, Long> payload = Map.of("broadcastId", broadcastId);
+        sendSseEvent(userId, SseEventType.READ_RECEIPT, broadcastId.toString(), payload);
     }
 
     private void sendActiveGroupMessages(String userId) {
