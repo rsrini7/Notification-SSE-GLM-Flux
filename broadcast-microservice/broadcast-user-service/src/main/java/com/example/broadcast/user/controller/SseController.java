@@ -3,7 +3,6 @@ package com.example.broadcast.user.controller;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.user.service.SseService;
-import com.example.broadcast.user.service.UserMessageService;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +27,6 @@ import java.util.UUID;
 public class SseController {
 
     private final SseService sseService;
-    private final UserMessageService userMessageService;
     private final CacheService cacheService;
     private final AppProperties appProperties;
     private final Scheduler jdbcScheduler;
@@ -88,13 +86,5 @@ public class SseController {
     public ResponseEntity<Boolean> isUserConnected(@PathVariable String userId) {
         boolean connected = sseService.isUserConnected(userId);
         return ResponseEntity.ok(connected);
-    }
-
-    @PostMapping("/read")
-    public ResponseEntity<String> markMessageAsRead(
-            @RequestParam String userId,
-            @RequestParam Long messageId) {
-        userMessageService.markMessageAsRead(userId, messageId);
-        return ResponseEntity.ok("Message marked as read");
     }
 }

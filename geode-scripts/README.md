@@ -16,3 +16,5 @@ query --query="SELECT e.key, e.value FROM /active-group-broadcasts.entries e"
 get --key="ROLE:ADMIN" --region=/active-group-broadcasts
 
 query --query="SELECT e.key, e.value FROM /pod-connections.entries e"
+
+query --query="SELECT entry.key, msg FROM /user-messages.entrySet entry, entry.value msg WHERE msg.broadcastId = 1"

@@ -151,9 +151,6 @@ export const userService = {
     const response = await userApi.get(`/messages/groups?userId=${userId}`);
     return response.data;
   },
-  markMessageAsRead: async (userId: string, broadcastId: number): Promise<void> => {
-    await userApi.post(`/sse/read?userId=${userId}&messageId=${broadcastId}`);
-  },
   getAllUsers: async (): Promise<string[]> => {
     const response = await adminApi.get('/broadcasts/users/all-ids');
     return response.data;
