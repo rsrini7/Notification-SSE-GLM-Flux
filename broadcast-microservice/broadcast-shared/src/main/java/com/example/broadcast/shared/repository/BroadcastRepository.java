@@ -151,6 +151,11 @@ public class BroadcastRepository {
         return jdbcTemplate.query(sql, broadcastRowMapper, id).stream().findFirst();
     }
 
+    public Optional<BroadcastMessage> findActiveBroadcastById(Long id) {
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND id = ?";
+        return jdbcTemplate.query(sql, broadcastRowMapper, id).stream().findFirst();
+    }
+
     public Optional<BroadcastResponse> findBroadcastWithStatsById(Long id) {
         String sql = """
             SELECT b.*, s.total_targeted, s.total_delivered, s.total_read

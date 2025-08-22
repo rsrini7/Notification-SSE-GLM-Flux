@@ -253,7 +253,10 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public void evictBroadcastContent(Long broadcastId) {
-        if (broadcastId != null) broadcastContentRegion.remove(broadcastId);
+        if (broadcastId != null){
+            broadcastContentRegion.remove(broadcastId);
+            log.warn("Cleared all entries from broadcastContentRegion from client-side.");
+        }
     }
 
     @Override

@@ -173,7 +173,7 @@ public class UserMessageService {
         Optional<BroadcastMessage> broadcastOpt = cacheService.getBroadcastContent(info.getBroadcastId());
         if (broadcastOpt.isEmpty()) {
             log.warn("Broadcast content for ID {} was not in cache. Fetching from DB.", info.getBroadcastId());
-            broadcastOpt = broadcastRepository.findById(info.getBroadcastId());
+            broadcastOpt = broadcastRepository.findActiveBroadcastById(info.getBroadcastId());
             broadcastOpt.ifPresent(cacheService::cacheBroadcastContent);
         }
         if (broadcastOpt.isEmpty()) {
