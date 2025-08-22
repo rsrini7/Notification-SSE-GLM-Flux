@@ -20,8 +20,6 @@ gfsh -e "connect --locator=localhost[10334]" \
      -e "create region --name=broadcast-content --type=REPLICATE" \
      -e "create region --name=active-group-broadcasts --type=REPLICATE" \
      -e "create region --name=user-messages --type=REPLICATE" \
-     -e "create region --name=sse-messages --type=REPLICATE" \
-     -e "create region --name=dlt-armed --type=REPLICATE" \
-     -e "create region --name=dlt-failure-ids --type=REPLICATE"
-
+     -e "create region --name=sse-messages --type=REPLICATE" 
+     
 echo "--> All regions created successfully!"

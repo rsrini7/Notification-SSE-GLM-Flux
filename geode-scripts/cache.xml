@@ -39,11 +39,5 @@
     <region name="sse-messages">
         <region-attributes refid="REPLICATE"/>
     </region>
-    <region name="dlt-armed">
-        <region-attributes refid="REPLICATE"/>
-    </region>
-    <region name="dlt-failure-ids">
-        <region-attributes refid="REPLICATE"/>
-    </region>
 
 </cache>

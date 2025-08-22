@@ -18,8 +18,6 @@ $regions = @(
     "active-group-broadcasts",
     "broadcast-content",
     "connection-to-user",
-    "dlt-armed",
-    "dlt-failure-ids",
     "heartbeat",
     "online-users",
     "pending-events",
