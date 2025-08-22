@@ -21,7 +21,7 @@ public class UserService {
     );
 
     public List<String> getAllUserIds() {
-        return java.util.stream.IntStream.rangeClosed(1, 120)
+        return java.util.stream.IntStream.rangeClosed(1, 10)
                 .mapToObj(i -> String.format("user-%03d", i))
                 .collect(java.util.stream.Collectors.toList());
     }
