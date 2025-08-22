@@ -73,9 +73,10 @@ public class UserMessageService {
     @Transactional(readOnly = true)
     public Mono<List<BroadcastMessage>> getActiveBroadcastsForUser(String userId) {
         return Mono.fromCallable(() -> {
-            List<Long> processedBroadcastIds = userBroadcastRepository.findActiveBroadcastIdsByUserId(userId);
-            Set<Long> processedBroadcastIdSet = new HashSet<>(processedBroadcastIds);
-
+            // Use the new method to get only READ messages
+            List<Long> readBroadcastIds = userBroadcastRepository.findReadBroadcastIdsByUserId(userId);
+            Set<Long> readBroadcastIdSet = new HashSet<>(readBroadcastIds);
+ 
             List<String> userRoles = userService.getRolesForUser(userId);
             List<BroadcastMessage> roleBroadcasts = userRoles.stream()
                 .flatMap(role -> getActiveBroadcastsForRole(role).stream())
@@ -87,7 +88,7 @@ public class UserMessageService {
             return Stream.of(roleBroadcasts, allUserBroadcasts, selectedBroadcasts)
                     .flatMap(List::stream)
                     .distinct()
-                    .filter(broadcast -> !processedBroadcastIdSet.contains(broadcast.getId()))
+                    .filter(broadcast -> !readBroadcastIdSet.contains(broadcast.getId()))
                     .collect(Collectors.toList());
         }).subscribeOn(jdbcScheduler);
     }
@@ -193,13 +194,9 @@ public class UserMessageService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void processAndCountGroupMessageDelivery(String userId, BroadcastMessage broadcast) {
-        if (broadcast == null || userId == null) return;
-        int newRows = userBroadcastRepository.createIfNotExists(broadcast.getId(), userId, ZonedDateTime.now(ZoneOffset.UTC));
-        if (newRows > 0) {
-            broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
-            log.info("Recorded and counted first-time delivery of group broadcast {} to user {}", broadcast.getId(), userId);
-        } else {
-            log.debug("Ignoring duplicate delivery of group broadcast {} to user {}", broadcast.getId(), userId);
-        }
-    }
+        if (broadcast == null || userId == null) return;       
+        // The only responsibility of this method now is to increment the central delivery counter.
+        broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
+        log.info("Counted delivery of group broadcast {} to user {}", broadcast.getId(), userId);
+     }
 }

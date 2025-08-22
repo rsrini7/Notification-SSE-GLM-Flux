@@ -3,7 +3,6 @@ package com.example.broadcast.shared.repository;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
-import com.example.broadcast.shared.util.Constants.ReadStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -235,37 +234,13 @@ public class UserBroadcastRepository {
         return jdbcTemplate.update(sql, newStatus, broadcastId);
     }
 
-    public List<Long> findActiveBroadcastIdsByUserId(String userId) {
-        String sql = "SELECT broadcast_id FROM user_broadcast_messages WHERE user_id = ? AND delivery_status = 'DELIVERED'";
-        return jdbcTemplate.queryForList(sql, Long.class, userId);
-    }
-
     public List<String> findBroadcastReceivers(Long broadcastId) {
         String sql = "SELECT user_id FROM user_broadcast_messages WHERE broadcast_id = ?";
         return jdbcTemplate.queryForList(sql, String.class, broadcastId);
     }
 
-     /**
-     * Atomically creates a user_broadcast_messages record if it does not already exist.
-     * This is used to ensure idempotent processing for fan-out-on-read broadcasts.
-     * @return The number of rows inserted (1 if created, 0 if it already existed).
-     */
-    public int createIfNotExists(Long broadcastId, String userId, ZonedDateTime deliveredAt) {
-        String sql = """
-            MERGE INTO user_broadcast_messages AS t
-            USING (VALUES (?, ?, ?, ?, ?)) AS s(p_broadcast_id, p_user_id, p_delivery_status, p_read_status, p_delivered_at)
-                ON t.broadcast_id = s.p_broadcast_id AND t.user_id = s.p_user_id
-            WHEN NOT MATCHED THEN
-                INSERT (broadcast_id, user_id, delivery_status, read_status, delivered_at)
-                VALUES (s.p_broadcast_id, s.p_user_id, s.p_delivery_status, s.p_read_status, s.p_delivered_at)
-            """;
-
-        return jdbcTemplate.update(sql,
-                broadcastId,
-                userId,
-                DeliveryStatus.DELIVERED.name(),
-                ReadStatus.UNREAD.name(),
-                deliveredAt.toOffsetDateTime()
-        );
+    public List<Long> findReadBroadcastIdsByUserId(String userId) {
+        String sql = "SELECT broadcast_id FROM user_broadcast_messages WHERE user_id = ? AND read_status = 'READ'";
+        return jdbcTemplate.queryForList(sql, Long.class, userId);
     }
 }

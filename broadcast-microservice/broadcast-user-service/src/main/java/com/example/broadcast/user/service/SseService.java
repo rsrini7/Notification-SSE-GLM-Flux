@@ -70,6 +70,7 @@ public class SseService {
     public void handleMessageEvent(MessageDeliveryEvent event) {
         log.debug("Orchestrating message event: {} for user: {}", event.getEventType(), event.getUserId());
         
+
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
                 broadcastRepository.findById(event.getBroadcastId()).ifPresentOrElse(
