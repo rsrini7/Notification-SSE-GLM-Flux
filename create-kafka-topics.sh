@@ -17,13 +17,9 @@ echo "Kafka is ready!"
 # --- Create Singleton Topics ---
 ORCHESTRATION_TOPIC="broadcast-orchestration"
 ORCHESTRATION_DLT="${ORCHESTRATION_TOPIC}-dlt"
-WORKER_DLT="broadcast-user-service-dlt"
 
 echo "--- Creating Singleton Topics ---"
 kafka-topics --bootstrap-server $KAFKA_BROKERS --create --if-not-exists --topic $ORCHESTRATION_TOPIC --partitions 1 --replication-factor 1
 kafka-topics --bootstrap-server $KAFKA_BROKERS --create --if-not-exists --topic $ORCHESTRATION_DLT --partitions 1 --replication-factor 1
-kafka-topics --bootstrap-server $KAFKA_BROKERS --create --if-not-exists --topic $WORKER_DLT --partitions 1 --replication-factor 1
-
-# --- DELETED: The section for creating pod-specific worker topics has been removed ---
 
 echo "--- Topic creation script finished successfully. ---"
