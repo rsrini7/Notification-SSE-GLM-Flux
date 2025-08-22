@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { broadcastService, testingService, type BroadcastMessage, type BroadcastStats, type BroadcastRequest } from '../services/api';
+import { broadcastService, type BroadcastMessage, type BroadcastStats, type BroadcastRequest } from '../services/api';
 
 export const useBroadcastManagement = () => {
   const [broadcasts, setBroadcasts] = useState<BroadcastMessage[]>([]);
@@ -10,7 +10,6 @@ export const useBroadcastManagement = () => {
   const [deliveryDetails, setDeliveryDetails] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('create');
   const [manageFilter, setManageFilter] = useState('all');
-  const [isFailureModeEnabled, setFailureModeEnabled] = useState(false);
   const { toast } = useToast();
 
   const fetchBroadcasts = useCallback(async (filter = 'all') => {
@@ -61,8 +60,6 @@ export const useBroadcastManagement = () => {
         title: 'Success',
         description: 'Broadcast created successfully',
       });
-      const status = await testingService.getKafkaFailureStatus();
-      setFailureModeEnabled(status.enabled);
       setActiveTab('manage');
     } catch {
       toast({
@@ -104,33 +101,6 @@ export const useBroadcastManagement = () => {
     });
   }, [selectedBroadcast, fetchBroadcasts, fetchBroadcastStats, fetchDeliveryDetails, toast]);
 
-  const handleToggleFailureMode = async (enabled: boolean) => {
-    try {
-      await testingService.setKafkaFailureStatus(enabled);
-      setFailureModeEnabled(enabled);
-      toast({
-        title: `Test Mode ${enabled ? 'Enabled' : 'Disabled'}`,
-        description: `Backend will now ${enabled ? 'simulate transient failures' : 'process normally'}.`,
-        variant: enabled ? 'destructive' : 'default',
-      });
-    } catch {
-      toast({
-        title: 'Error',
-        description: 'Failed to update test mode status.',
-        variant: 'destructive',
-      });
-    }
-  };
-  
-  const fetchFailureModeStatus = useCallback(async () => {
-      try {
-        const status = await testingService.getKafkaFailureStatus();
-        setFailureModeEnabled(status.enabled);
-      } catch {
-        console.error("Could not fetch testing status from backend.");
-      }
-  }, []);
-
   return {
     state: {
       broadcasts,
@@ -140,7 +110,6 @@ export const useBroadcastManagement = () => {
       deliveryDetails,
       activeTab,
       manageFilter,
-      isFailureModeEnabled,
     },
     actions: {
       fetchBroadcasts,
@@ -152,8 +121,6 @@ export const useBroadcastManagement = () => {
       setSelectedBroadcast,
       setActiveTab,
       setManageFilter,
-      handleToggleFailureMode,
-      fetchFailureModeStatus,
     }
   };
 };

@@ -2,9 +2,6 @@ import React, { useEffect } from 'react';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Label } from '../ui/label';
-import { Switch } from '../ui/switch';
-import { AlertCircle } from 'lucide-react';
 import BroadcastCreationForm from './BroadcastCreationForm';
 import BroadcastManagementList from './BroadcastManagementList';
 import BroadcastStatisticsView from './BroadcastStatisticsView';
@@ -22,7 +19,6 @@ const BroadcastAdminPanel: React.FC = () => {
     deliveryDetails,
     activeTab,
     manageFilter,
-    isFailureModeEnabled,
   } = state;
   const {
     fetchBroadcasts,
@@ -34,15 +30,9 @@ const BroadcastAdminPanel: React.FC = () => {
     setSelectedBroadcast,
     setActiveTab,
     setManageFilter,
-    handleToggleFailureMode,
-    fetchFailureModeStatus,
   } = actions;
 
   // Initial data fetching
-  useEffect(() => {
-    fetchFailureModeStatus();
-  }, [fetchFailureModeStatus]);
-  
   useEffect(() => {
     fetchBroadcasts(manageFilter);
   }, [manageFilter, fetchBroadcasts]);
@@ -69,32 +59,6 @@ const BroadcastAdminPanel: React.FC = () => {
           {broadcasts.length} Total Broadcasts
         </Badge>
       </div>
-
-      <Card className="border border-red-300 bg-red-500 dark:bg-red-900/120">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-red-800 dark:text-red-700">
-            <AlertCircle className="h-5 w-5 text-red-800 dark:text-red-900" />
-            DLT Test Mode
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="kafka-failure-mode"
-              className="data-[state=checked]:bg-red-800 data-[state=unchecked]:border-red-800 data-[state=unchecked]:bg-gray-400"
-              checked={isFailureModeEnabled}
-              onCheckedChange={handleToggleFailureMode}
-              aria-label="Toggle Kafka consumer failure mode"
-            />
-            <Label htmlFor="kafka-failure-mode" className="flex-grow font-medium text-yellow-600 dark:text-yellow-900">
-              Enable Kafka Consumer Failure Mode
-            </Label>
-          </div>
-          <p className="text-xs text-yellow-900 dark:text-yellow-800 mt-2">
-            When enabled, the next created broadcast will fail processing to test DLT functionality.
-          </p>
-        </CardContent>
-      </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
         <TabsList className="grid w-full grid-cols-4 max-w-2xl mx-auto bg-gray-200">

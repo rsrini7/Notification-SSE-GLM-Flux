@@ -6,7 +6,6 @@ import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
 import com.example.broadcast.shared.service.BroadcastStatisticsService;
-import com.example.broadcast.shared.service.TestingConfigurationService;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.service.cache.CacheService;
@@ -38,7 +37,6 @@ public class KafkaOrchestratorConsumerService {
     private final BroadcastRepository broadcastRepository;
     private final UserService userService;
     private final BroadcastStatisticsService broadcastStatisticsService;
-    private final TestingConfigurationService testingConfigurationService;
 
     @Qualifier("sseMessagesRegion")
     private final Region<String, Object> sseMessagesRegion;
@@ -54,11 +52,6 @@ public class KafkaOrchestratorConsumerService {
                                            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
                                            @Header(KafkaHeaders.OFFSET) long offset,
                                            Acknowledgment acknowledgment) {
-
-        if (testingConfigurationService.isMarkedForFailure(event.getBroadcastId())) {
-            log.warn("DLT TEST MODE: Simulating failure in Orchestrator for broadcast ID: {}", event.getBroadcastId());
-            throw new RuntimeException("Simulating DLT failure in Orchestrator for broadcast ID: " + event.getBroadcastId());
-        }
 
         log.info("Orchestration event received for type '{}' on broadcast ID: {}. [Topic: {}, Partition: {}, Offset: {}]", event.getEventType(), event.getBroadcastId(), topic, partition, offset);
         BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId()).orElse(null);

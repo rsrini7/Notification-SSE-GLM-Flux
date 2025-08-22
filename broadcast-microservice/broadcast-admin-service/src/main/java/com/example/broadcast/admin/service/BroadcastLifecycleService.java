@@ -12,7 +12,6 @@ import com.example.broadcast.shared.model.BroadcastStatistics;
 import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.repository.*;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
-// import com.example.broadcast.shared.service.TestingConfigurationService;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.admin.event.BroadcastCreatedEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -44,7 +43,6 @@ public class BroadcastLifecycleService {
     private final BroadcastMapper broadcastMapper;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
-    // private final TestingConfigurationService testingConfigurationService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
@@ -84,11 +82,6 @@ public class BroadcastLifecycleService {
         }
         
         broadcast = broadcastRepository.save(broadcast);
-
-        // if (isFailureTest) {
-        //     testingConfigurationService.markBroadcastForFailure(broadcast.getId());
-        //     log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
-        // }
 
         // If it's an immediate broadcast, we MUST publish the single orchestration event to the outbox.
         // This now correctly includes ALL, ROLE, and SELECTED types.

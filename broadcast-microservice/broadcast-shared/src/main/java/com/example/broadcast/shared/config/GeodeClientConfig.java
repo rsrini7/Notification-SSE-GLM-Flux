@@ -109,17 +109,4 @@ public class GeodeClientConfig {
                 .create("sse-messages");
     }
 
-    // ADDED: Region to store the single "armed" flag for the DLT test
-    @Bean("dltArmedRegion")
-    public Region<String, Boolean> dltArmedRegion(ClientCache clientCache) {
-        return clientCache.<String, Boolean>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("dlt-armed");
-    }
-
-    // ADDED: Region to act as a "Set" of broadcast IDs marked for failure
-    @Bean("dltFailureIdsRegion")
-    public Region<Long, Boolean> dltFailureIdsRegion(ClientCache clientCache) {
-        return clientCache.<Long, Boolean>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("dlt-failure-ids");
-    }
 }

@@ -130,17 +130,6 @@ export const dltService = {
   },
 };
 
-export const testingService = {
-  getKafkaFailureStatus: async (): Promise<{ enabled: boolean }> => {
-    const response = await adminApi.get('/testing/kafka-consumer-failure');
-    return response.data;
-  },
-  setKafkaFailureStatus: async (enabled: boolean): Promise<void> => {
-    await adminApi.post('/testing/kafka-consumer-failure', { enabled });
-  },
-};
-
-
 // Services using the userApi instance
 export const userService = {
   getUserMessages: async (userId: string): Promise<UserBroadcastMessage[]> => {
