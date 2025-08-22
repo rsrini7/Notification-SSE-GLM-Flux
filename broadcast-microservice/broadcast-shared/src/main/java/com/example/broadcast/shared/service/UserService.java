@@ -53,11 +53,11 @@ public class UserService {
         // This is a simple mock. A real implementation would be more complex.
         if ("Payments".equalsIgnoreCase(productId)) {
             // Return a specific subset of users for the "Payments" product
-            return List.of("user-001", "user-003", "user-005", "user-010", "user-025");
+            return List.of("user-001", "user-003", "user-005", "user-010");
         }
         if ("Analytics".equalsIgnoreCase(productId)) {
             // Return another subset for "Analytics"
-            return List.of("user-002", "user-003", "user-020", "user-030");
+            return List.of("user-003", "user-007", "user-009");
         }
         // Return an empty list for unknown products
         return List.of();
