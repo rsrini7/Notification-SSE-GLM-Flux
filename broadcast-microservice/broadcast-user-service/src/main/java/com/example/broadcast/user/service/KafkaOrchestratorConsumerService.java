@@ -3,9 +3,8 @@ package com.example.broadcast.user.service;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
-import com.example.broadcast.shared.model.BroadcastStatistics;
 import com.example.broadcast.shared.repository.BroadcastRepository;
-import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
+import com.example.broadcast.shared.service.BroadcastStatisticsService;
 import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
 import com.example.broadcast.shared.service.TestingConfigurationService;
 import com.example.broadcast.shared.service.UserService;
@@ -23,8 +22,6 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +37,7 @@ public class KafkaOrchestratorConsumerService {
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
     private final UserService userService;
-    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
+    private final BroadcastStatisticsService broadcastStatisticsService;
     private final TestingConfigurationService testingConfigurationService;
 
     @Qualifier("sseMessagesRegion")
@@ -78,7 +75,7 @@ public class KafkaOrchestratorConsumerService {
         } else {
             if (Constants.EventType.CREATED.name().equals(event.getEventType()) &&
                     (!Constants.TargetType.PRODUCT.name().equals(broadcast.getTargetType()))) {
-                initializeStatistics(broadcast.getId(), targetUsers.size());
+                broadcastStatisticsService.initializeStatistics(broadcast.getId(), targetUsers.size());
             }
 
             log.info("Scattering {} user-specific '{}' events to Geode Region for broadcast ID {}", targetUsers.size(), event.getEventType(), broadcast.getId());
@@ -137,16 +134,4 @@ public class KafkaOrchestratorConsumerService {
         return Collections.emptyList();
     }
 
-    private void initializeStatistics(Long broadcastId, int totalTargeted) {
-        log.info("Orchestrator initializing statistics for broadcast ID {} with {} targeted users.", broadcastId, totalTargeted);
-        BroadcastStatistics stats = BroadcastStatistics.builder()
-                .broadcastId(broadcastId)
-                .totalTargeted(totalTargeted)
-                .totalDelivered(0)
-                .totalRead(0)
-                .totalFailed(0)
-                .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .build();
-        broadcastStatisticsRepository.save(stats);
-    }
 }

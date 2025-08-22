@@ -37,7 +37,7 @@ public class GeodeClientConfig {
                 .setPoolSubscriptionRedundancy(1)
                 .setPoolMinConnections(1)
                 .set("durable-client-id", durableClientId)
-                .set("durable-client-timeout", "300") // Timeout in seconds
+                .set("durable-client-timeout", "30") // Timeout in seconds
                 .set("log-level", "config")
                 .create();
     }
