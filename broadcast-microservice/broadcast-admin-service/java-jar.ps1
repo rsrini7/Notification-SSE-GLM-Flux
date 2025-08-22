@@ -8,7 +8,8 @@ mvn clean package
 try {
     Write-Host "Starting admin-service... Press Ctrl+C to stop the service and trigger Geode cleanup." -ForegroundColor Green
     # Run the application in the foreground. The script will wait here until the process exits.
-    java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg,admin-only" -jar target/broadcast-admin-service-1.0.0.jar
+    # Add -Dpod.name and -Dcluster.name to give this service a unique identity
+    java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg,admin-only" "-Dpod.name=broadcast-admin-service-0" "-Dcluster.name=cluster-a" -jar target/broadcast-admin-service-1.0.0.jar
 }
 catch [System.Management.Automation.PipelineStoppedException] {
     # This block specifically catches the Ctrl+C interrupt.

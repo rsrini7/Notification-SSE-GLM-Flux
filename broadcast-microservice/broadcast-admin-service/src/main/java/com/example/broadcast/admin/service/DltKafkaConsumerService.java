@@ -34,7 +34,6 @@ public class DltKafkaConsumerService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastLifecycleService broadcastLifecycleService;
 
-    // MODIFIED: The @KafkaListener annotation now points to the two new, simplified DLTs.
     @KafkaListener(
             topics = {
                 "${broadcast.kafka.topic.name-orchestration}" + Constants.DLT_SUFFIX
@@ -44,34 +43,53 @@ public class DltKafkaConsumerService {
     )
     @Transactional
     public void listenToDlt(
-            @Payload(required = false) String payload,
+            @Payload(required = false) MessageDeliveryEvent failedEvent,
             @Header(name = KafkaHeaders.RECEIVED_KEY, required = false) String key,
-            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
-            @Header(KafkaHeaders.DLT_ORIGINAL_TOPIC) String originalTopic,
-            @Header(KafkaHeaders.DLT_ORIGINAL_PARTITION) int originalPartition,
-            @Header(KafkaHeaders.DLT_ORIGINAL_OFFSET) long originalOffset,
-            @Header(KafkaHeaders.DLT_EXCEPTION_MESSAGE) String exceptionMessage,
-            @Header(KafkaHeaders.DLT_EXCEPTION_STACKTRACE) String exceptionStacktrace,
+            @Header(name = KafkaHeaders.RECEIVED_TOPIC, required = false) String topic,
+            @Header(name = KafkaHeaders.DLT_ORIGINAL_TOPIC, required = false) String originalTopic,
+            @Header(name = KafkaHeaders.DLT_ORIGINAL_PARTITION, required = false) Integer originalPartition,
+            @Header(name = KafkaHeaders.DLT_ORIGINAL_OFFSET, required = false) Long originalOffset,
+            @Header(name = KafkaHeaders.DLT_EXCEPTION_MESSAGE, required = false) String exceptionMessage,
+            @Header(name = KafkaHeaders.DLT_EXCEPTION_STACKTRACE, required = false) String exceptionStacktrace,
             Acknowledgment acknowledgment) {
 
-        log.info("DLT Received Message. Failed Payload: {}, Key: {}, Original Topic: {}, Reason: {}.", payload, key, originalTopic, exceptionMessage);
-
-        if (payload == null) {
+            
+        if (failedEvent == null) {
             log.info("Received tombstone record from DLT for key: {}. Acknowledging and discarding.", key);
             acknowledgment.acknowledge();
             return;
         }
 
+        if(key == null){
+            log.info("Received tombstone record from DLT for key is null. Acknowledging and discarding.");
+            acknowledgment.acknowledge();
+            return;
+        }
+
+        if(originalTopic == null){
+            log.info("Received tombstone record from DLT for original topic is null. Acknowledging and discarding.");
+            acknowledgment.acknowledge();
+            return;
+        }
+
+        log.info("DLT Received Message. Failed Message: {}, Key: {}, Original Topic: {}, Reason: {}.", failedEvent.getMessage(), key, originalTopic, exceptionMessage);
+
         String displayTitle;
-        MessageDeliveryEvent failedEvent = null;
+        String payloadJson;
 
         try {
-            failedEvent = objectMapper.readValue(payload, MessageDeliveryEvent.class);
+            payloadJson = objectMapper.writeValueAsString(failedEvent);
         } catch (JsonProcessingException e) {
-            log.error("CRITICAL: Could not deserialize DLT message payload. Storing as raw string. Payload: {}", payload, e);
-            // If deserialization fails, we create a placeholder event.
+            log.error("CRITICAL: Could not parse DLT message failedEvent.", e);
             failedEvent = new MessageDeliveryEvent();
             failedEvent.setMessage("POISON PILL: UNABLE TO DESERIALIZE PAYLOAD");
+            try{
+                payloadJson = objectMapper.writeValueAsString(failedEvent);
+            } catch (JsonProcessingException e2) {
+                log.info("Ignorng the failed PoisonPill Object to Json Convertion issue .", key);
+                acknowledgment.acknowledge();
+                return;
+            }
         }
 
         if (failedEvent.getUserId() != null) {
@@ -81,7 +99,7 @@ public class DltKafkaConsumerService {
         } else {
             displayTitle = String.format("Failed group broadcast event (Broadcast: %d)",
                     failedEvent.getBroadcastId());
-            broadcastLifecycleService.failBroadcast(failedEvent.getBroadcastId());
+            broadcastLifecycleService.failBroadcast(failedEvent);
             log.warn("Marked entire BroadcastMessage {} as FAILED due to DLT event.", failedEvent.getBroadcastId());
         }
 
@@ -96,7 +114,7 @@ public class DltKafkaConsumerService {
                 .exceptionMessage(displayTitle)
                 .exceptionStackTrace(exceptionStacktrace)
                 .failedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .originalMessagePayload(payload)
+                .originalMessagePayload(payloadJson)
                 .build();
         
          try {

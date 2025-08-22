@@ -3,10 +3,12 @@ package com.example.broadcast.shared.service;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.Region;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 @Service
 @Slf4j
+@Profile("!admin-only")
 public class TestingConfigurationService {
 
     private final Region<String, Boolean> dltArmedRegion;

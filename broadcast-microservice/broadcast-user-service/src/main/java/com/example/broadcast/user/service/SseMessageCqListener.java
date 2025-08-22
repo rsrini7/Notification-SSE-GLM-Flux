@@ -34,7 +34,7 @@ public class SseMessageCqListener extends CqListenerAdapter {
             CqAttributes cqa = cqf.create();
 
             String query = "SELECT * FROM /sse-messages s WHERE s.getTargetPodId = '" + uniquePodId + "'";
-            CqQuery cq = queryService.newCq("SseMessageCQ_" + uniquePodId.replace(":", "_"), query, cqa);
+            CqQuery cq = queryService.newCq("SseMessageCQ_" + uniquePodId.replace(":", "_"), query, cqa, true);
 
             cq.execute();
             log.info("Continuous Query registered for pod '{}' with query: {}", uniquePodId, query);

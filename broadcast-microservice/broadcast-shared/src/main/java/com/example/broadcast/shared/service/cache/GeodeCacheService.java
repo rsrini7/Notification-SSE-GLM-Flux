@@ -11,6 +11,7 @@ import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.ClientCache;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
+@Profile("!admin-only")
 public class GeodeCacheService implements CacheService {
 
     private final ObjectMapper objectMapper;

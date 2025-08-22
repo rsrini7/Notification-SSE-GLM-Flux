@@ -4,8 +4,8 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
-import com.example.broadcast.shared.service.BroadcastStatisticsService;
 import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
+import com.example.broadcast.shared.service.BroadcastStatisticsService;
 import com.example.broadcast.shared.service.TestingConfigurationService;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
@@ -69,56 +69,91 @@ public class KafkaOrchestratorConsumerService {
             return;
         }
 
-        final List<String> targetUsers = determineTargetUsers(broadcast, event);
-        if (targetUsers.isEmpty()) {
-            log.warn("Orchestrator found no target users for broadcast ID {}. No events will be scattered.", broadcast.getId());
-        } else {
-            if (Constants.EventType.CREATED.name().equals(event.getEventType()) &&
-                    (!Constants.TargetType.PRODUCT.name().equals(broadcast.getTargetType()))) {
-                broadcastStatisticsService.initializeStatistics(broadcast.getId(), targetUsers.size());
-            }
+        // --- REFACTORED LOGIC WITH SWITCH STATEMENT ---
+        switch (Constants.EventType.valueOf(event.getEventType())) {
+            case CREATED:
+            case CANCELLED:
+            case EXPIRED:
+                handleBroadcastLifecycleEvent(broadcast, event);
+                break;
+            case CACHE_EVICT_BROADCAST:
+                log.info("Processing cache eviction from broadcast content ID: {}", event.getBroadcastId());
+                cacheService.evictBroadcastContent(event.getBroadcastId());
+            case CACHE_EVICT_ACTIVEGROUP:
+                log.info("Processing cache eviction from active group broadcast ID: {}", event.getBroadcastId());
+                cacheService.evictActiveGroupBroadcastsCache();
+            case CACHE_EVICT_BROADCAST_ACTIVEGROUP:
+                log.info("Processing cache eviction to activegroup and broadcast content ID: {}", event.getBroadcastId());
+                cacheService.evictActiveGroupBroadcastsCache();
+                cacheService.evictBroadcastContent(event.getBroadcastId());
+                break;
 
-            log.info("Scattering {} user-specific '{}' events to Geode Region for broadcast ID {}", targetUsers.size(), event.getEventType(), broadcast.getId());
+            case READ:
+                handleReadEvent(event);
+                break;
 
-            for (String userId : targetUsers) {
-                Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
-                if (!userConnections.isEmpty()) {
-                    UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
-                    String uniquePodId = connectionInfo.getClusterName() + ":" + connectionInfo.getPodId();
-                    MessageDeliveryEvent userSpecificEvent = event.toBuilder().userId(userId).build();
-
-                    String messageKey = UUID.randomUUID().toString();
-                    GeodeSsePayload payload = new GeodeSsePayload(uniquePodId, userSpecificEvent);
-
-                    // Publish to Geode by putting the data into the region
-                    sseMessagesRegion.put(messageKey, payload);
-                } else {
-                    log.debug("User {} is offline. Caching pending event for broadcast {}.", userId, event.getBroadcastId());
-                    cacheService.cachePendingEvent(event.toBuilder().userId(userId).build());
-                }
-            }
+            default:
+                log.warn("Unhandled event type in orchestrator: {}", event.getEventType());
+                break;
         }
+
         acknowledgment.acknowledge();
     }
 
-    private List<String> determineTargetUsers(BroadcastMessage broadcast, MessageDeliveryEvent event) {
-        final List<String> targetUsers;
-        String eventType = event.getEventType();
-        String targetType = broadcast.getTargetType();
-        if (Constants.EventType.READ.name().equals(eventType)) {
-            targetUsers = List.of(event.getUserId());
-        } else if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
-            log.debug("Distributing for fan-out-on-write broadcast ({}). Reading from broadcast_user_targets table.", targetType);
-            targetUsers = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
-        } else {
-            log.debug("Distributing for fan-out-on-read broadcast ({}).", targetType);
-            targetUsers = determineFanOutOnReadUsers(broadcast);
+    private void handleBroadcastLifecycleEvent(BroadcastMessage broadcast, MessageDeliveryEvent event) {
+        final List<String> targetUsers = determineTargetUsers(broadcast);
+        if (targetUsers.isEmpty()) {
+            log.warn("Orchestrator found no target users for broadcast ID {}. No events will be scattered.", broadcast.getId());
+            return;
         }
-        return targetUsers;
+
+        if (Constants.EventType.CREATED.name().equals(event.getEventType()) &&
+                (!Constants.TargetType.PRODUCT.name().equals(broadcast.getTargetType()))) {
+            broadcastStatisticsService.initializeStatistics(broadcast.getId(), targetUsers.size());
+        }
+
+        log.info("Scattering {} user-specific '{}' events to Geode Region for broadcast ID {}", targetUsers.size(), event.getEventType(), broadcast.getId());
+
+        for (String userId : targetUsers) {
+            scatterToUser(event.toBuilder().userId(userId).build());
+        }
     }
 
-    private List<String> determineFanOutOnReadUsers(BroadcastMessage broadcast) {
+    private void handleReadEvent(MessageDeliveryEvent event) {
+        log.info("Scattering single '{}' event to Geode Region for user {}", event.getEventType(), event.getUserId());
+        scatterToUser(event);
+    }
+    
+    private void scatterToUser(MessageDeliveryEvent userSpecificEvent) {
+        String userId = userSpecificEvent.getUserId();
+        Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
+
+        if (!userConnections.isEmpty()) {
+            UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
+            String uniquePodId = connectionInfo.getClusterName() + ":" + connectionInfo.getPodId();
+            
+            String messageKey = UUID.randomUUID().toString();
+            GeodeSsePayload payload = new GeodeSsePayload(uniquePodId, userSpecificEvent);
+
+            sseMessagesRegion.put(messageKey, payload);
+        } else {
+            // Only cache CREATED events for offline users. Do not cache CANCEL/EXPIRE/READ events.
+            if (Constants.EventType.CREATED.name().equals(userSpecificEvent.getEventType())) {
+                log.debug("User {} is offline. Caching pending CREATED event for broadcast {}.", userId, userSpecificEvent.getBroadcastId());
+                cacheService.cachePendingEvent(userSpecificEvent);
+            }
+        }
+    }
+
+    private List<String> determineTargetUsers(BroadcastMessage broadcast) {
         String targetType = broadcast.getTargetType();
+        
+        if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
+            log.debug("Distributing for fan-out-on-write broadcast ({}). Reading from broadcast_user_targets table.", targetType);
+            return userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
+        }
+        
+        log.debug("Distributing for fan-out-on-read broadcast ({}).", targetType);
         if (Constants.TargetType.ALL.name().equals(targetType)) {
             return userService.getAllUserIds();
         }
@@ -133,5 +168,4 @@ public class KafkaOrchestratorConsumerService {
         }
         return Collections.emptyList();
     }
-
 }

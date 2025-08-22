@@ -10,7 +10,7 @@ import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.DltRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
-import com.example.broadcast.shared.service.TestingConfigurationService;
+// import com.example.broadcast.shared.service.TestingConfigurationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +36,7 @@ public class DltService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
     private final MessageStatusService messageStatusService;
-    private final TestingConfigurationService testingConfigurationService;
+    // private final TestingConfigurationService testingConfigurationService;
     private final AppProperties appProperties;
     
     public Collection<DltMessage> getDltMessages() {
@@ -57,7 +57,7 @@ public class DltService {
             MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
             kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload).get();
             
-            testingConfigurationService.clearFailureMark(originalPayload.getBroadcastId());
+            // testingConfigurationService.clearFailureMark(originalPayload.getBroadcastId());
             log.info("Cleared DLT failure mark for broadcast ID: {}", originalPayload.getBroadcastId());
 
             String dltTopicName = resolveDltTopicName(dltMessage.getOriginalTopic());

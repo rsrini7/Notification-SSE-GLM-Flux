@@ -1,6 +1,6 @@
 package com.example.broadcast.admin.controller;
 
-import com.example.broadcast.shared.service.TestingConfigurationService;
+// import com.example.broadcast.shared.service.TestingConfigurationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j; // ADD THIS IMPORT
 import org.springframework.http.ResponseEntity;
@@ -14,20 +14,20 @@ import java.util.Map;
 @Slf4j
 public class TestingAdminController {
 
-    private final TestingConfigurationService testingConfigurationService;
+    // private final TestingConfigurationService testingConfigurationService;
 
     @PostMapping("/kafka-consumer-failure")
     public ResponseEntity<Void> setKafkaConsumerFailure(@RequestBody Map<String, Boolean> request) {
-        boolean enabled = request.getOrDefault("enabled", false);
-        log.debug("Received request to set DLT Test Mode. Enabled: {}", enabled);
-        testingConfigurationService.setArm(enabled);
-        return ResponseEntity.ok().build();
+        // boolean enabled = request.getOrDefault("enabled", false);
+        // log.debug("Received request to set DLT Test Mode. Enabled: {}", enabled);
+        // testingConfigurationService.setArm(enabled);
+        return ResponseEntity.internalServerError().build();
     }
 
     @GetMapping("/kafka-consumer-failure")
     public ResponseEntity<Map<String, Boolean>> getKafkaConsumerFailure() {
-        boolean isEnabled = testingConfigurationService.isArmed();
-        log.debug("Received request to get DLT Test Mode status. Currently Enabled: {}", isEnabled);
-        return ResponseEntity.ok(Map.of("enabled", isEnabled));
+        // boolean isEnabled = testingConfigurationService.isArmed();
+        // log.debug("Received request to get DLT Test Mode status. Currently Enabled: {}", isEnabled);
+        return ResponseEntity.ok(Map.of("enabled", false));
     }
 }

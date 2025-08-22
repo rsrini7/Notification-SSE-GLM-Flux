@@ -13,6 +13,7 @@ import org.apache.geode.cache.client.ClientCacheFactory;
 import org.apache.geode.cache.client.ClientRegionShortcut;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 import java.util.List;
 import java.util.Set;
@@ -20,6 +21,7 @@ import java.util.Set;
 @Configuration
 @RequiredArgsConstructor
 @Slf4j
+@Profile("!admin-only")
 public class GeodeClientConfig {
 
     private final AppProperties appProperties;
