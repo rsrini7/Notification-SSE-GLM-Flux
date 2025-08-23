@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: geode-server-service
+  namespace: broadcast-system
+spec:
+  type: ClusterIP
+  selector:
+    app: geode-server
+  ports:
+    - name: server-port
+      port: 40404
+      targetPort: 40404

@@ -14,7 +14,7 @@ patches:
     target:
       kind: Deployment
       name: broadcast-admin-service
-  - path: user-statefulset-patch.yaml
+  - path: user-deployment-patch.yaml
     target:
-      kind: StatefulSet
+      kind: Deployment
       name: broadcast-user-service

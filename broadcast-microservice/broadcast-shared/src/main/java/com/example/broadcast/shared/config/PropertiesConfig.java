@@ -9,7 +9,6 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class PropertiesConfig {
 
-    // Inject the pod and cluster names directly from the environment/system properties
     @Value("${pod.name:${POD_NAME:broadcast-user-service-0}}")
     private String podName;
 
@@ -22,7 +21,7 @@ public class PropertiesConfig {
         AppProperties properties = new AppProperties();
         
         // Manually and explicitly set the pod and cluster names
-        properties.getPod().setId(podName);
+        properties.setPodName(podName);
         properties.setClusterName(clusterName);
         
         // The @ConfigurationProperties annotation will handle binding the rest of the

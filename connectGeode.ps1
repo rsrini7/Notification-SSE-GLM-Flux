@@ -1,0 +1,1 @@
+docker run -it --rm --network host custom-geode:1.0 gfsh

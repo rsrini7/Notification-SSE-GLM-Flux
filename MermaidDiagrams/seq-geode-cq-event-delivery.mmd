@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+
+    box "Backend Services"
+        participant Orchestrator as Orchestrator Consumer (Pod A)
+        participant CqListener as SseMessageCqListener (on Pod B)
+        participant SseSvc as SseService (on Pod B)
+    end
+
+    box "Infrastructure"
+        participant Kafka as Kafka (Orchestration Topic)
+        participant Geode as Apache Geode Server
+    end
+    
+    box "Client"
+        participant UserUI as User UI
+    end
+
+    Note over CqListener, Geode: On Startup, Pod B registers a Continuous Query (CQ) with Geode: <br/> "SELECT * FROM /sse-messages WHERE targetClusterPodName = 'cluster-a:pod-b'"
+
+    Kafka->>+Orchestrator: Kafka delivers event to an orchestrator consumer (Pod A)
+    Note over Orchestrator: This pod (Pod A) does NOT have the SSE connection for the target user.
+    Orchestrator->>+Geode: LOOKUP connection info for target user
+    Geode-->>-Orchestrator: Returns { pod: 'pod-b', cluster: 'cluster-a' }
+
+    Orchestrator->>+Geode: PUT GeodeSsePayload into '/sse-messages' region <br/> (Key: UUID, Value: { target: 'cluster-a:pod-b', event: ... })
+    Geode-->>-Orchestrator: 
+
+    Note over Geode, CqListener: Geode server evaluates the new data against all registered CQs. <br/> It finds a match for the query from Pod B.
+    Geode-->>+CqListener: Pushes the CQ event to the CqListener on Pod B
+    
+    CqListener->>+SseSvc: handleMessageEvent(payload.getEvent())
+    SseSvc->>+UserUI: Pushes message to the target user via persistent SSE connection
+    UserUI-->>-SseSvc: 
+
+    Orchestrator-->>-Kafka: Acknowledges Kafka message

@@ -1,68 +1,74 @@
 graph TD
-    subgraph "Frontend"
+    subgraph "User Action"
         AdminUI[Admin UI]
     end
 
-    subgraph "Admin Service (Control Plane)"
-        AdminAPI["1- API Layer"]
-        LifecycleSvc["2- BroadcastLifecycleService"]
-        
-        subgraph "Background Processing Schedulers"
-            direction TB
-            PrecomputationScheduler["4a- Precomputation Scheduler<br/>(Runs every minute for PRODUCT)"]
-            ActivationScheduler["6- Activation Scheduler<br/>(Runs every minute)"]
-            OutboxPoller["8- Outbox Polling Service<br/>(Runs every 2s)"]
-        end
-        AsyncPrecomputation["5a- Async Precomputation<br/>(TargetingService)"]
-    end
-    
-    subgraph "User Service (Delivery Plane)"
-        OrchestratorConsumer["10- Orchestrator Consumer"]
-        WorkerConsumer["12- Worker Consumer"]
-        SseService["13- SSE Service"]
+    subgraph "1. Creation & Triage (Admin Service)"
+        AdminAPI["API Layer"]
+        LifecycleSvc["BroadcastLifecycleService"]
+        CreationTriage{"Broadcast Type?"}
     end
 
-    subgraph "Shared Infrastructure"
+    subgraph "2. Async Pre-computation (Admin Service)"
+        PrecomputationScheduler["Precomputation Scheduler<br/>(Every 1 min)"]
+        AsyncPrecomputation["Async TargetingService<br/>(Fan-out on Write)"]
+    end
+    
+
+    subgraph "3. Activation (Admin Service)"
+        ActivationScheduler["Activation Scheduler<br/>(Every 1 min)"]
+    end
+
+    subgraph "4. Publishing (Admin Service)"
+        OutboxPoller["Outbox Polling Service<br/>(Every 2s)"]
+    end
+
+    subgraph "5. Delivery (User Service & Infra)"
+        OrchestratorConsumer["Orchestrator Consumer (Kafka)"]
+        WorkerCqListener["Worker CqListener (Geode)"]
+        SseService["SSE Service"]
+        Kafka["Kafka (Orchestration Topic)"]
+        Geode["Geode (Cache & Eventing)"]
         Postgres["PostgreSQL DB"]
-        Kafka["Kafka Broker"]
-        Redis["Redis Cache"]
+        User[User Browser]
     end
-
-    %% --- 1- CREATION & TRIAGE ---
-    AdminUI --> AdminAPI --> LifecycleSvc --> CreationLogic{"3- Creation Logic"}
-
-    CreationLogic -- "Immediate ALL/ROLE/SELECTED" --> SaveActiveAndOutbox["DB: status=ACTIVE<br/>INSERT into outbox_events"]
-    CreationLogic -- "Immediate PRODUCT" --> SavePreparing["DB: status=PREPARING"]
-    CreationLogic -- "Scheduled PRODUCT" --> SaveScheduledProduct["DB: status=SCHEDULED<br/>targetType=PRODUCT"]
-    CreationLogic -- "Scheduled ALL/ROLE/SELECTED" --> SaveScheduledOther["DB: status=SCHEDULED<br/>targetType=ALL/ROLE/SELECTED"]
-
-    SaveActiveAndOutbox --> Postgres
-    SavePreparing --> Postgres
-    SaveScheduledProduct --> Postgres
-    SaveScheduledOther --> Postgres
     
-    %% --- 2- ASYNC & SCHEDULED PROCESSING ---
+    %% --- FLOW START ---
+    AdminUI --> AdminAPI --> LifecycleSvc --> CreationTriage
+
+    %% --- PATH A: IMMEDIATE BROADCASTS ---
+    CreationTriage -- "Immediate" --> ImmediateType{"Fan-out on Read or Write?"}
+    ImmediateType -- "Read (ALL/ROLE/SELECTED)" --> SaveActiveAndOutbox["DB: status=ACTIVE<br/>INSERT into outbox_events"]
+    ImmediateType -- "Write (PRODUCT)" --> SavePreparing["DB: status=PREPARING"]
+    
     SavePreparing -- "Triggers" --> AsyncPrecomputation
-    
-    PrecomputationScheduler -- "Polls for due SCHEDULED PRODUCT" --> Postgres
-    PrecomputationScheduler -- "DB: status=PREPARING" --> Postgres
-    Postgres -- "status=PREPARING" --> AsyncPrecomputation
 
-    AsyncPrecomputation -- "Fetches users & saves to 'broadcast_user_targets'" --> Postgres
-    AsyncPrecomputation -- "DB: status=READY" --> Postgres
-
-    ActivationScheduler -- "Polls for READY (from Product) OR<br/>due SCHEDULED (from All/Role/Selected)" --> Postgres
-    ActivationScheduler -- "7- DB: status=ACTIVE<br/>INSERT into outbox_events" --> Postgres
+    %% --- PATH B: SCHEDULED BROADCASTS ---
+    CreationTriage -- "Scheduled" --> SaveScheduled["DB: status=SCHEDULED"]
+    SaveScheduled --> ScheduledType{"Fan-out on Read or Write?"}
     
-    %% --- 3- PUBLISHING (CONVERGENCE POINT) ---
+    ScheduledType -- "Write (PRODUCT)" --> PrecomputationScheduler
+    PrecomputationScheduler -- "Polls for due broadcasts" --> Postgres
+    PrecomputationScheduler --> SavePreparing
+    
+    ScheduledType -- "Read (ALL/ROLE/SELECTED)" --> ActivationScheduler
+
+    %% --- PRECOMPUTATION & ACTIVATION FLOW ---
+    AsyncPrecomputation -- "Saves targets & sets status=READY" --> Postgres
+    Postgres -- "status=READY" --> ActivationScheduler
+    
+    ActivationScheduler -- "Polls for READY or<br/>due SCHEDULED broadcasts" --> Postgres
+    ActivationScheduler --> SaveActiveAndOutbox
+    
+    %% --- CONVERGENCE & PUBLISHING ---
+    SaveActiveAndOutbox --> Postgres
     Postgres -- "Event waits in 'outbox_events'" --> OutboxPoller
     OutboxPoller -- "Polls & Locks Event" --> Postgres
-    OutboxPoller -- "Publishes ONE Orchestration Event" --> Kafka
+    OutboxPoller -- "Publishes ONE Event" --> Kafka
 
-    %% --- 4- ORCHESTRATION & DELIVERY ---
-    Kafka -- "9- Orchestration Topic" --> OrchestratorConsumer
-    OrchestratorConsumer -- "Determines Final Audience" --> Postgres
-    OrchestratorConsumer -- "11- 'Scatters' User-Specific Events" --> Kafka
-    Kafka -- "Worker Topics" --> WorkerConsumer
-    WorkerConsumer --> SseService
-    SseService -- "Pushes via SSE" --> User[User Browser]
+    %% --- DELIVERY ---
+    Kafka --> OrchestratorConsumer
+    OrchestratorConsumer -- "Determines Audience & Pod, <br/> Puts event into Geode Region" --> Geode
+    Geode -- "CQ invokes Listener" --> WorkerCqListener
+    WorkerCqListener --> SseService
+    SseService --> User

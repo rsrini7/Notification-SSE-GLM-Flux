@@ -23,17 +23,9 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
-      const [targetedMessages, groupMessages] = await Promise.all([
-        userService.getUserMessages(userId),
-        userService.getGroupMessages(userId),
-      ]);
-      
-      const allMessages = [...targetedMessages, ...groupMessages];
-      const uniqueMessages = Array.from(new Map(allMessages.map(msg => [msg.id, msg])).values());
-      uniqueMessages.sort((a, b) => new Date(b.broadcastCreatedAt).getTime() - new Date(a.broadcastCreatedAt).getTime());
-
+      // Make a single API call to get the complete message list
+      const uniqueMessages = await userService.getUserMessages(userId);
       setMessages(uniqueMessages);
-
     } catch (error) {
       toast({
         title: 'Error',
@@ -45,27 +37,22 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     }
   }, [userId, toast]);
 
-  const handleSseEvent = useCallback((event: { type: string; data: any }) => {
+  const handleSseEvent = (event: { type: string; data: any }) => {
     const payload = event.data;
     switch (event.type) {
       case 'MESSAGE':
         if (payload) {
-          // Check for Force Logoff category
           if (payload.category === 'Force Logoff') {
             toast({
               title: 'Logged Off',
               description: 'Your connection has been terminated by an administrator.',
               variant: 'destructive',
             });
-            // Call disconnect with the new force flag
             sseConnection.disconnect(true); 
-
-            // NEW: If the callback exists, call it to trigger the panel's removal
             if (onForcedDisconnect) {
               onForcedDisconnect(userId);
             }
           }
-
           setMessages(prev => {
             const exists = prev.some(msg => msg.id === payload.id);
             if (!exists) {
@@ -81,8 +68,10 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
       
       case 'READ_RECEIPT':
-        console.log(`Read receipt for broadcast ${payload.broadcastId} acknowledged.`);
-        break;
+        if (payload && payload.broadcastId) {
+            setMessages(prev => prev.filter(msg => msg.broadcastId !== payload.broadcastId));
+        }
+       break;
       
       case 'MESSAGE_REMOVED':
         if (payload && payload.broadcastId) {
@@ -94,21 +83,25 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         }
         break;
       case 'CONNECTED':
-        console.log(`SSE Connection Confirmed via Event for user: ${userId}`, payload);
-        fetchMessages();
+        // This is now intentionally left blank to prevent the race condition.
+        // Initial messages are delivered via the SSE stream itself.
         break;
       case 'HEARTBEAT':
         break;
       default:
         console.log('Unhandled SSE event type:', event.type);
     }
-  }, [toast, userId, onForcedDisconnect, fetchMessages]);
+  };
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
-  }, [toast, fetchMessages, userId]);
+  }, [toast, userId]);
 
-  const onDisconnect = useCallback(() => { /* Silent */ }, []);
+  const onDisconnect = useCallback(() => {
+    // Clear the message list on disconnect to ensure a fresh state on reconnect.
+    setMessages([]);
+  }, []);
+  
   const onError = useCallback(() => { /* Silent */ }, []);
 
   const sseConnection = useSseConnection({
@@ -123,8 +116,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
 
   const markAsRead = useCallback(async (broadcastId: number) => {
     try {
-      // The action now sends the request. The UI update is handled by the SSE event.
-      await sseConnection.markAsRead(broadcastId); // CHANGED: from messageId to broadcastId
+      await sseConnection.markAsRead(broadcastId);
     } catch {
       toast({
         title: 'Error',
@@ -132,7 +124,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         variant: 'destructive',
       });
     }
-  }, [sseConnection, toast]);
+   }, [sseConnection, toast]);
 
   const stats = useMemo(() => {
     const total = messages.length;

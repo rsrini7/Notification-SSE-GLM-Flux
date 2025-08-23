@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.KafkaException;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.listener.CommonLoggingErrorHandler;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.listener.ContainerProperties;
@@ -89,6 +90,19 @@ public class KafkaConfig {
         return factory;
     }
 
+    @Bean("dltListenerContainerFactory")
+    public ConcurrentKafkaListenerContainerFactory<String, Object> dltListenerContainerFactory(
+        ConsumerFactory<String, Object> consumerFactory, AsyncTaskExecutor kafkaListenerExecutor) {
+        
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        // Use a simple logging error handler instead of the one that sends to a DLT
+        factory.setCommonErrorHandler(new CommonLoggingErrorHandler());
+        factory.getContainerProperties().setListenerTaskExecutor(kafkaListenerExecutor);
+        return factory;
+    }
+
     @Bean
     public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
         FixedBackOff backOff = new FixedBackOff(1000L, 2L);
@@ -103,28 +117,17 @@ public class KafkaConfig {
 
     @Bean
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
-           KafkaTemplate<String, Object> kafkaTemplate) {
+       KafkaTemplate<String, Object> kafkaTemplate) {
 
         BiFunction<ConsumerRecord<?, ?>, Exception, TopicPartition> destinationResolver = (cr, e) -> {
-            String workerTopicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
             String orchestrationTopic = appProperties.getKafka().getTopic().getNameOrchestration();
-
-             if (cr.topic().contains(workerTopicPrefix)) {
-                String sharedDltTopic = workerTopicPrefix + Constants.DLT_SUFFIX;
-                log.info("Routing failed record from worker topic {} to shared DLT {}", cr.topic(), sharedDltTopic);
-                return new TopicPartition(sharedDltTopic, 0);
-            }
-
-            if (cr.topic().equals(orchestrationTopic)) {
-                String orchestrationDltTopic = orchestrationTopic + Constants.DLT_SUFFIX;
-                log.info("Routing failed record from orchestration topic {} to its DLT {}", cr.topic(), orchestrationDltTopic);
-                return new TopicPartition(orchestrationDltTopic, 0);
-            }
+            // ALWAYS use the primary orchestration DLT name.
+            String dltTopic = orchestrationTopic + Constants.DLT_SUFFIX;
             
-             log.warn("Unrecognized topic '{}' in DLT resolver. Using default fallback DLT name.", cr.topic());
-            return new TopicPartition(cr.topic() + Constants.DLT_SUFFIX, 0);
+            log.info("Routing failed record from original topic {} to DLT {}", cr.topic(), dltTopic);
+            return new TopicPartition(dltTopic, 0);
         };
- 
+
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate, destinationResolver);
         recoverer.setFailIfSendResultIsError(true);
         
@@ -150,15 +153,6 @@ public class KafkaConfig {
     }
     
     @Bean
-    public NewTopic workerEventsDeadLetterTopic() {
-        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameWorkerPrefix() + Constants.DLT_SUFFIX)
-            .partitions(1)
-            .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
-            .config("retention.ms", "1209600000") // 14 days
-            .build();
-    }
-
-    @Bean
     public KafkaAdmin kafkaAdmin() {
         Map<String, Object> configs = new HashMap<>();
         configs.put(org.apache.kafka.clients.admin.AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
@@ -166,7 +160,7 @@ public class KafkaConfig {
     }
 
     @Bean
-    public AsyncTaskExecutor kafkaListenerExecutor() { // CHANGED: Return type is now AsyncTaskExecutor
+    public AsyncTaskExecutor kafkaListenerExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(10);
         executor.setThreadNamePrefix("kafka-consumer-");

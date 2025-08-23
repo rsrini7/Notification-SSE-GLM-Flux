@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: geode-locator
+  namespace: broadcast-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: geode-locator
+  template:
+    metadata:
+      labels:
+        app: geode-locator
+    spec:
+      containers:
+        - name: geode-locator
+          image: custom-geode:1.0
+          imagePullPolicy: IfNotPresent
+          command: ["/geode-scripts/startK8sLocator.sh"]
+          ports:
+            - name: locator-port
+              containerPort: 10334

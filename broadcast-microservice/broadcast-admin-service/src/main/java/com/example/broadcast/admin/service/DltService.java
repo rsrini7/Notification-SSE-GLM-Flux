@@ -10,8 +10,6 @@ import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.DltRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
-import com.example.broadcast.shared.service.TestingConfigurationService;
-import com.example.broadcast.shared.config.AppProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.broadcast.shared.config.AppProperties;
 
 import java.util.Collection;
 import java.util.ArrayList;
@@ -36,7 +35,6 @@ public class DltService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
     private final MessageStatusService messageStatusService;
-    private final TestingConfigurationService testingConfigurationService;
     private final AppProperties appProperties;
     
     public Collection<DltMessage> getDltMessages() {
@@ -57,7 +55,7 @@ public class DltService {
             MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
             kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload).get();
             
-            testingConfigurationService.clearFailureMark(originalPayload.getBroadcastId());
+            // testingConfigurationService.clearFailureMark(originalPayload.getBroadcastId());
             log.info("Cleared DLT failure mark for broadcast ID: {}", originalPayload.getBroadcastId());
 
             String dltTopicName = resolveDltTopicName(dltMessage.getOriginalTopic());
@@ -169,11 +167,9 @@ public class DltService {
      * @return The correct DLT topic name.
      */
     private String resolveDltTopicName(String originalTopic) {
-        String workerTopicPrefix = appProperties.getKafka().getTopic().getNameWorkerPrefix();
-        if (originalTopic != null && originalTopic.contains(workerTopicPrefix)) {
-            return workerTopicPrefix + Constants.DLT_SUFFIX;
-        }
-        // Fallback for orchestration topic or other potential topics
-        return originalTopic + Constants.DLT_SUFFIX;
+        // MODIFIED: This logic should not be recursive. It should always derive the DLT name
+        // from the primary orchestration topic, not from another DLT.
+        String orchestrationTopic = appProperties.getKafka().getTopic().getNameOrchestration();
+        return orchestrationTopic + Constants.DLT_SUFFIX;
     }
 }

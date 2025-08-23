@@ -1,0 +1,27 @@
+sequenceDiagram
+    participant AdminSvc as Admin Service (Lifecycle)
+    participant DB as DB (Outbox)
+    participant KafkaOrchestration as Kafka (broadcast-orchestration)
+    participant Orchestrator as User Service (Orchestrator Pod)
+    participant Geode as Apache Geode (sse-messages Region)
+    participant Worker as User Service (Worker Pod)
+
+    AdminSvc->>+DB: 1- Writes ONE orchestration event (type=CANCELLED) to Outbox
+    DB-->>-AdminSvc: 
+
+    Note right of KafkaOrchestration: Outbox Poller publishes the event...
+
+    KafkaOrchestration->>+Orchestrator: 2- Orchestrator consumes event
+    Orchestrator->>+DB: 3- Fetches full user list for the broadcast
+    DB-->>-Orchestrator: Returns user list
+
+    loop For each targeted user
+        Orchestrator->>+Geode: 4- "Scatters" by PUT-ting a user-specific event into the 'sse-messages' region
+    end
+    Geode-->>-Orchestrator: 
+
+    Orchestrator-->>-KafkaOrchestration: 5- Acknowledges orchestration event
+
+    Note over Geode, Worker: 6- Geode server notifies subscribed clients via Continuous Query (CQ).
+    Geode-->>+Worker: 7- CqListener on the correct worker pod is invoked with the event
+    Worker->>Worker: 8- Handles event: Removes message and pushes 'MESSAGE_REMOVED' via SSE.

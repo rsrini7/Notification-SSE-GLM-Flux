@@ -12,8 +12,6 @@ import com.example.broadcast.shared.model.BroadcastStatistics;
 import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.repository.*;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
-import com.example.broadcast.shared.service.TestingConfigurationService;
-import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.admin.event.BroadcastCreatedEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -45,13 +43,10 @@ public class BroadcastLifecycleService {
     private final BroadcastMapper broadcastMapper;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
-    private final CacheService cacheService;
-    private final TestingConfigurationService testingConfigurationService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
-        boolean isFailureTest = testingConfigurationService.consumeArmedState();
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
         BroadcastMessage broadcast = buildBroadcastFromRequest(request);
 
@@ -61,10 +56,7 @@ public class BroadcastLifecycleService {
             broadcast = broadcastRepository.save(broadcast);
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
-       
-        cacheService.evictBroadcastContent(broadcast.getId());
-        log.info("Evicted broadcast-content cache for ID: {}", broadcast.getId());
-
+             
         // ONLY the 'PRODUCT' type requires the intensive user list preparation (Fan-out-on-Write).
         if (Constants.TargetType.PRODUCT.name().equals(request.getTargetType())) {
             log.info("Broadcast is for PRODUCT users. Saving with PREPARING status to trigger user pre-computation.", broadcast.getId());
@@ -90,11 +82,6 @@ public class BroadcastLifecycleService {
         
         broadcast = broadcastRepository.save(broadcast);
 
-        if (isFailureTest) {
-            testingConfigurationService.markBroadcastForFailure(broadcast.getId());
-            log.warn("Broadcast ID {} has been marked for DLT failure simulation.", broadcast.getId());
-        }
-
         // If it's an immediate broadcast, we MUST publish the single orchestration event to the outbox.
         // This now correctly includes ALL, ROLE, and SELECTED types.
         if (isImmediatelyActive) {
@@ -104,9 +91,6 @@ public class BroadcastLifecycleService {
         // This is for display purposes only on the API response.
         int totalTargeted = Constants.TargetType.SELECTED.name().equals(request.getTargetType()) ? request.getTargetIds().size() : 0;
         
-        // Evict cache so newly connecting users see the latest group broadcasts.
-        cacheService.evictActiveGroupBroadcastsCache();
-
         return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
     }
 
@@ -133,10 +117,8 @@ public class BroadcastLifecycleService {
         int updatedCount = userBroadcastRepository.updateNonFinalStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
         log.info("Updated {} PENDING or DELIVERED user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
 
-        triggerCancelOrExpireBroadcastEvent(broadcast, Constants.EventType.CANCELLED, "Broadcast CANCELLED");
+        publishSingleOrchestrationEvent(broadcast, Constants.EventType.CANCELLED, "Broadcast CANCELLED");
         
-        cacheService.evictActiveGroupBroadcastsCache();
-        cacheService.evictBroadcastContent(id);
         log.info("Broadcast cancelled: {}. Published cancellation events to outbox and evicted caches.", id);
     }
 
@@ -152,10 +134,8 @@ public class BroadcastLifecycleService {
             int updatedCount = userBroadcastRepository.updateNonFinalStatusesByBroadcastId(broadcastId, Constants.DeliveryStatus.SUPERSEDED.name());
             log.info("Updated {} PENDING or DELIVERED user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
             
-            triggerCancelOrExpireBroadcastEvent(broadcast, Constants.EventType.EXPIRED, "Broadcast EXPIRED");
+            publishSingleOrchestrationEvent(broadcast, Constants.EventType.EXPIRED, "Broadcast EXPIRED");
             
-            cacheService.evictActiveGroupBroadcastsCache();
-            cacheService.evictBroadcastContent(broadcastId);
             log.info("Broadcast expired: {}. Published expiration events to outbox and evicted caches.", broadcastId);
         } else {
            log.info("Broadcast {} was already in a non-active state ({}). No expiration action needed.", broadcastId, broadcast.getStatus());
@@ -172,11 +152,6 @@ public class BroadcastLifecycleService {
         initializeStatistics(broadcast.getId(), totalTargeted);
         publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
         return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
-    }
-
-    private void triggerCancelOrExpireBroadcastEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
-        log.info("Publishing single orchestration event for broadcast ID {} with type {}", broadcast.getId(), eventType);
-        publishSingleOrchestrationEvent(broadcast, eventType, message);
     }
     
     private void publishSingleOrchestrationEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
@@ -202,7 +177,16 @@ public class BroadcastLifecycleService {
                 .eventId(UUID.randomUUID().toString())
                 .broadcastId(broadcast.getId())
                 .eventType(eventType.name())
-                .podId(System.getenv().getOrDefault("POD_NAME", "pod-local"))
+                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                .message(message)
+                .build();
+    }
+
+    private MessageDeliveryEvent createOrchestrationEvent(MessageDeliveryEvent deliveryEvent, Constants.EventType eventType, String message) {
+        return MessageDeliveryEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .broadcastId(deliveryEvent.getBroadcastId())
+                .eventType(eventType.name())
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .message(message)
                 .build();
@@ -243,15 +227,6 @@ public class BroadcastLifecycleService {
                 .build();
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void failBroadcast(Long broadcastId) {
-        if (broadcastId == null) return;
-        
-        broadcastRepository.updateStatus(broadcastId, Constants.BroadcastStatus.FAILED.name());
-        cacheService.evictActiveGroupBroadcastsCache();
-        log.warn("Marked entire BroadcastMessage {} as FAILED in a new transaction and evicted cache.", broadcastId);
-    }
-
     @Transactional
     public void activateAndPublishFanOutOnReadBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
@@ -266,5 +241,14 @@ public class BroadcastLifecycleService {
         log.info("Activated scheduled fan-out-on-read broadcast ID: {}", broadcastId);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void failBroadcast(MessageDeliveryEvent deliveryEvent) {
+        if (deliveryEvent.getBroadcastId() == null) return;
+        broadcastRepository.updateStatus(deliveryEvent.getBroadcastId(), Constants.BroadcastStatus.FAILED.name());
+        String topicName = appProperties.getKafka().getTopic().getNameOrchestration();
+        MessageDeliveryEvent eventPayload = createOrchestrationEvent(deliveryEvent, Constants.EventType.FAILED, "Broadcast FAILED");
+        outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, deliveryEvent.getBroadcastId().toString()));
+        log.warn("Marked entire BroadcastMessage {} as FAILED in a new transaction and evicted cache.", deliveryEvent.getBroadcastId());
+    }
 
 }

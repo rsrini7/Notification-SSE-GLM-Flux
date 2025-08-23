@@ -1,0 +1,35 @@
+sequenceDiagram
+    participant AdminSvc as Admin Service
+    participant DB as DB (Outbox Table)
+    participant OutboxPoller as AdminSvc (Outbox Poller)
+    participant KafkaOrchestration as Kafka (broadcast-orchestration)
+    participant Orchestrator as UserSvc (Orchestrator)
+    participant Geode as Apache Geode (sse-messages Region)
+    participant Worker as UserSvc (Worker Pod)
+    participant SseSvc as UserSvc (SSE Service)
+
+    AdminSvc->>+DB: 1- Writes ONE orchestration event to Outbox table
+    DB-->>-AdminSvc: (Transaction commits)
+
+    OutboxPoller->>+DB: 2- Polls for and locks new events from Outbox
+    DB-->>-OutboxPoller: Returns event
+
+    OutboxPoller->>+KafkaOrchestration: 3- Publishes single orchestration event
+    KafkaOrchestration-->>-OutboxPoller: 
+
+    OutboxPoller->>+DB: 4- Deletes event from Outbox
+    DB-->>-OutboxPoller: 
+
+    KafkaOrchestration->>+Orchestrator: 5- Pod consumes the orchestration event
+    Orchestrator->>+Geode: 6- Looks up user's pod location in Geode
+    Geode-->>-Orchestrator: Returns pod name
+    
+    loop For each target user
+        Orchestrator->>+Geode: 7- "Scatters" user-specific event by PUT-ting it into the 'sse-messages' region
+    end
+    Geode-->>-Orchestrator: 
+    Orchestrator-->>-KafkaOrchestration: 8- Acknowledges orchestration event
+
+    Geode-->>+Worker: 9- Geode invokes CqListener on the correct worker pod
+    Worker->>+SseSvc: 10- Forwards event for real-time delivery
+    SseSvc->>SseSvc: Pushes message via SSE to user

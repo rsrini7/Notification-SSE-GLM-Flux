@@ -1,31 +1,29 @@
 package com.example.broadcast.shared.config;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
-// import org.springframework.boot.context.properties.ConfigurationProperties;
-// import org.springframework.context.annotation.Configuration;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.beans.factory.annotation.Value;
 
-import java.time.Duration;
-
-// @Configuration
-// @ConfigurationProperties(prefix = "broadcast")
 @Data
 @Validated
 public class AppProperties {
 
     private String clusterName;
+    private String podName;
 
     private final Sse sse = new Sse();
-    private final Cache cache = new Cache();
     private final Db db = new Db();
     private final Kafka kafka = new Kafka();
-    private final Pod pod = new Pod();
     private final Simulation simulation = new Simulation();
     private final H2Console h2Console = new H2Console();
+    private final Service service = new Service();
+    private final Geode geode = new Geode();
+
+    @Data
+    public static class Service{
+        private String name = "";
+    }
 
     @Data
     public static class H2Console{
@@ -34,15 +32,19 @@ public class AppProperties {
     }
 
     @Data
-    public static class Simulation {
-        private long userFetchDelayMs = 0; // Default to 0 if not specified
+    public static class Geode{
+        private final Locator locator = new Locator();
+        @Data
+        public static class Locator{
+            private String host = "localhost";
+            private int port = 10334;
+        }
+
     }
 
     @Data
-    public static class Pod {
-        @Value("${pod.name:${POD_NAME:broadcast-user-service-0}}")
-        @NotBlank
-        private String id;
+    public static class Simulation {
+        private long userFetchDelayMs = 0; // Default to 0 if not specified
     }
 
     @Data
@@ -51,37 +53,6 @@ public class AppProperties {
         private long timeout = 300000L;
         @Positive
         private long heartbeatInterval = 30000L;
-    }
-
-    @Data
-    public static class Cache {
-        private final UserConnections userConnections = new UserConnections();
-        private final UserMessages userMessages = new UserMessages();
-        private final PendingEvents pendingEvents = new PendingEvents();
-
-        @Data
-        public static class UserConnections {
-            @Positive
-            private int maximumSize = 50000;
-            @NotNull
-            private Duration expireAfterAccess = Duration.ofMinutes(30);
-        }
-
-        @Data
-        public static class UserMessages {
-            @Positive
-            private int maximumSize = 100000;
-            @NotNull
-            private Duration expireAfterWrite = Duration.ofHours(24);
-        }
-
-        @Data
-        public static class PendingEvents {
-            @Positive
-            private int maximumSize = 50000;
-            @NotNull
-            private Duration expireAfterWrite = Duration.ofHours(6);
-        }
     }
 
     @Data
@@ -102,8 +73,6 @@ public class AppProperties {
         public static class Topic {
             @NotBlank
             private String nameOrchestration = "broadcast-orchestration";
-            @NotBlank
-            private String nameWorkerPrefix = "broadcast-user-service"; // Prefix for pod-specific topics
             @Positive
             private int partitions = 1;
             @Positive
@@ -114,8 +83,6 @@ public class AppProperties {
         public static class Consumer {
             @NotBlank
             private String groupOrchestration = "broadcast-orchestration-group"; // Static group for the leader
-            @NotBlank
-            private String groupWorker = "broadcast-worker-group"; // Static group for workers
             @NotBlank
             private String groupDlt = "broadcast-dlt-group";
         }

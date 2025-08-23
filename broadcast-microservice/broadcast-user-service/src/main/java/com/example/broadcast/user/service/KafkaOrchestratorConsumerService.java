@@ -1,22 +1,20 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
-import com.example.broadcast.shared.model.OutboxEvent;
-import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
-import com.example.broadcast.shared.service.OutboxEventPublisher;
-import com.example.broadcast.shared.util.Constants;
-import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
-import com.example.broadcast.shared.model.BroadcastStatistics;
-import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
+import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
+import com.example.broadcast.shared.service.BroadcastStatisticsService;
 import com.example.broadcast.shared.service.UserService;
-import java.util.Collections;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.broadcast.shared.dto.GeodeSsePayload;
+import com.example.broadcast.shared.service.cache.CacheService;
+import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.geode.cache.Region;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
@@ -24,12 +22,11 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.stream.Collectors;
 
 @Service
@@ -38,27 +35,28 @@ import java.util.stream.Collectors;
 public class KafkaOrchestratorConsumerService {
 
     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
-    private final OutboxEventPublisher outboxEventPublisher;
-    private final ObjectMapper objectMapper;
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
     private final UserService userService;
-    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
+    private final BroadcastStatisticsService broadcastStatisticsService;
+    private final AppProperties appProperties;
+    
+    @Qualifier("sseMessagesRegion")
+    private final Region<String, Object> sseMessagesRegion;
 
     @KafkaListener(
-        topics = "${broadcast.kafka.topic.name-orchestration}",
-        groupId = "${broadcast.kafka.consumer.group-orchestration}",
-        containerFactory = "kafkaListenerContainerFactory"
+            topics = "${broadcast.kafka.topic.name-orchestration}",
+            groupId = "${broadcast.kafka.consumer.group-orchestration}",
+            containerFactory = "kafkaListenerContainerFactory"
     )
     @Transactional
     public void orchestrateBroadcastEvents(MessageDeliveryEvent event,
-            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
-            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
-            @Header(KafkaHeaders.OFFSET) long offset,
-            Acknowledgment acknowledgment) {
+                                           @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
+                                           @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
+                                           @Header(KafkaHeaders.OFFSET) long offset,
+                                           Acknowledgment acknowledgment) {
 
         log.info("Orchestration event received for type '{}' on broadcast ID: {}. [Topic: {}, Partition: {}, Offset: {}]", event.getEventType(), event.getBroadcastId(), topic, partition, offset);
-
         BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId()).orElse(null);
 
         if (broadcast == null) {
@@ -67,63 +65,136 @@ public class KafkaOrchestratorConsumerService {
             return;
         }
 
-        final List<String> targetUsers = determineTargetUsers(broadcast,event);
-
-        if (targetUsers.isEmpty()) {
-            log.warn("Orchestrator found no target users for broadcast ID {}. No events will be scattered.", broadcast.getId());
-        } else {
-
-            if (Constants.EventType.CREATED.name().equals(event.getEventType()) &&
-                   (!Constants.TargetType.PRODUCT.name().equals(broadcast.getTargetType()))) {
-                initializeStatistics(broadcast.getId(), targetUsers.size());
-            }
-
-            log.info("Scattering {} user-specific '{}' events to worker topics for broadcast ID {}", targetUsers.size(), event.getEventType(), broadcast.getId());
-            List<OutboxEvent> eventsToPublish = targetUsers.stream()
-                .map(userId -> {
-                    Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
-                    if (!userConnections.isEmpty()) {
-                        UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
-                        String workerTopicName = connectionInfo.getClusterName() + "-" + connectionInfo.getPodId();
-                        return createWorkerOutboxEvent(event, userId, workerTopicName);
-                    } else {
-                        log.debug("User {} is offline. Caching pending event for broadcast {}.", userId, event.getBroadcastId());
-                        cacheService.cachePendingEvent(event.toBuilder().userId(userId).build());
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-            
-            if (!eventsToPublish.isEmpty()) {
-                outboxEventPublisher.publishBatch(eventsToPublish);
-            }
+        switch (Constants.EventType.valueOf(event.getEventType())) {
+            case CREATED:
+                // Cache the content of the new broadcast
+                cacheService.cacheBroadcastContent(broadcast);
+                // Surgically add this new broadcast to the active group caches
+                updateActiveGroupCaches(broadcast, true);
+                handleBroadcastLifecycleEvent(broadcast, event);
+                break;
+            case CANCELLED:
+            case EXPIRED:
+                // Evict the content of the specific broadcast that is no longer active
+                cacheService.evictBroadcastContent(event.getBroadcastId());
+                // Surgically remove this broadcast from the active group caches
+                updateActiveGroupCaches(broadcast, false);
+                handleBroadcastLifecycleEvent(broadcast, event);
+                break;
+            case FAILED:
+                log.warn("Broadcast Failed.");
+                break;
+            case READ:
+                handleReadEvent(event);
+                break;
+            default:
+                log.warn("Unhandled event type in orchestrator: {}", event.getEventType());
+                break;
         }
-        
+
         acknowledgment.acknowledge();
     }
 
-    private List<String> determineTargetUsers(BroadcastMessage broadcast, MessageDeliveryEvent event){
-        final List<String> targetUsers;
-        String eventType = event.getEventType();
+    /**
+     * Surgically updates the 'active-group-broadcasts' cache by either adding or removing a single broadcast.
+     * @param broadcast The broadcast to add or remove.
+     * @param isAddition True to add, false to remove.
+     */
+    private void updateActiveGroupCaches(BroadcastMessage broadcast, boolean isAddition) {
         String targetType = broadcast.getTargetType();
-         // For lifecycle events (READ, CANCELLED, EXPIRED), the audience is determined the same way as for CREATED events.
-        if (Constants.EventType.READ.name().equals(eventType)) {
-            targetUsers = List.of(event.getUserId());
-        } else if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
-            // For fan-out-on-write types, the definitive user list is in the pre-computed targets table.
-            log.debug("Distributing for fan-out-on-write broadcast ({}). Reading from broadcast_user_targets table.", targetType);
-            targetUsers = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
-        } else {
-            // For fan-out-on-read types (ALL, ROLE), determine the user list dynamically.
-            log.debug("Distributing for fan-out-on-read broadcast ({}).", targetType);
-            targetUsers = determineFanOutOnReadUsers(broadcast);
+        if (Constants.TargetType.ALL.name().equals(targetType)) {
+            updateCacheForKey("ALL", broadcast, isAddition);
+        } else if (Constants.TargetType.ROLE.name().equals(targetType)) {
+            broadcast.getTargetIds().forEach(role -> {
+                String cacheKey = "ROLE:" + role;
+                updateCacheForKey(cacheKey, broadcast, isAddition);
+            });
         }
-        return targetUsers;
     }
 
-    private List<String> determineFanOutOnReadUsers(BroadcastMessage broadcast) {
+    private void updateCacheForKey(String cacheKey, BroadcastMessage broadcast, boolean isAddition) {
+        List<BroadcastMessage> cachedList = cacheService.getActiveGroupBroadcasts(cacheKey);
+        // Initialize the list if it doesn't exist in the cache
+        if (cachedList == null) {
+            cachedList = new ArrayList<>();
+        }
+
+        // Remove any existing instance of this broadcast to prevent duplicates
+        cachedList.removeIf(b -> b.getId().equals(broadcast.getId()));
+
+        if (isAddition) {
+            cachedList.add(broadcast);
+            log.info("Added broadcast {} to active cache for key '{}'.", broadcast.getId(), cacheKey);
+        } else {
+            log.info("Removed broadcast {} from active cache for key '{}'.", broadcast.getId(), cacheKey);
+        }
+
+        // Put the modified list back into the cache
+        cacheService.cacheActiveGroupBroadcasts(cacheKey, cachedList);
+    }
+
+    private void handleBroadcastLifecycleEvent(BroadcastMessage broadcast, MessageDeliveryEvent event) {
+        final List<String> targetUsers = determineTargetUsers(broadcast);
+        if (targetUsers.isEmpty()) {
+            log.warn("Orchestrator found no target users for broadcast ID {}. No events will be scattered.", broadcast.getId());
+            return;
+        }
+
+        if (Constants.EventType.CREATED.name().equals(event.getEventType()) &&
+                (!Constants.TargetType.PRODUCT.name().equals(broadcast.getTargetType()))) {
+            broadcastStatisticsService.initializeStatistics(broadcast.getId(), targetUsers.size());
+        }
+
+        log.info("Scattering {} user-specific '{}' events to Geode Region for broadcast ID {}", targetUsers.size(), event.getEventType(), broadcast.getId());
+        for (String userId : targetUsers) {
+            scatterToUser(event.toBuilder().userId(userId).build());
+        }
+    }
+
+    private void handleReadEvent(MessageDeliveryEvent event) {
+        log.info("Scattering single '{}' event to Geode Region for user {}", event.getEventType(), event.getUserId());
+        scatterToUser(event);
+    }
+    
+    private void scatterToUser(MessageDeliveryEvent userSpecificEvent) {
+        String userId = userSpecificEvent.getUserId();
+        String clusterName = appProperties.getClusterName();
+        
+        Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId, clusterName);
+
+        if (!userConnections.isEmpty()) {
+            UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
+            String uniqueClusterPodName = connectionInfo.getClusterName() + ":" + connectionInfo.getPodName();
+            
+            String messageKey = UUID.randomUUID().toString();
+            GeodeSsePayload payload = new GeodeSsePayload(uniqueClusterPodName, userSpecificEvent);
+
+            sseMessagesRegion.put(messageKey, payload);
+        } else {
+            String podName = appProperties.getPodName();
+            
+            switch (Constants.EventType.valueOf(userSpecificEvent.getEventType())) {
+                case CREATED:
+                    log.debug("User {} is offline. Caching pending CREATED event for broadcast {}.", userId, userSpecificEvent.getBroadcastId());
+                    cacheService.cachePendingEvent(userSpecificEvent, podName);
+                    break;
+                case CANCELLED:
+                case EXPIRED:
+                    log.info("User {} is offline. Removing pending event for cancelled/expired broadcast {}.", userId, userSpecificEvent.getBroadcastId());
+                    cacheService.removePendingEvent(userId, userSpecificEvent.getBroadcastId());
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    private List<String> determineTargetUsers(BroadcastMessage broadcast) {
         String targetType = broadcast.getTargetType();
+        if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
+            return userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
+        }
+        
         if (Constants.TargetType.ALL.name().equals(targetType)) {
             return userService.getAllUserIds();
         }
@@ -137,41 +208,5 @@ public class KafkaOrchestratorConsumerService {
             return broadcast.getTargetIds();
         }
         return Collections.emptyList();
-    }
-
-    private OutboxEvent createWorkerOutboxEvent(MessageDeliveryEvent originalEvent, String userId, String topicName) {
-        MessageDeliveryEvent userSpecificEvent = originalEvent.toBuilder()
-                .eventId(UUID.randomUUID().toString())
-                .userId(userId)
-                .build();
-        try {
-            String payloadJson = objectMapper.writeValueAsString(userSpecificEvent);
-            return OutboxEvent.builder()
-                    .id(UUID.fromString(userSpecificEvent.getEventId()))
-                    .aggregateType(userSpecificEvent.getClass().getSimpleName())
-                    .aggregateId(userSpecificEvent.getUserId())
-                    .eventType(userSpecificEvent.getEventType())
-                    .topic(topicName)
-                    .payload(payloadJson)
-                    .createdAt(userSpecificEvent.getTimestamp())
-                    .build();
-        } catch (JsonProcessingException e) {
-            log.error("Could not serialize payload for user {}. Event will be skipped.", userId, e);
-            return null;
-        }
-    }
-
-    private void initializeStatistics(Long broadcastId, int totalTargeted) {
-        log.info("Orchestrator initializing statistics for broadcast ID {} with {} targeted users.", broadcastId, totalTargeted);
-        BroadcastStatistics stats = BroadcastStatistics.builder()
-                .broadcastId(broadcastId)
-                .totalTargeted(totalTargeted)
-                .totalDelivered(0)
-                .totalRead(0)
-                .totalFailed(0)
-                .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .build();
-        // The existing save method uses MERGE, which is safe to call even if the record somehow already exists.
-        broadcastStatisticsRepository.save(stats);
     }
 }

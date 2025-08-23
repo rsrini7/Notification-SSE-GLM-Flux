@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broadcast-user-service
+  namespace: broadcast-system
+  labels:
+    app: broadcast-user-service
+    version: v1
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: "25%"
+      maxUnavailable: "25%"
+  selector:
+    matchLabels:
+      app: broadcast-user-service
+  template:
+    metadata:
+      labels:
+        app: broadcast-user-service
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: "/api/actuator/prometheus"
+    spec:
+      serviceAccountName: broadcast-service-account
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: broadcast-user-service
+        image: broadcast-user-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8082
+          name: api
+        env:
+        - name: LOGGING_FILE_NAME
+          value: "broadcast-user-service"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: CLUSTER_NAME
+          valueFrom:
+                configMapKeyRef:
+                  name: cluster-info
+                  key: cluster.name
+        - name: JAVA_OPTS
+          value: "-Xms512m -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "dev-pg"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8082
+            scheme: HTTPS
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8082
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+        - name: logs
+          mountPath: /var/log
+      volumes:
+      - name: config-volume
+        configMap:
+          name: broadcast-config
+      - name: logs
+        emptyDir: {}
+      

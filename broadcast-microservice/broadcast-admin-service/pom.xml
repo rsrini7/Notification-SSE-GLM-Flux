@@ -21,6 +21,16 @@
             <groupId>com.example</groupId>
             <artifactId>broadcast-shared</artifactId>
             <version>${project.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.geode</groupId>
+                    <artifactId>geode-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.geode</groupId>
+                    <artifactId>geode-cq</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>

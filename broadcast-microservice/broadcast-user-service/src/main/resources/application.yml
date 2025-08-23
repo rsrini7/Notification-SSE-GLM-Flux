@@ -1,9 +1,6 @@
 server:
   port: 8082 # User service port
   shutdown: graceful
-  netty:
-    worker:
-      thread-name-prefix: "http-nio-" # Custom prefix for web threads
   http2:
     enabled: true
   ssl:
@@ -35,10 +32,6 @@ spring:
   sql:
     init:
       mode: never
-  data:
-    redis:
-      host: localhost
-      port: 6379
 
   # Kafka Configuration
   kafka:
@@ -47,7 +40,6 @@ spring:
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      # group-id: "broadcast-group-#{environment.getProperty('POD_NAME', T(java.util.UUID).randomUUID().toString())}"
       auto-offset-reset: earliest
       properties:
         '[spring.json.trusted.packages]': "*"
@@ -68,7 +60,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,ratelimiters,redis-cache-stats
+        include: health,info,metrics,prometheus,ratelimiters
   endpoint:
     health:
       show-details: always
@@ -77,7 +69,7 @@ management:
       validate-group-membership: false
       group:
         readiness:
-          include: db,kafka,redis
+          include: db,kafka
         liveness:
           include: ping
 
@@ -112,23 +104,14 @@ resilience4j:
 # --- CUSTOM PROPERTIES ---
 
 broadcast:
+  service:
+    name: broadcast-user-service
   h2-console:
     web-port: "8085" # Admin H2 Console on port 8085
     tcp-port: "9095"
   sse:
     timeout: 300000
     heartbeat-interval: 30000
-  # Redis Cache Configuration
-  cache:
-    user-connections:
-      maximum-size: 50000
-      expire-after-access: PT1H
-    user-messages:
-      maximum-size: 100000
-      expire-after-write: PT24H
-    pending-events:
-      maximum-size: 50000
-      expire-after-write: PT6H
 
   # Database Configuration
   db:
@@ -138,18 +121,19 @@ broadcast:
   # Kafka Configuration
   kafka:
     topic:
-      name: "#{environment.getProperty('CLUSTER_NAME', 'cluster-a')}-#{environment.getProperty('POD_NAME', 'broadcast-user-service-0')}"
       name-orchestration: broadcast-orchestration
-      name-worker-prefix: broadcast-user-service
       partitions: 1
       replication-factor: 1
     consumer:
       group-orchestration: "broadcast-orchestration-group"
-      group-worker: "broadcast-worker-group"
-      # group-dlt: "broadcast-dlt-group" # Included for consistency, though not used by a listener in this service
     retry:
       max-attempts: 3
       backoff-delay: 1000
+
+  geode:
+    locator:
+      host: localhost
+      port: 10334
 
 ---
 # PostgreSQL-specific profile for local development

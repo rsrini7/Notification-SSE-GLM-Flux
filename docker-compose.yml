@@ -1,5 +1,5 @@
 networks:
-  broadcast-net:
+  broadcastnet:
     driver: bridge
 
 # Define reusable base configurations
@@ -9,7 +9,7 @@ x-nginx-base: &nginx_base
   ports:
     - "443:443"
   networks:
-    - broadcast-net
+    - broadcastnet
 
 services:
   # ===================================================================
@@ -48,7 +48,7 @@ services:
       - POD_NAME_PREFIX=broadcast-user-service
     command: ["sh", "-c", "echo 'Waiting 5s for dev Kafka...' && sleep 5 && /tmp/create-kafka-topics.sh"]
     networks:
-      - broadcast-net
+      - broadcastnet
   
   # Kafka service for the 'dev' profile
   kafka-dev:
@@ -70,7 +70,7 @@ services:
     depends_on:
       - zookeeper
     networks:
-      - broadcast-net
+      - broadcastnet
 
   # ===================================================================
   #  PROD PROFILE SERVICES
@@ -110,7 +110,7 @@ services:
       - POD_NAME_PREFIX=broadcast-user-service
     command: ["sh", "-c", "echo 'Waiting 5s for prod Kafka...' && sleep 5 && /tmp/create-kafka-topics.sh"]
     networks:
-      - broadcast-net
+      - broadcastnet
 
   # Kafka service for the 'prod' profile
   kafka-prod:
@@ -132,7 +132,7 @@ services:
     depends_on:
       - zookeeper
     networks:
-      - broadcast-net
+      - broadcastnet
 
   admin-service:
     profiles:
@@ -144,20 +144,24 @@ services:
       - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g
       - SPRING_PROFILES_ACTIVE=dev-pg,admin-only
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
-      - SPRING_DATA_REDIS_HOST=redis
+      - BROADCAST_GEODE_LOCATOR_HOST=geode-locator
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-admin-service.log
+      - CLUSTER_NAME=${CLUSTER_NAME:-cluster-a}
+      - POD_NAME=${ADMIN_SERVICE_POD_NAME:-broadcast-admin-service-0}
     volumes:
       - ./logs/admin:/var/log/app
+    links:
+      - geode-locator:locator
     depends_on:
       kafka-prod-setup:
         condition: service_completed_successfully
       postgres:
         condition: service_started
-      redis:
+      geode-server:
         condition: service_started
     networks:
-      - broadcast-net
+      - broadcastnet
 
   user-service:
     profiles:
@@ -169,24 +173,26 @@ services:
       - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g    
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
-      - SPRING_DATA_REDIS_HOST=redis
+      - BROADCAST_GEODE_LOCATOR_HOST=geode-locator
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-user-service.log
-      - CLUSTER_NAME=cluster-a
-      - POD_NAME=broadcast-user-service-0
+      - CLUSTER_NAME=${CLUSTER_NAME:-cluster-a}
+      - POD_NAME=${USER_SERVICE_POD_NAME:-broadcast-user-service-0}
     volumes:
       - ./logs/user:/var/log/app
+    links:
+      - geode-locator:locator
     depends_on:
       kafka-prod-setup:
         condition: service_completed_successfully
       postgres:
         condition: service_started
-      redis:
+      geode-server:
         condition: service_started
       admin-service:
         condition: service_started
     networks:
-      - broadcast-net
+      - broadcastnet
 
   # ===================================================================
   #  COMMON INFRASTRUCTURE SERVICES
@@ -203,7 +209,7 @@ services:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_log:/var/lib/zookeeper/log
     networks:
-      - broadcast-net
+      - broadcastnet
 
   postgres:
     image: postgres:15
@@ -219,21 +225,70 @@ services:
       - postgres_data:/var/lib/postgresql/data
     command: ["-c", "max_connections=300"]
     networks:
-      - broadcast-net
+      - broadcastnet
 
-  redis:
-    image: redis:7-alpine
-    container_name: redis_cache
+  geode-locator:
+    build:
+      context: ./geode-scripts
+      dockerfile: Dockerfile.dev
+    container_name: geode-locator    
+    hostname: locator
+    mem_reservation: 1g
+    mem_limit: 2g 
+    expose:
+    - "10334"
+    - "1099"
+    - "7575"
     ports:
-      - "6379:6379"
+    - "1099:1099"
+    - "10334:10334"
+    - "7575:7575"
+    - "7070:7070"
     volumes:
-      - redis_data:/data
+    - ./geode-scripts/:/geode-scripts/
+    command: /geode-scripts/startLocator.sh
+    healthcheck:
+      test: ["CMD", "gfsh", "-e", "connect --locator=localhost[10334]", "-e", "list members"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
     networks:
-      - broadcast-net
+      - broadcastnet
+
+  geode-server:
+    build:
+      context: ./geode-scripts
+      dockerfile: Dockerfile.dev
+    container_name: geode-server
+    links:
+      - geode-locator:locator
+    mem_reservation: 1g
+    mem_limit: 2g
+    expose:
+    - "8080"
+    - "40404"
+    - "1099"
+    ports:
+    - "40404:40404"
+    # environment:
+    #   - GEODE_OPTS=-Dgemfire.subscription-conflation-enabled=true
+    volumes:
+    - ./broadcast-microservice/broadcast-shared/target/broadcast-shared-1.0.0.jar:/geode-server/classpath/app.jar
+    - ./geode-scripts/:/geode-scripts/
+    command: /geode-scripts/startServer.sh --server-port=40404 --max-heap=1G
+    # healthcheck:
+    #   test: ["CMD", "gfsh", "-e", "connect --locator=locator[10334]", "-e", "list regions"]
+    #   interval: 5s
+    #   timeout: 10s
+    #   retries: 12
+    depends_on:
+      geode-locator:
+        condition: service_started
+    networks:
+    - broadcastnet
 
 volumes:
   postgres_data:
-  redis_data:
   zookeeper_data:
   zookeeper_log:
   kafka_data_dev:

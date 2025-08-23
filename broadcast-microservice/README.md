@@ -7,7 +7,7 @@ A high-performance Java microservice for the Broadcast Messaging System, built w
 - **Real-time SSE Delivery**: Sub-second latency for online users
 - **Persistent Storage**: h2 Database with admin and user-side tracking
 - **Event Streaming**: Kafka-based fan-out with at-least-once semantics
-- **High-Performance Caching**: Redis for low-latency operations
+- **High-Performance Caching**: Geode for low-latency operations
 - **Scalable Architecture**: Kubernetes-ready with HPA and PDB
 
 ## Tech Stack
@@ -16,7 +16,7 @@ A high-performance Java microservice for the Broadcast Messaging System, built w
 - **Spring Boot**: Java backend framework.
 - **Netty**: High-performance network library for Java.
 - **Postgres**: Relational database for message storage.
-- **Redis**: In-memory data structure store for caching and message queuing.
+- **Geode**: In-memory data structure store for caching and message queuing.
 - **Docker**: Containerization for easy deployment.
 - **Nginx**: Reverse proxy and load balancer.
 
@@ -40,7 +40,7 @@ A high-performance Java microservice for the Broadcast Messaging System, built w
 - Docker & Kubernetes (for deployment)
 - Kafka 3.7.1+ (Confluence 7.7.1)
 - Postgres 15+
-- Redis 7+
+- Geode 1.15.1
 
 ## Database Schema
 
@@ -69,12 +69,6 @@ A high-performance Java microservice for the Broadcast Messaging System, built w
 - **Partitions**: 10 partitions for parallel processing
 - **Replication**: 3 replicas for fault tolerance
 - **Consumer Groups**: Multiple consumers for load distribution
-
-### Actuator
-- **Endpoint**: `/actuator/redis-cache-stats`
-- **Description**: Provides cache statistics for Redis.
-- **Usage**: Access this endpoint to monitor cache performance.
-- **Note**: This endpoint is only available when the Redis profile is active.
 
 ## H2 Console
 
@@ -147,91 +141,5 @@ mvn gatling:test
 
 ### Startup Tips
 
-- **Redis Profile**: Use `mvn spring-boot:run -Dspring-boot.run.profiles=redis` to start with Redis profile.
 - **PostgreSQL Profile**: Use `mvn spring-boot:run -Dspring-boot.run.profiles=dev-pg` to start with PostgreSQL profile.
 - **Database Initialization**: For first-time setup, set `spring.sql.init.mode=always` in `application.yml`. After initial schema creation, change to `spring.sql.init.mode=never` and ensure `schema.sql` comment `SET MODE PostgreSQL;` for PostgreSQL then uncomment for h2.
-
-## Project Architecture
-
-### System Design Diagram Backend
-```mermaid
-graph TD
-    subgraph "User Interaction & Frontend"
-        AdminUser[Admin User]
-        UI[React Frontend App]
-        AdminUser -- Manages Broadcasts --> UI
-    end
-
-    subgraph "Entry & Caching"
-        Nginx[Nginx Reverse Proxy]
-        Redis[Redis Cache]
-    end
-
-    subgraph "Backend: Admin Service"
-        AdminController[BroadcastAdminController]
-        LifecycleService[BroadcastLifecycleService]
-        DltService[DltService]
-        OutboxPoller["OutboxPollingService (Scheduled)"]
-    end
-
-    subgraph "Backend: User Service"
-        UserController[UserMessageController & SseController]
-        KafkaConsumer[KafkaConsumerService]
-        SseService[SseService]
-    end
-
-    subgraph "Data & Eventing Infrastructure"
-        KafkaTopic[Kafka Topic broadcast-user-service-selected/group]
-        KafkaDLT[Kafka DLT...-dlt]
-        Postgres[PostgreSQL Database]
-    end
-
-    %% Styles
-    style AdminUser fill:#d4edff,stroke:#333
-    style UI fill:#d4edff,stroke:#333
-    style Nginx fill:#e2f0d9,stroke:#333
-    style AdminController fill:#fff2cc,stroke:#333
-    style LifecycleService fill:#fff2cc,stroke:#333
-    style DltService fill:#f8d7da,stroke:#333
-    style OutboxPoller fill:#fff2cc,stroke:#333
-    style UserController fill:#fff2cc,stroke:#333
-    style KafkaConsumer fill:#fff2cc,stroke:#333
-    style SseService fill:#fff2cc,stroke:#333
-    style Postgres fill:#d6d8db,stroke:#333
-    style Redis fill:#f5c6cb,stroke:#333
-    style KafkaTopic fill:#cce5ff,stroke:#333
-    style KafkaDLT fill:#f8d7da,stroke:#333
-
-
-    %% Happy Path: Broadcast Creation and Delivery
-    UI -- 1- POST /api/admin/broadcasts --> Nginx
-    Nginx -- 2- Proxies Request --> AdminController
-    AdminController -- 3- createBroadcast --> LifecycleService
-    LifecycleService -- "4- DB Transaction" --> Postgres
-    Postgres -- "Saves to broadcast_messages & outbox_events" --> LifecycleService
-    OutboxPoller -- 5- Polls for new events --> Postgres
-    OutboxPoller -- 6- Publishes Event --> KafkaTopic
-    KafkaConsumer -- 7- Consumes Event --> KafkaTopic
-    KafkaConsumer -- 8- Is user online? --> Redis
-    KafkaConsumer -- 9a- If Online --> SseService
-    SseService -- "10- Pushes SSE Event" --> UI
-    SseService -- "Updates Status to DELIVERED" --> Postgres
-    KafkaConsumer -- 9b- If Offline --> Redis
-    Redis -- "Caches in pending-evt:<userId>" --> KafkaConsumer
-    
-    %% User Reconnection Path
-    UI -- "User Connects" --> UserController
-    UserController -- "Calls on connect" --> SseService
-    SseService -- "Gets pending messages" --> Redis
-    SseService -- "Pushes pending messages via SSE" --> UI
-
-    %% DLT Path: Failure and Redrive
-    KafkaConsumer -- "A- Processing Fails" --> KafkaConsumer
-    KafkaConsumer -- "B- After Retries, sends to DLT" --> KafkaDLT
-    DltService -- "C- Consumes from DLT" --> KafkaDLT
-    DltService -- "D- Saves to dlt_messages table" --> Postgres
-    UI -- "E- Admin clicks 'Redrive'" --> Nginx
-    Nginx -- "F- POST /api/admin/dlt/redrive" --> DltService
-    DltService -- "G- Resets message status" --> Postgres
-    DltService -- "H- Re-publishes original event" --> KafkaTopic
-```

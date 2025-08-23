@@ -205,7 +205,7 @@ kubectl get --raw /api/v1/namespaces/monitoring/services/prometheus:http/proxy/a
 - **Retries**: Configure for resilience
 
 ### Cache Tuning
-- **Redis Cache**: Adjust size and expiration
+- **Geode Cache**: Adjust size and expiration
 - **Connection Pool**: Optimize for database load
 - **SSE Timeouts**: Balance resource usage vs UX
 
