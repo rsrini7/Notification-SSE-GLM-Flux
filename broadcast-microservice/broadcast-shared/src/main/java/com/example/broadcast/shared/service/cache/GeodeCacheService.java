@@ -269,13 +269,6 @@ public class GeodeCacheService implements CacheService {
         activeGroupBroadcastsRegion.put(cacheKey, broadcasts);
     }
 
-    @Override
-    public void evictActiveGroupBroadcastsCache() {
-        Set<String> keysToClear = activeGroupBroadcastsRegion.keySet();
-        keysToClear.forEach(activeGroupBroadcastsRegion::remove);
-        log.warn("Cleared all entries from activeGroupBroadcastsRegion from client-side.");
-    }
-
     private Optional<UserConnectionInfo> getConnectionInfo(String connectionId) {
         String userId = connectionToUserRegion.get(connectionId);
         if (userId == null) {

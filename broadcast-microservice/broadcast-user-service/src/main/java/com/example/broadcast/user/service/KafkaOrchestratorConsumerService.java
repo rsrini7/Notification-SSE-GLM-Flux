@@ -21,6 +21,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +38,7 @@ public class KafkaOrchestratorConsumerService {
     private final BroadcastRepository broadcastRepository;
     private final UserService userService;
     private final BroadcastStatisticsService broadcastStatisticsService;
-
+    
     @Qualifier("sseMessagesRegion")
     private final Region<String, Object> sseMessagesRegion;
 
@@ -64,26 +65,70 @@ public class KafkaOrchestratorConsumerService {
 
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
+                // Cache the content of the new broadcast
+                cacheService.cacheBroadcastContent(broadcast);
+                // Surgically add this new broadcast to the active group caches
+                updateActiveGroupCaches(broadcast, true);
+                handleBroadcastLifecycleEvent(broadcast, event);
+                break;
             case CANCELLED:
             case EXPIRED:
-                cacheService.evictActiveGroupBroadcastsCache();
+                // Evict the content of the specific broadcast that is no longer active
                 cacheService.evictBroadcastContent(event.getBroadcastId());
-                cacheService.cacheBroadcastContent(broadcast);
+                // Surgically remove this broadcast from the active group caches
+                updateActiveGroupCaches(broadcast, false);
                 handleBroadcastLifecycleEvent(broadcast, event);
                 break;
             case FAILED:
-                cacheService.evictActiveGroupBroadcastsCache();
+                log.warn("Broadcast Failed.");
                 break;
             case READ:
                 handleReadEvent(event);
                 break;
-
             default:
                 log.warn("Unhandled event type in orchestrator: {}", event.getEventType());
                 break;
         }
 
         acknowledgment.acknowledge();
+    }
+
+    /**
+     * Surgically updates the 'active-group-broadcasts' cache by either adding or removing a single broadcast.
+     * @param broadcast The broadcast to add or remove.
+     * @param isAddition True to add, false to remove.
+     */
+    private void updateActiveGroupCaches(BroadcastMessage broadcast, boolean isAddition) {
+        String targetType = broadcast.getTargetType();
+        if (Constants.TargetType.ALL.name().equals(targetType)) {
+            updateCacheForKey("ALL", broadcast, isAddition);
+        } else if (Constants.TargetType.ROLE.name().equals(targetType)) {
+            broadcast.getTargetIds().forEach(role -> {
+                String cacheKey = "ROLE:" + role;
+                updateCacheForKey(cacheKey, broadcast, isAddition);
+            });
+        }
+    }
+
+    private void updateCacheForKey(String cacheKey, BroadcastMessage broadcast, boolean isAddition) {
+        List<BroadcastMessage> cachedList = cacheService.getActiveGroupBroadcasts(cacheKey);
+        // Initialize the list if it doesn't exist in the cache
+        if (cachedList == null) {
+            cachedList = new ArrayList<>();
+        }
+
+        // Remove any existing instance of this broadcast to prevent duplicates
+        cachedList.removeIf(b -> b.getId().equals(broadcast.getId()));
+
+        if (isAddition) {
+            cachedList.add(broadcast);
+            log.info("Added broadcast {} to active cache for key '{}'.", broadcast.getId(), cacheKey);
+        } else {
+            log.info("Removed broadcast {} from active cache for key '{}'.", broadcast.getId(), cacheKey);
+        }
+
+        // Put the modified list back into the cache
+        cacheService.cacheActiveGroupBroadcasts(cacheKey, cachedList);
     }
 
     private void handleBroadcastLifecycleEvent(BroadcastMessage broadcast, MessageDeliveryEvent event) {
@@ -99,7 +144,6 @@ public class KafkaOrchestratorConsumerService {
         }
 
         log.info("Scattering {} user-specific '{}' events to Geode Region for broadcast ID {}", targetUsers.size(), event.getEventType(), broadcast.getId());
-
         for (String userId : targetUsers) {
             scatterToUser(event.toBuilder().userId(userId).build());
         }
@@ -123,7 +167,6 @@ public class KafkaOrchestratorConsumerService {
 
             sseMessagesRegion.put(messageKey, payload);
         } else {
-           // User is offline, modify the pending events cache accordingly.
             switch (Constants.EventType.valueOf(userSpecificEvent.getEventType())) {
                 case CREATED:
                     log.debug("User {} is offline. Caching pending CREATED event for broadcast {}.", userId, userSpecificEvent.getBroadcastId());
@@ -135,7 +178,6 @@ public class KafkaOrchestratorConsumerService {
                     cacheService.removePendingEvent(userId, userSpecificEvent.getBroadcastId());
                     break;
                 default:
-                    // Do nothing for other events like READ for offline users
                     break;
             }
         }
@@ -143,13 +185,10 @@ public class KafkaOrchestratorConsumerService {
 
     private List<String> determineTargetUsers(BroadcastMessage broadcast) {
         String targetType = broadcast.getTargetType();
-        
         if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
-            log.debug("Distributing for fan-out-on-write broadcast ({}). Reading from broadcast_user_targets table.", targetType);
             return userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
         }
         
-        log.debug("Distributing for fan-out-on-read broadcast ({}).", targetType);
         if (Constants.TargetType.ALL.name().equals(targetType)) {
             return userService.getAllUserIds();
         }

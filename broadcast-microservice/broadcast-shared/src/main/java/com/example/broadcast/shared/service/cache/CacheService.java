@@ -38,5 +38,4 @@ public interface CacheService {
     void evictBroadcastContent(Long broadcastId);
     List<BroadcastMessage> getActiveGroupBroadcasts(String cacheKey);
     void cacheActiveGroupBroadcasts(String cacheKey, List<BroadcastMessage> broadcasts);
-    void evictActiveGroupBroadcastsCache();
 }
