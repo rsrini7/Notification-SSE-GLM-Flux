@@ -5,13 +5,10 @@ Remove-Item -Path "logs\*" -Recurse -Force -ErrorAction SilentlyContinue
 # Run the Maven build command
 mvn clean package
 
-# --- MODIFICATION START ---
 # Generate a random suffix to create a dynamic pod name for testing cleanup
 $randomSuffix = -join ((65..90) + (97..122) | Get-Random -Count 5 | ForEach-Object { [char]$_ })
 $env:POD_NAME = "broadcast-user-service-$randomSuffix"
 $env:CLUSTER_NAME = "cluster-a"
-# --- MODIFICATION END ---
-
 # Run the application
 Write-Host "Starting user-service with DYNAMIC pod name: $($env:POD_NAME) and cluster.name=$($env:CLUSTER_NAME)..."
 java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" "-Dpod.name=$($env:POD_NAME)" "-Dcluster.name=$($env:CLUSTER_NAME)" -jar target/broadcast-user-service-1.0.0.jar

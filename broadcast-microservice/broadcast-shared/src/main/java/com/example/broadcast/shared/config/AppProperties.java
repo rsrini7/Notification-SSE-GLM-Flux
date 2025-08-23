@@ -11,11 +11,11 @@ import org.springframework.beans.factory.annotation.Value;
 public class AppProperties {
 
     private String clusterName;
+    private String podName;
 
     private final Sse sse = new Sse();
     private final Db db = new Db();
     private final Kafka kafka = new Kafka();
-    private final Pod pod = new Pod();
     private final Simulation simulation = new Simulation();
     private final H2Console h2Console = new H2Console();
     private final Service service = new Service();
@@ -46,13 +46,6 @@ public class AppProperties {
     @Data
     public static class Simulation {
         private long userFetchDelayMs = 0; // Default to 0 if not specified
-    }
-
-    @Data
-    public static class Pod {
-        @Value("${pod.name:${POD_NAME:broadcast-user-service-0}}")
-        @NotBlank
-        private String id;
     }
 
     @Data

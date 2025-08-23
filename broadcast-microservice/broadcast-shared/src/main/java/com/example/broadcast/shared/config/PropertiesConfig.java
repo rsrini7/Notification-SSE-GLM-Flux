@@ -21,7 +21,7 @@ public class PropertiesConfig {
         AppProperties properties = new AppProperties();
         
         // Manually and explicitly set the pod and cluster names
-        properties.getPod().setId(podName);
+        properties.setPodName(podName);
         properties.setClusterName(clusterName);
         
         // The @ConfigurationProperties annotation will handle binding the rest of the

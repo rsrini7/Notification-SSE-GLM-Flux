@@ -47,7 +47,6 @@ public class BroadcastLifecycleService {
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
-        // boolean isFailureTest = testingConfigurationService.consumeArmedState();
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
         BroadcastMessage broadcast = buildBroadcastFromRequest(request);
 
@@ -178,7 +177,6 @@ public class BroadcastLifecycleService {
                 .eventId(UUID.randomUUID().toString())
                 .broadcastId(broadcast.getId())
                 .eventType(eventType.name())
-                .podId(System.getenv().getOrDefault("POD_NAME", "broadcast-user-service-0"))
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .message(message)
                 .build();
@@ -189,7 +187,6 @@ public class BroadcastLifecycleService {
                 .eventId(UUID.randomUUID().toString())
                 .broadcastId(deliveryEvent.getBroadcastId())
                 .eventType(eventType.name())
-                .podId(System.getenv().getOrDefault("POD_NAME", "broadcast-user-service-0"))
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .message(message)
                 .build();

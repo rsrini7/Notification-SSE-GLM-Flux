@@ -75,9 +75,9 @@ public class SseController {
     public ResponseEntity<java.util.Map<String, Object>> getStats() {
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
         stats.put("totalActiveUsers", cacheService.getTotalActiveUsers());
-        stats.put("podActiveUsers", cacheService.getPodActiveUsers(appProperties.getPod().getId()));
+        stats.put("podActiveUsers", cacheService.getPodActiveUsers(appProperties.getPodName()));
         stats.put("sseConnectedUsers", sseService.getConnectedUserCount());
-        stats.put("podId", appProperties.getPod().getId());
+        stats.put("podId", appProperties.getPodName());
         stats.put("timestamp", ZonedDateTime.now());
         return ResponseEntity.ok(stats);
     }

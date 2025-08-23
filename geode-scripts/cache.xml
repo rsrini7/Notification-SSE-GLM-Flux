@@ -14,7 +14,7 @@
     </region>
     <region name="connection-metadata"> <region-attributes refid="REPLICATE"/>
     </region>
-    <region name="pod-connections">
+    <region name="cluster-pod-connections">
         <region-attributes refid="REPLICATE"/>
     </region>
     <region name="pod-heartbeats">

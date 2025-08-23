@@ -99,7 +99,7 @@ public class SseConnectionManager {
     }
 
     public void registerConnection(String userId, String connectionId) {
-        String podName = appProperties.getPod().getId();
+        String podName = appProperties.getPodName();
         String clusterName = appProperties.getClusterName();
         cacheService.registerUserConnection(userId, connectionId, podName, clusterName);
         log.info("[REGISTER] Connection registered for userId='{}', connection='{}', cluster='{}', pod='{}'", userId, connectionId, clusterName, podName);

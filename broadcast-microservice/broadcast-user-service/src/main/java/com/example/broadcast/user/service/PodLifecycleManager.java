@@ -34,8 +34,8 @@ public class PodLifecycleManager {
     public void updateSelfHeartbeat() {
         if (clientCache.isClosed()) return;
         try {
-            String podId = appProperties.getPod().getId();
-            podHeartbeatsRegion.put(podId, System.currentTimeMillis());
+            String clusterPodKey = getClusterPodKey();
+            podHeartbeatsRegion.put(clusterPodKey, System.currentTimeMillis());
         } catch (Exception e) {
             log.warn("Could not update pod heartbeat. May be shutting down.", e);
         }
@@ -54,17 +54,22 @@ public class PodLifecycleManager {
             long staleThreshold = System.currentTimeMillis() - 90_000; // 90-second threshold for a pod to be considered dead
             Set<String> podsWithConnections = podConnectionsRegion.keySetOnServer();
             
-            for (String podId : podsWithConnections) {
-                Long lastHeartbeat = podHeartbeatsRegion.get(podId);
+            for (String clusterPodKey : podsWithConnections) {
+                Long lastHeartbeat = podHeartbeatsRegion.get(clusterPodKey);
 
-                // If a pod has connection data but no heartbeat, or its heartbeat is stale, it's a zombie.
                 if (lastHeartbeat == null || lastHeartbeat < staleThreshold) {
-                    log.warn("Detected stale/dead pod: {}. Initiating cleanup of its resources.", podId);
-                    cacheService.cleanupDeadPod(podId);
+                    log.warn("Detected stale/dead pod: {}. Initiating cleanup of its resources.", clusterPodKey);
+                    // The service method now needs the composite key
+                    cacheService.cleanupDeadPod(clusterPodKey);
                 }
             }
         } catch (Exception e) {
             log.error("Error during stale pod reaping task: {}", e.getMessage(), e);
         }
+    }
+
+     // HELPER METHOD
+    private String getClusterPodKey() {
+        return appProperties.getClusterName() + ":" + appProperties.getPodName();
     }
 }

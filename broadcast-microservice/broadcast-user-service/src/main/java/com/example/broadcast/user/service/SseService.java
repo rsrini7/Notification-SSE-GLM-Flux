@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
@@ -38,6 +39,7 @@ public class SseService {
     private final UserMessageService userMessageService;
     private final ObjectMapper objectMapper;
     private final Scheduler jdbcScheduler;
+    private final AppProperties appProperties;
 
     @Transactional
     public void registerConnection(String userId, String connectionId) {
@@ -103,7 +105,8 @@ public class SseService {
     }
     
     private Set<Long> sendPendingMessages(String userId) {
-        List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
+        String clusterName = appProperties.getClusterName();
+        List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId,clusterName);
         if (pendingEvents == null || pendingEvents.isEmpty()) {
             return Collections.emptySet();
         }
@@ -129,7 +132,7 @@ public class SseService {
                     break;
             }
         }
-        cacheService.clearPendingEvents(userId);
+        cacheService.clearPendingEvents(userId, clusterName);
         return processedIds;
     }
 

@@ -19,8 +19,8 @@ $regions = @(
     "broadcast-content",
     "connection-metadata",
     "pending-events",
-    "pod-connections",
-    "pod-heartbeats",
+    "cluster-pod-connections",
+    "cluster-pod-heartbeats",
     "sse-messages",
     "user-connections",
     "user-messages"
