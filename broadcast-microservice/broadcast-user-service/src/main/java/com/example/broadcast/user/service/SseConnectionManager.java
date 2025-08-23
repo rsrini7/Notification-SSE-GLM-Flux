@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.apache.geode.cache.CacheClosedException;
+import org.apache.geode.cache.client.ClientCache;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -40,6 +41,7 @@ public class SseConnectionManager {
     private final CacheService cacheService;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
+    private final ClientCache clientCache; // Inject ClientCache to check its status
 
     private Disposable serverHeartbeatSubscription;
 
@@ -94,19 +96,10 @@ public class SseConnectionManager {
         
         return sink.asFlux()
                 .doOnCancel(() -> removeEventStream(userId, connectionId))
-                .doOnError(throwable -> {
-                    // This is the main change. Catch the specific error on shutdown.
-                    if (throwable.getCause() instanceof CacheClosedException) {
-                        log.warn("Connection for user {} closed during application shutdown. Suppressing error.", userId);
-                    } else {
-                        log.error("SSE stream error for user {}: {}", userId, throwable.getMessage());
-                        removeEventStream(userId, connectionId);
-                    }
-                })
+                .doOnError(throwable -> removeEventStream(userId, connectionId))
                 .doOnTerminate(() -> removeEventStream(userId, connectionId));
     }
 
-    // ... (rest of the file is unchanged) ...
     public void registerConnection(String userId, String connectionId) {
         String podName = appProperties.getPod().getId();
         String clusterName = appProperties.getClusterName();
@@ -126,7 +119,14 @@ public class SseConnectionManager {
                 }
             }
             connectionIdToUserIdMap.remove(connectionId);
-            cacheService.unregisterUserConnection(userId, connectionId);
+            
+            // **THIS IS THE FIX**: Check if the cache is closed before trying to use it.
+            if (clientCache.isClosed()) {
+                log.warn("Cache is closed. Skipping Geode unregister for connection {} on shutdown.", connectionId);
+            } else {
+                cacheService.unregisterUserConnection(userId, connectionId);
+            }
+
             log.info("Cleanly disconnected connection {} for user {}", connectionId, userId);
         }
     }
@@ -158,6 +158,12 @@ public class SseConnectionManager {
         serverHeartbeatSubscription = Flux.interval(Duration.ofMillis(appProperties.getSse().getHeartbeatInterval()), Schedulers.parallel())
             .doOnNext(tick -> {
                 try {
+                    // Check if cache is closed before running heartbeat logic
+                    if (clientCache.isClosed()) {
+                        log.warn("Cache is closed, skipping heartbeat.");
+                        return;
+                    }
+
                     Set<String> connectionIdsOnThisPod = connectionSinks.keySet();
                     if (connectionIdsOnThisPod.isEmpty()) return;
   
@@ -172,6 +178,8 @@ public class SseConnectionManager {
                             sink.tryEmitNext(heartbeatEvent);
                         }
                     }
+                } catch (CacheClosedException e) {
+                    log.warn("Cache closed during heartbeat task. Suppressing error.");
                 } catch (Exception e) {
                     log.error("Error in server heartbeat task: {}", e.getMessage());
                 }
