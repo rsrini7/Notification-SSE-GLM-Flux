@@ -40,7 +40,7 @@ export default function App() {
             </Badge>
             <Badge variant="secondary" className="flex items-center gap-2">
               <Database className="h-4 w-4" />
-              h2 Database
+              Postgres Database
             </Badge>
             <Badge variant="secondary" className="flex items-center gap-2">
               <Cloud className="h-4 w-4" />
@@ -160,7 +160,7 @@ export default function App() {
                       </li>
                       <li className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-green-500 rounded-full shrink-0"></div>
-                        h2 Database with JDBC
+                        Postgres Database with JDBC
                       </li>
                       <li className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-green-500 rounded-full shrink-0"></div>
@@ -168,7 +168,7 @@ export default function App() {
                       </li>
                       <li className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-green-500 rounded-full shrink-0"></div>
-                        Redis high-performance cache
+                        Geode high-performance cache
                       </li>
                     </ul>
                   </div>
@@ -222,7 +222,7 @@ export default function App() {
                       <h3 className="font-semibold">High Performance</h3>
                     </div>
                     <p className="text-sm text-gray-600">
-                      Redis caching for low-latency operations and scalability
+                      Geode caching for low-latency operations and scalability
                     </p>
                   </div>
                   

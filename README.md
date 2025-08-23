@@ -17,7 +17,7 @@ The overall system architecture is designed for scalability and real-time perfor
 
 -   **Real-time SSE Delivery**: For instant message delivery to online users.
 -   **Event-Driven Architecture**: Using Kafka for asynchronous communication.
--   **High-Performance Caching**: With Redis for low-latency operations.
+-   **High-Performance Caching**: With Geode / Gemfire for low-latency operations.
 -   **Scalable Deployment**: Ready for Kubernetes with Horizontal Pod Autoscaling (HPA).
 
 ### System Design Diagram
@@ -46,7 +46,7 @@ graph TD
     subgraph "Shared Infrastructure"
         Kafka["Kafka Broker broadcast-user-service-selected broadcast-user-service-group ...-dlt"]
         PostgresDB["PostgreSQL DB broadcast_messages user_broadcast_messages outbox_events dlt_messages"]
-        RedisCache["Redis Cache online-users pending-events user-msg:userId"]
+        GeodeCache["Geode Cache online-users pending-events"]
     end
     
     OnlineCheck{8 Is User Online?}
@@ -60,13 +60,13 @@ graph TD
     OutboxPoller -->|"4- Polls & Locks Events"| PostgresDB
     OutboxPoller -->|"5- Publishes CREATED Event"| Kafka
     Kafka -->|"6- Delivers Event"| KafkaConsumer
-    KafkaConsumer -->|"7- Checks Redis for User Status"| OnlineCheck
+    KafkaConsumer -->|"7- Checks Geode for User Status"| OnlineCheck
     OnlineCheck -->|"Yes"| SseService
     SseService -->|"9a- Pushes Message via SSE"| ReactUI
     SseService -->|"Updates Status to DELIVERED"| PostgresDB
     
-    OnlineCheck -->|"No"| RedisCache
-    RedisCache -->|"9b- Caches Pending Event in pending-evt:userId"| EndOfflinePath
+    OnlineCheck -->|"No"| GeodeCache
+    GeodeCache -->|"9b- Caches Pending Event in pending-evt:userId"| EndOfflinePath
     
     ReactUI -->|"A- DELETE /broadcasts/{id} (Cancel)"| AdminController
     AdminController -->|"(Updates DB & creates Outbox event)"| LifecycleService
@@ -97,7 +97,7 @@ graph TD
     class UserController,KafkaConsumer,SseService userService
     class Kafka,PostgresDB infrastructure
     class KafkaDLT dlt
-    class RedisCache cache
+    class GeodeCache cache
 ```
 
 ## License
