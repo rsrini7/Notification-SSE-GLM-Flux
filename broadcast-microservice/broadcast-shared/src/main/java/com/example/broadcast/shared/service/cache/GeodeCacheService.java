@@ -27,8 +27,9 @@ public class GeodeCacheService implements CacheService {
     private final ObjectMapper objectMapper;
     private final ClientCache clientCache;
     private final Region<String, String> userConnectionsRegion;
-    private final Region<String, ConnectionMetadata> connectionMetadataRegion; // CONSOLIDATED
+    private final Region<String, ConnectionMetadata> connectionMetadataRegion;
     private final Region<String, Set<String>> podConnectionsRegion;
+    private final Region<String, Long> podHeartbeatsRegion;
     private final Region<String, List<MessageDeliveryEvent>> pendingEventsRegion;
     private final Region<Long, BroadcastMessage> broadcastContentRegion;
     private final Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion;
@@ -39,6 +40,7 @@ public class GeodeCacheService implements CacheService {
                              @Qualifier("userConnectionsRegion") Region<String, String> userConnectionsRegion,
                              @Qualifier("connectionMetadataRegion") Region<String, ConnectionMetadata> connectionMetadataRegion,
                              @Qualifier("podConnectionsRegion") Region<String, Set<String>> podConnectionsRegion,
+                             @Qualifier("podHeartbeatsRegion") Region<String, Long> podHeartbeatsRegion,
                              @Qualifier("pendingEventsRegion") Region<String, List<MessageDeliveryEvent>> pendingEventsRegion,
                              @Qualifier("broadcastContentRegion") Region<Long, BroadcastMessage> broadcastContentRegion,
                              @Qualifier("activeGroupBroadcastsRegion") Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion,
@@ -49,6 +51,7 @@ public class GeodeCacheService implements CacheService {
         this.userConnectionsRegion = userConnectionsRegion;
         this.connectionMetadataRegion = connectionMetadataRegion;
         this.podConnectionsRegion = podConnectionsRegion;
+        this.podHeartbeatsRegion = podHeartbeatsRegion;
         this.pendingEventsRegion = pendingEventsRegion;
         this.broadcastContentRegion = broadcastContentRegion;
         this.activeGroupBroadcastsRegion = activeGroupBroadcastsRegion;
@@ -95,7 +98,6 @@ public class GeodeCacheService implements CacheService {
             }
         });
         userConnectionsRegion.remove(userId);
-        // NEW LOGIC: Remove from the single metadata region
         connectionMetadataRegion.remove(connectionId);
     }
     
@@ -293,5 +295,24 @@ public class GeodeCacheService implements CacheService {
             log.error("Failed to deserialize UserConnectionInfo for userId {}", userId, e);
             return Optional.empty();
         }
+    }
+
+     /**
+     * NEW METHOD: Atomically cleans up all resources for a dead pod.
+     */
+    public void cleanupDeadPod(String podId) {
+        log.warn("Executing cleanup for dead pod: {}", podId);
+        // Get the list of connections that belonged to the dead pod
+        Set<String> connectionIds = podConnectionsRegion.get(podId);
+
+        if (connectionIds != null && !connectionIds.isEmpty()) {
+            // Clean up all individual connection entries
+            removeConnections(connectionIds);
+        }
+
+        // Atomically remove the pod's own entries from the cache
+        podConnectionsRegion.remove(podId);
+        podHeartbeatsRegion.remove(podId);
+        log.info("Cleanup complete for dead pod: {}", podId);
     }
 }

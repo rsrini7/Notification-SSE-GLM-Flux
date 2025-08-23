@@ -17,6 +17,9 @@
     <region name="pod-connections">
         <region-attributes refid="REPLICATE"/>
     </region>
+    <region name="pod-heartbeats">
+        <region-attributes refid="REPLICATE"/>
+    </region>
     <region name="pending-events">
         <region-attributes refid="REPLICATE"/>
     </region>

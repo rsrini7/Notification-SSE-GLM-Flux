@@ -59,6 +59,12 @@ public class GeodeClientConfig {
                 .create("pod-connections");
     }
 
+    @Bean("podHeartbeatsRegion")
+    public Region<String, Long> podHeartbeatsRegion(ClientCache clientCache) {
+        return clientCache.<String, Long>createClientRegionFactory(ClientRegionShortcut.PROXY)
+                .create("pod-heartbeats");
+    }
+
     // NEW CONSOLIDATED REGION for connectionId -> {userId, heartbeatTimestamp}
     @Bean("connectionMetadataRegion")
     public Region<String, ConnectionMetadata> connectionMetadataRegion(ClientCache clientCache) {

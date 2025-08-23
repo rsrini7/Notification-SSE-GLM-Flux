@@ -9,12 +9,10 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.apache.geode.cache.CacheClosedException;
 import org.apache.geode.cache.client.ClientCache;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.http.codec.ServerSentEvent;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -128,29 +126,6 @@ public class SseConnectionManager {
             }
 
             log.info("Cleanly disconnected connection {} for user {}", connectionId, userId);
-        }
-    }
-
-    @Scheduled(fixedRate = 60000)
-    @SchedulerLock(name = "cleanupStaleSseConnections", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
-    public void cleanupStaleConnections() {
-        try {
-            long staleThresholdSeconds = (appProperties.getSse().getHeartbeatInterval() / 1000) * 3;
-            long thresholdTimestamp = ZonedDateTime.now().minusSeconds(staleThresholdSeconds).toEpochSecond();
-            Set<String> staleConnectionIds = cacheService.getStaleConnectionIds(thresholdTimestamp);
-            if (staleConnectionIds.isEmpty()) return;
-            
-            log.warn("Found {} total stale connections cluster-wide to clean up.", staleConnectionIds.size());
-            for (String connectionId : staleConnectionIds) {
-                String userId = connectionIdToUserIdMap.get(connectionId);
-                if (userId != null) {
-                    log.warn("Cleaning up stale in-memory connection {} for user {}", connectionId, userId);
-                    removeEventStream(userId, connectionId);
-                }
-            }
-            cacheService.removeConnections(staleConnectionIds);
-        } catch (Exception e) {
-            log.error("Error during stale connection cleanup task: {}", e.getMessage(), e);
         }
     }
 

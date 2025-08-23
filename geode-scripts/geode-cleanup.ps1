@@ -20,6 +20,7 @@ $regions = @(
     "connection-metadata",
     "pending-events",
     "pod-connections",
+    "pod-heartbeats",
     "sse-messages",
     "user-connections",
     "user-messages"
