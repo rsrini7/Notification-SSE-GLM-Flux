@@ -123,10 +123,20 @@ public class KafkaOrchestratorConsumerService {
 
             sseMessagesRegion.put(messageKey, payload);
         } else {
-            // Only cache CREATED events for offline users. Do not cache CANCEL/EXPIRE/READ events.
-            if (Constants.EventType.CREATED.name().equals(userSpecificEvent.getEventType())) {
-                log.debug("User {} is offline. Caching pending CREATED event for broadcast {}.", userId, userSpecificEvent.getBroadcastId());
-                cacheService.cachePendingEvent(userSpecificEvent);
+           // User is offline, modify the pending events cache accordingly.
+            switch (Constants.EventType.valueOf(userSpecificEvent.getEventType())) {
+                case CREATED:
+                    log.debug("User {} is offline. Caching pending CREATED event for broadcast {}.", userId, userSpecificEvent.getBroadcastId());
+                    cacheService.cachePendingEvent(userSpecificEvent);
+                    break;
+                case CANCELLED:
+                case EXPIRED:
+                    log.info("User {} is offline. Removing pending event for cancelled/expired broadcast {}.", userId, userSpecificEvent.getBroadcastId());
+                    cacheService.removePendingEvent(userId, userSpecificEvent.getBroadcastId());
+                    break;
+                default:
+                    // Do nothing for other events like READ for offline users
+                    break;
             }
         }
     }

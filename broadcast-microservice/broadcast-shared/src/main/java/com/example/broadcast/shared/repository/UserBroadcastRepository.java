@@ -1,6 +1,5 @@
 package com.example.broadcast.shared.repository;
 
-// import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.util.Constants.DeliveryStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -40,25 +39,6 @@ public class UserBroadcastRepository {
             .createdAt(rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC))
             .updatedAt(rs.getTimestamp("updated_at").toInstant().atZone(ZoneOffset.UTC))
             .build();
-            
-    // private final RowMapper<UserBroadcastResponse> userBroadcastResponseRowMapper = (rs, rowNum) -> UserBroadcastResponse.builder()
-    //         .id(rs.getLong("id"))
-    //         .broadcastId(rs.getLong("broadcast_id"))
-    //         .userId(rs.getString("user_id"))
-    //         .deliveryStatus(rs.getString("delivery_status"))
-    //         .readStatus(rs.getString("read_status"))
-    //         .deliveredAt(rs.getTimestamp("delivered_at") != null ? rs.getTimestamp("delivered_at").toInstant().atZone(ZoneOffset.UTC) : null)
-    //         .readAt(rs.getTimestamp("read_at") != null ? rs.getTimestamp("read_at").toInstant().atZone(ZoneOffset.UTC) : null)
-    //         .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toInstant().atZone(ZoneOffset.UTC) : null)
-    //         .senderName(rs.getString("sender_name"))
-    //         .content(rs.getString("content"))
-    //         .priority(rs.getString("priority"))
-    //         .category(rs.getString("category"))
-    //         .broadcastCreatedAt(rs.getTimestamp("broadcast_created_at").toInstant().atZone(ZoneOffset.UTC))
-    //         .scheduledAt(rs.getTimestamp("scheduled_at") != null ?
-    //             rs.getTimestamp("scheduled_at").toInstant().atZone(ZoneOffset.UTC) : null)
-    //         .expiresAt(rs.getTimestamp("expires_at") != null ? rs.getTimestamp("expires_at").toInstant().atZone(ZoneOffset.UTC) : null)
-    //         .build();
             
     public UserBroadcastMessage save(UserBroadcastMessage userBroadcast) {
         String sql = """
@@ -112,28 +92,6 @@ public class UserBroadcastRepository {
         return jdbcTemplate.query(sql, userBroadcastRowMapper, id).stream().findFirst();
     }
 
-    // public List<UserBroadcastResponse> findUserMessagesByUserId(String userId) {
-    //     String sql = """
-    //         SELECT
-    //             ubm.id, ubm.broadcast_id, ubm.user_id, ubm.delivery_status, ubm.read_status,
-    //             ubm.delivered_at, ubm.read_at, ubm.created_at,
-    //             bm.sender_name, bm.content, bm.priority, bm.category,
-    //             bm.created_at as broadcast_created_at, bm.scheduled_at, bm.expires_at
-    //         FROM
-    //             user_broadcast_messages ubm
-    //         JOIN
-    //             broadcast_messages bm ON ubm.broadcast_id = bm.id
-    //         WHERE
-    //             ubm.user_id = ?
-    //             AND ubm.delivery_status != 'FAILED'
-    //             AND bm.status = 'ACTIVE'
-    //             AND ubm.read_status = 'UNREAD'
-    //         ORDER BY
-    //             ubm.created_at DESC
-    //         """;
-    //     return jdbcTemplate.query(sql, userBroadcastResponseRowMapper, userId);
-    // }
-    
     /**
     * This is the updated method using a PreparedStatement callback for consistency and clarity.
     */
