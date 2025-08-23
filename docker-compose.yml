@@ -147,7 +147,7 @@ services:
       - BROADCAST_GEODE_LOCATOR_HOST=geode-locator
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-admin-service.log
-      - CLUSTER_NAME=cluster-a
+      - CLUSTER_NAME=${CLUSTER_NAME:-cluster-a}
       - POD_NAME=${ADMIN_SERVICE_POD_NAME:-broadcast-admin-service-0}
     volumes:
       - ./logs/admin:/var/log/app
@@ -176,7 +176,7 @@ services:
       - BROADCAST_GEODE_LOCATOR_HOST=geode-locator
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093
       - LOGGING_FILE_NAME=/var/log/app/broadcast-user-service.log
-      - CLUSTER_NAME=cluster-a
+      - CLUSTER_NAME=${CLUSTER_NAME:-cluster-a}
       - POD_NAME=${USER_SERVICE_POD_NAME:-broadcast-user-service-0}
     volumes:
       - ./logs/user:/var/log/app

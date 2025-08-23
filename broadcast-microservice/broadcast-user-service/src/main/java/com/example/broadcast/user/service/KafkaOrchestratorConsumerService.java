@@ -156,14 +156,15 @@ public class KafkaOrchestratorConsumerService {
     
     private void scatterToUser(MessageDeliveryEvent userSpecificEvent) {
         String userId = userSpecificEvent.getUserId();
-        Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
+        String podName = userSpecificEvent.getPodName();
+        Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId, podName);
 
         if (!userConnections.isEmpty()) {
             UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
-            String uniquePodId = connectionInfo.getClusterName() + ":" + connectionInfo.getPodId();
+            String uniqueClusterPodName = connectionInfo.getClusterName() + ":" + connectionInfo.getPodName();
             
             String messageKey = UUID.randomUUID().toString();
-            GeodeSsePayload payload = new GeodeSsePayload(uniquePodId, userSpecificEvent);
+            GeodeSsePayload payload = new GeodeSsePayload(uniqueClusterPodName, userSpecificEvent);
 
             sseMessagesRegion.put(messageKey, payload);
         } else {

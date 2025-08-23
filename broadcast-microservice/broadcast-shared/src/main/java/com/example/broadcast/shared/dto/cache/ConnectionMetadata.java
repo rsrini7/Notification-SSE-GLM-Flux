@@ -11,5 +11,6 @@ import java.io.Serializable;
 @With // Useful for non-destructive updates
 public class ConnectionMetadata implements Serializable {
     private final String userId;
+    private final String podName;
     private final long lastHeartbeatTimestamp;
 }

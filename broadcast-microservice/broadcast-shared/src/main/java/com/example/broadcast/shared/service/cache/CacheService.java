@@ -14,8 +14,8 @@ public interface CacheService {
     void registerUserConnection(String userId, String connectionId, String podId, String clusterName);
 
     void unregisterUserConnection(String userId, String connectionId);
-    Map<String, UserConnectionInfo> getConnectionsForUser(String userId);
-    boolean isUserOnline(String userId);
+    Map<String, UserConnectionInfo> getConnectionsForUser(String userId, String podName);
+    boolean isUserOnline(String userId, String podName);
     void updateHeartbeats(Set<String> connectionIds);
     Set<String> getStaleConnectionIds(long thresholdTimestamp);
     Optional<UserConnectionInfo> getConnectionDetails(String connectionId);
@@ -29,9 +29,9 @@ public interface CacheService {
     void addMessageToUserCache(String userId, PersistentUserMessageInfo message);
     void removeMessageFromUserCache(String userId, Long broadcastId);
     void cachePendingEvent(MessageDeliveryEvent event);
-    List<MessageDeliveryEvent> getPendingEvents(String userId);
+    List<MessageDeliveryEvent> getPendingEvents(String userId, String clusterName);
     void removePendingEvent(String userId, Long broadcastId);
-    void clearPendingEvents(String userId);
+    void clearPendingEvents(String userId, String podName);
     Map<String, Object> getCacheStats();
     Optional<BroadcastMessage> getBroadcastContent(Long broadcastId);
     void cacheBroadcastContent(BroadcastMessage broadcast);

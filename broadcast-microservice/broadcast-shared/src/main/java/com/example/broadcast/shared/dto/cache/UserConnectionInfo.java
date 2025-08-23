@@ -13,7 +13,7 @@ import java.time.ZonedDateTime;
 public class UserConnectionInfo implements Serializable{
     private final String userId;
     private final String connectionId;
-    private final String podId;
+    private final String podName;
     private final String clusterName;
     private final ZonedDateTime connectedAt;
     private final ZonedDateTime lastActivityAt;

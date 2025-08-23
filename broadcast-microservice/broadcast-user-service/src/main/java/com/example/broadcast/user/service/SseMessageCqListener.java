@@ -24,20 +24,20 @@ public class SseMessageCqListener extends CqListenerAdapter {
     @PostConstruct
     public void registerCq() {
         try {
-            String podId = appProperties.getPod().getId();
+            String podId = appProperties.getPodName();
             String clusterName = appProperties.getClusterName();
-            String uniquePodId = clusterName + ":" + podId;
+            String uniqueClusterPodName = clusterName + ":" + podId;
 
             QueryService queryService = clientCache.getQueryService();
             CqAttributesFactory cqf = new CqAttributesFactory();
             cqf.addCqListener(this);
             CqAttributes cqa = cqf.create();
 
-            String query = "SELECT * FROM /sse-messages s WHERE s.getTargetPodId = '" + uniquePodId + "'";
-            CqQuery cq = queryService.newCq("SseMessageCQ_" + uniquePodId.replace(":", "_"), query, cqa, true);
+            String query = "SELECT * FROM /sse-messages s WHERE s.getTargetPodId = '" + uniqueClusterPodName + "'";
+            CqQuery cq = queryService.newCq("SseMessageCQ_" + uniqueClusterPodName.replace(":", "_"), query, cqa, true);
 
             cq.execute();
-            log.info("Continuous Query registered for pod '{}' with query: {}", uniquePodId, query);
+            log.info("Continuous Query registered for  ClusterPod '{}' with query: {}", uniqueClusterPodName, query);
         } catch (CqException | RegionNotFoundException | CqExistsException e) {
             log.error("Failed to create Continuous Query", e);
             throw new RuntimeException(e);
@@ -52,7 +52,7 @@ public class SseMessageCqListener extends CqListenerAdapter {
         if (aCqEvent.getQueryOperation().isCreate() || aCqEvent.getQueryOperation().isUpdate()) {
             Object newValue = aCqEvent.getNewValue();
             if (newValue instanceof GeodeSsePayload payload) {
-                log.info("Processing CQ payload for pod {}: {}", appProperties.getPod().getId(), payload.getEvent());
+                log.info("Processing CQ payload for cluster {} pod {}: {}", appProperties.getClusterName(), appProperties.getPodName(), payload.getEvent());
                 sseService.handleMessageEvent(payload.getEvent());
             } else {
                 log.warn("Received unexpected payload type from CQ event: {}", (newValue != null) ? newValue.getClass().getName() : "null");

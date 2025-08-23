@@ -28,8 +28,8 @@ public class GeodeCacheService implements CacheService {
     private final ClientCache clientCache;
     private final Region<String, String> userConnectionsRegion;
     private final Region<String, ConnectionMetadata> connectionMetadataRegion;
-    private final Region<String, Set<String>> podConnectionsRegion;
-    private final Region<String, Long> podHeartbeatsRegion;
+    private final Region<String, Set<String>> clusterPodConnectionsRegion;
+    private final Region<String, Long> clusterPodHeartbeatsRegion;
     private final Region<String, List<MessageDeliveryEvent>> pendingEventsRegion;
     private final Region<Long, BroadcastMessage> broadcastContentRegion;
     private final Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion;
@@ -39,8 +39,8 @@ public class GeodeCacheService implements CacheService {
                              ClientCache clientCache,
                              @Qualifier("userConnectionsRegion") Region<String, String> userConnectionsRegion,
                              @Qualifier("connectionMetadataRegion") Region<String, ConnectionMetadata> connectionMetadataRegion,
-                             @Qualifier("podConnectionsRegion") Region<String, Set<String>> podConnectionsRegion,
-                             @Qualifier("podHeartbeatsRegion") Region<String, Long> podHeartbeatsRegion,
+                             @Qualifier("clusterPodConnectionsRegion") Region<String, Set<String>> clusterPodConnectionsRegion,
+                             @Qualifier("clusterPodHeartbeatsRegion") Region<String, Long> clusterPodHeartbeatsRegion,
                              @Qualifier("pendingEventsRegion") Region<String, List<MessageDeliveryEvent>> pendingEventsRegion,
                              @Qualifier("broadcastContentRegion") Region<Long, BroadcastMessage> broadcastContentRegion,
                              @Qualifier("activeGroupBroadcastsRegion") Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion,
@@ -50,8 +50,8 @@ public class GeodeCacheService implements CacheService {
         this.clientCache = clientCache;
         this.userConnectionsRegion = userConnectionsRegion;
         this.connectionMetadataRegion = connectionMetadataRegion;
-        this.podConnectionsRegion = podConnectionsRegion;
-        this.podHeartbeatsRegion = podHeartbeatsRegion;
+        this.clusterPodConnectionsRegion = clusterPodConnectionsRegion;
+        this.clusterPodHeartbeatsRegion = clusterPodHeartbeatsRegion;
         this.pendingEventsRegion = pendingEventsRegion;
         this.broadcastContentRegion = broadcastContentRegion;
         this.activeGroupBroadcastsRegion = activeGroupBroadcastsRegion;
@@ -60,23 +60,25 @@ public class GeodeCacheService implements CacheService {
 
 
     @Override
-    public void registerUserConnection(String userId, String connectionId, String podId, String clusterName) {
+    public void registerUserConnection(String userId, String connectionId, String podName, String clusterName) {
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
-        UserConnectionInfo info = new UserConnectionInfo(userId, connectionId, podId, clusterName, now, now);
+        UserConnectionInfo info = new UserConnectionInfo(userId, connectionId, podName, clusterName, now, now);
         try {
             String infoJson = objectMapper.writeValueAsString(info);
-            userConnectionsRegion.put(userId, infoJson);
+            // USE COMPOSITE KEY for user-specific data
+            userConnectionsRegion.put(getPodUserKey(userId, podName), infoJson);
 
-            // NEW LOGIC: Put a single metadata object
-            ConnectionMetadata metadata = new ConnectionMetadata(userId, now.toEpochSecond());
+            ConnectionMetadata metadata = new ConnectionMetadata(userId, podName, now.toEpochSecond());
             connectionMetadataRegion.put(connectionId, metadata);
 
-            Set<String> podConnections = podConnectionsRegion.get(podId);
+            // USE COMPOSITE KEY for pod-specific data
+            String clusterPodKey = getClusterPodKey(podName, clusterName);
+            Set<String> podConnections = clusterPodConnectionsRegion.get(clusterPodKey);
             if (podConnections == null) {
                 podConnections = new HashSet<>();
             }
             podConnections.add(connectionId);
-            podConnectionsRegion.put(podId, podConnections);
+            clusterPodConnectionsRegion.put(clusterPodKey, podConnections);
 
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize UserConnectionInfo", e);
@@ -86,25 +88,35 @@ public class GeodeCacheService implements CacheService {
     @Override
     public void unregisterUserConnection(String userId, String connectionId) {
         getConnectionInfo(connectionId).ifPresent(info -> {
-            String podId = info.getPodId();
-            Set<String> podConnections = podConnectionsRegion.get(podId);
+            String podName = info.getPodName();
+            String clusterName = info.getClusterName();
+            
+            // USE COMPOSITE KEY to find the correct pod entry
+            String clusterPodKey = getClusterPodKey(podName, clusterName);
+            Set<String> podConnections = clusterPodConnectionsRegion.get(clusterPodKey);
             if (podConnections != null) {
                 podConnections.remove(connectionId);
                 if (podConnections.isEmpty()) {
-                    podConnectionsRegion.remove(podId);
+                    clusterPodConnectionsRegion.remove(clusterPodKey);
                 } else {
-                    podConnectionsRegion.put(podId, podConnections);
+                    clusterPodConnectionsRegion.put(clusterPodKey, podConnections);
                 }
             }
         });
-        userConnectionsRegion.remove(userId);
+        
+        // This method is now problematic as we don't know the clusterName here.
+        // The calling context should be more specific. We assume the info object provides it.
+        // Note: This highlights that clusterName needs to be available in most contexts.
+        getConnectionInfo(connectionId).ifPresent(info -> {
+            userConnectionsRegion.remove(getPodUserKey(userId, info.getPodName()));
+        });
+        
         connectionMetadataRegion.remove(connectionId);
     }
     
     @Override
-    public boolean isUserOnline(String userId) {
-        // NEW LOGIC: A user is online if an entry exists for them in the user-connections region.
-        return userConnectionsRegion.containsKey(userId);
+    public boolean isUserOnline(String userId, String podName) {
+        return userConnectionsRegion.containsKey(getPodUserKey(userId, podName));
     }
 
     @Override
@@ -125,7 +137,6 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public Set<String> getStaleConnectionIds(long thresholdTimestamp) {
-        // NEW LOGIC: Filter based on the timestamp within the metadata object
         return connectionMetadataRegion.entrySet().stream()
                 .filter(entry -> entry.getValue().getLastHeartbeatTimestamp() < thresholdTimestamp)
                 .map(Map.Entry::getKey)
@@ -149,12 +160,12 @@ public class GeodeCacheService implements CacheService {
     }
     
     private Optional<UserConnectionInfo> getConnectionInfo(String connectionId) {
-        // NEW LOGIC: Get userId from the metadata object
+        // NEW LOGIC: Get userId and podName from the metadata object
         ConnectionMetadata metadata = connectionMetadataRegion.get(connectionId);
         if (metadata == null) {
             return Optional.empty();
         }
-        return getConnectionInfoByUserId(metadata.getUserId());
+        return getConnectionInfoByUserId(metadata.getUserId(),metadata.getPodName());
     }
 
 
@@ -183,7 +194,7 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public void cachePendingEvent(MessageDeliveryEvent event) {
-        String key = event.getUserId();
+        String key = getPodUserKey(event.getUserId(), event.getPodName());
         List<MessageDeliveryEvent> pendingEvents = pendingEventsRegion.get(key);
         if (pendingEvents == null) {
             pendingEvents = new ArrayList<>();
@@ -206,8 +217,8 @@ public class GeodeCacheService implements CacheService {
     }
 
     @Override
-    public Map<String, UserConnectionInfo> getConnectionsForUser(String userId) {
-        return getConnectionInfoByUserId(userId)
+    public Map<String, UserConnectionInfo> getConnectionsForUser(String userId, String podName) {
+        return getConnectionInfoByUserId(userId, podName)
                 .map(info -> Map.of(info.getConnectionId(), info))
                 .orElse(Collections.emptyMap());
     }
@@ -219,7 +230,7 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public long getPodActiveUsers(String podId) {
-        return Optional.ofNullable(podConnectionsRegion.get(podId))
+        return Optional.ofNullable(clusterPodConnectionsRegion.get(podId))
                        .map(Set::size)
                        .orElse(0);
     }
@@ -239,14 +250,14 @@ public class GeodeCacheService implements CacheService {
         return userMessagesRegion.get(userId);
     }
 
-    @Override
-    public List<MessageDeliveryEvent> getPendingEvents(String userId) {
-        return pendingEventsRegion.getOrDefault(userId, Collections.emptyList());
+   @Override
+    public List<MessageDeliveryEvent> getPendingEvents(String userId, String podName) {
+        return pendingEventsRegion.getOrDefault(getPodUserKey(userId, podName), Collections.emptyList());
     }
 
     @Override
-    public void clearPendingEvents(String userId) {
-        pendingEventsRegion.remove(userId);
+    public void clearPendingEvents(String userId, String podName) {
+        pendingEventsRegion.remove(getPodUserKey(userId, podName));
     }
 
     @Override
@@ -284,8 +295,8 @@ public class GeodeCacheService implements CacheService {
         activeGroupBroadcastsRegion.put(cacheKey, broadcasts);
     }
    
-    private Optional<UserConnectionInfo> getConnectionInfoByUserId(String userId) {
-        String infoJson = userConnectionsRegion.get(userId);
+    private Optional<UserConnectionInfo> getConnectionInfoByUserId(String userId, String podName) {
+        String infoJson = userConnectionsRegion.get(getPodUserKey(userId, podName));
         if (infoJson == null) {
             return Optional.empty();
         }
@@ -300,10 +311,10 @@ public class GeodeCacheService implements CacheService {
      /**
      * NEW METHOD: Atomically cleans up all resources for a dead pod.
      */
-    public void cleanupDeadPod(String podId) {
-        log.warn("Executing cleanup for dead pod: {}", podId);
+    public void cleanupDeadPod(String clusterPodKey) {
+        log.warn("Executing cleanup for dead pod: {}", clusterPodKey);
         // Get the list of connections that belonged to the dead pod
-        Set<String> connectionIds = podConnectionsRegion.get(podId);
+        Set<String> connectionIds = clusterPodConnectionsRegion.get(clusterPodKey);
 
         if (connectionIds != null && !connectionIds.isEmpty()) {
             // Clean up all individual connection entries
@@ -311,8 +322,16 @@ public class GeodeCacheService implements CacheService {
         }
 
         // Atomically remove the pod's own entries from the cache
-        podConnectionsRegion.remove(podId);
-        podHeartbeatsRegion.remove(podId);
-        log.info("Cleanup complete for dead pod: {}", podId);
+        clusterPodConnectionsRegion.remove(clusterPodKey);
+        clusterPodHeartbeatsRegion.remove(clusterPodKey);
+        log.info("Cleanup complete for dead pod: {}", clusterPodKey);
+    }
+
+    private String getPodUserKey(String userId, String podName) {
+        return podName + ":" + userId;
+    }
+
+    private String getClusterPodKey(String podId, String clusterName) {
+        return clusterName + ":" + podId;
     }
 }

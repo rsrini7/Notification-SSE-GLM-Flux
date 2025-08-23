@@ -30,7 +30,7 @@ public class GeodeClientConfig {
     @Bean(destroyMethod = "close")
     public ClientCache geodeClientCache() {
 
-        String durableClientId = appProperties.getClusterName() + "_" + appProperties.getPod().getId();
+        String durableClientId = appProperties.getClusterName() + "_" + appProperties.getPodName();
 
         log.info("Durable Client ID: {}",durableClientId);
 
@@ -53,16 +53,16 @@ public class GeodeClientConfig {
     }
    
     // Used like a distributed Set for tracking connections per pod
-    @Bean("podConnectionsRegion")
-    public Region<String, Set<String>> podConnectionsRegion(ClientCache clientCache) {
+    @Bean("clusterPodConnectionsRegion")
+    public Region<String, Set<String>> clusterPodConnectionsRegion(ClientCache clientCache) {
         return clientCache.<String, Set<String>>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("pod-connections");
+                .create("cluster-pod-connections");
     }
 
-    @Bean("podHeartbeatsRegion")
-    public Region<String, Long> podHeartbeatsRegion(ClientCache clientCache) {
+    @Bean("clusterPodHeartbeatsRegion")
+    public Region<String, Long> clusterPodHeartbeatsRegion(ClientCache clientCache) {
         return clientCache.<String, Long>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("pod-heartbeats");
+                .create("cluster-pod-heartbeats");
     }
 
     // NEW CONSOLIDATED REGION for connectionId -> {userId, heartbeatTimestamp}
