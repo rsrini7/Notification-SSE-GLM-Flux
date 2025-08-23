@@ -177,8 +177,6 @@ public class BroadcastLifecycleService {
                 .eventId(UUID.randomUUID().toString())
                 .broadcastId(broadcast.getId())
                 .eventType(eventType.name())
-                .clusterName(appProperties.getClusterName())
-                .podName(appProperties.getPodName())
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .message(message)
                 .build();
@@ -189,8 +187,6 @@ public class BroadcastLifecycleService {
                 .eventId(UUID.randomUUID().toString())
                 .broadcastId(deliveryEvent.getBroadcastId())
                 .eventType(eventType.name())
-                .clusterName(appProperties.getClusterName())
-                .podName(appProperties.getPodName())
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .message(message)
                 .build();

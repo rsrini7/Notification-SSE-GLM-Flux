@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
@@ -38,6 +39,7 @@ public class KafkaOrchestratorConsumerService {
     private final BroadcastRepository broadcastRepository;
     private final UserService userService;
     private final BroadcastStatisticsService broadcastStatisticsService;
+    private final AppProperties appProperties;
     
     @Qualifier("sseMessagesRegion")
     private final Region<String, Object> sseMessagesRegion;
@@ -156,7 +158,7 @@ public class KafkaOrchestratorConsumerService {
     
     private void scatterToUser(MessageDeliveryEvent userSpecificEvent) {
         String userId = userSpecificEvent.getUserId();
-        String podName = userSpecificEvent.getPodName();
+        String podName = appProperties.getPodName();
         Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId, podName);
 
         if (!userConnections.isEmpty()) {
@@ -171,7 +173,7 @@ public class KafkaOrchestratorConsumerService {
             switch (Constants.EventType.valueOf(userSpecificEvent.getEventType())) {
                 case CREATED:
                     log.debug("User {} is offline. Caching pending CREATED event for broadcast {}.", userId, userSpecificEvent.getBroadcastId());
-                    cacheService.cachePendingEvent(userSpecificEvent);
+                    cacheService.cachePendingEvent(userSpecificEvent, podName);
                     break;
                 case CANCELLED:
                 case EXPIRED:

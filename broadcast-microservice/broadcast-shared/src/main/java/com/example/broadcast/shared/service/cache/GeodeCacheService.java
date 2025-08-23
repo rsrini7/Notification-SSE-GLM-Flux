@@ -193,8 +193,8 @@ public class GeodeCacheService implements CacheService {
     }
 
     @Override
-    public void cachePendingEvent(MessageDeliveryEvent event) {
-        String key = getPodUserKey(event.getUserId(), event.getPodName());
+    public void cachePendingEvent(MessageDeliveryEvent event, String podName) {
+        String key = getPodUserKey(event.getUserId(), podName);
         List<MessageDeliveryEvent> pendingEvents = pendingEventsRegion.get(key);
         if (pendingEvents == null) {
             pendingEvents = new ArrayList<>();

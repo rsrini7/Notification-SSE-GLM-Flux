@@ -28,7 +28,7 @@ public interface CacheService {
     List<PersistentUserMessageInfo> getCachedUserMessages(String userId);
     void addMessageToUserCache(String userId, PersistentUserMessageInfo message);
     void removeMessageFromUserCache(String userId, Long broadcastId);
-    void cachePendingEvent(MessageDeliveryEvent event);
+    void cachePendingEvent(MessageDeliveryEvent event, String podName);
     List<MessageDeliveryEvent> getPendingEvents(String userId, String clusterName);
     void removePendingEvent(String userId, Long broadcastId);
     void clearPendingEvents(String userId, String podName);

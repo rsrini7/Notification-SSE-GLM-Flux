@@ -16,8 +16,6 @@ public class MessageDeliveryEvent implements Serializable {
     private Long broadcastId;
     private String userId;
     private String eventType; // CREATED, DELIVERED, READ, FAILED
-    private String clusterName;
-    private String podName;
     private ZonedDateTime timestamp;
     private String message;
     private String errorDetails;
