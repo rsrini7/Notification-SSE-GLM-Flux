@@ -4,6 +4,7 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.ConnectionMetadata;
 import com.example.broadcast.shared.dto.cache.PersistentUserMessageInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.util.Constants.GeodeRegionNames;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,57 +50,57 @@ public class GeodeClientConfig {
     @Bean("userConnectionsRegion")
     public Region<String, String> userConnectionsRegion(ClientCache clientCache) {
         return clientCache.<String, String>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("user-connections");
+                .create(GeodeRegionNames.USER_CONNECTIONS);
     }
    
     // Used like a distributed Set for tracking connections per pod
     @Bean("clusterPodConnectionsRegion")
     public Region<String, Set<String>> clusterPodConnectionsRegion(ClientCache clientCache) {
         return clientCache.<String, Set<String>>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("cluster-pod-connections");
+                .create(GeodeRegionNames.CLUSTER_POD_CONNECTIONS);
     }
 
     @Bean("clusterPodHeartbeatsRegion")
     public Region<String, Long> clusterPodHeartbeatsRegion(ClientCache clientCache) {
         return clientCache.<String, Long>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("cluster-pod-heartbeats");
+                .create(GeodeRegionNames.CLUSTER_POD_HEARTBEATS);
     }
 
     // NEW CONSOLIDATED REGION for connectionId -> {userId, heartbeatTimestamp}
     @Bean("connectionMetadataRegion")
     public Region<String, ConnectionMetadata> connectionMetadataRegion(ClientCache clientCache) {
         return clientCache.<String, ConnectionMetadata>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("connection-metadata");
+                .create(GeodeRegionNames.CONNECTION_METADATA);
     }
 
     @Bean("pendingEventsRegion")
     public Region<String, List<MessageDeliveryEvent>> pendingEventsRegion(ClientCache clientCache) {
         return clientCache.<String, List<MessageDeliveryEvent>>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("pending-events");
+                .create(GeodeRegionNames.PENDING_EVENTS);
     }
 
     @Bean("broadcastContentRegion")
     public Region<Long, BroadcastMessage> broadcastContentRegion(ClientCache clientCache) {
         return clientCache.<Long, BroadcastMessage>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("broadcast-content");
+                .create(GeodeRegionNames.BROADCAST_CONTENT);
     }
 
     @Bean("activeGroupBroadcastsRegion")
     public Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion(ClientCache clientCache) {
         return clientCache.<String, List<BroadcastMessage>>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("active-group-broadcasts");
+                .create(GeodeRegionNames.ACTIVE_GROUP_BROADCASTS);
     }
 
     @Bean("userMessagesRegion")
     public Region<String, List<PersistentUserMessageInfo>> userMessagesRegion(ClientCache clientCache) {
         return clientCache.<String, List<PersistentUserMessageInfo>>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("user-messages");
+                .create(GeodeRegionNames.USER_MESSAGES);
     }
 
     @Bean("sseMessagesRegion")
     public Region<String, Object> sseMessagesRegion(ClientCache clientCache) {
         return clientCache.<String, Object>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("sse-messages");
+                .create(GeodeRegionNames.SSE_MESSAGES);
     }
 
 }
