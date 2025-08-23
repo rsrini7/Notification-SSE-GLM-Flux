@@ -15,8 +15,8 @@ graph TD
             subgraph "Pod: User Service (Replica 1)"
                 UserContainer1["[Container: broadcast-user-service]"]
             end
-            subgraph "Pod: Redis"
-                RedisContainer["[Container: redis]"]
+            subgraph "Pod: Geode Locator"
+                GeodeLocator["[Container: geode-locator]"]
             end
         end
         
@@ -28,8 +28,8 @@ graph TD
             subgraph "Pod: PostgreSQL"
                 PostgresContainer["[Container: postgres]"]
             end
-             subgraph "Pod: Outbox Poller (Admin Replica)"
-                AdminContainer2["[Container: broadcast-admin-service]"]
+             subgraph "Pod: Geode Server"
+                GeodeServer["[Container: geode-server]"]
             end
         end
 
@@ -54,5 +54,5 @@ graph TD
     Ingress -- "Routes /api/admin/*" --> AdminSvc
     Ingress -- "Routes /api/user/*" --> UserSvc
     
-    AdminSvc --> AdminContainer & AdminContainer2
+    AdminSvc --> AdminContainer
     UserSvc --> UserContainer1 & UserContainer2 & UserContainer3

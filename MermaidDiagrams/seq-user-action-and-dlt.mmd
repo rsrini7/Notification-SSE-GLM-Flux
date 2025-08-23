@@ -4,7 +4,7 @@ sequenceDiagram
     participant DB as DB (Outbox)
     participant KafkaOrch as Kafka (broadcast-orchestration)
     participant Orchestrator as UserSvc (Orchestrator)
-    participant Redis as Redis (Pub/Sub)
+    participant Geode as Geode (sse-messages Region)
     participant Worker as UserSvc (Worker Pod)
     participant DLT as Kafka (broadcast-orchestration-dlt)
     participant DLTConsumer as AdminSvc (DLT Consumer)
@@ -18,11 +18,11 @@ sequenceDiagram
     KafkaOrch->>+Orchestrator: 4- Orchestrator consumes READ event
 
     alt Happy Path
-        Orchestrator->>+Redis: 5a- Forwards event to correct pod's Redis channel
-        Redis-->>-Orchestrator: 
+        Orchestrator->>+Geode: 5a- Puts user-specific event into 'sse-messages' region
+        Geode-->>-Orchestrator: 
         Orchestrator-->>-KafkaOrch: 6a- Acknowledges orchestration event
 
-        Redis->>+Worker: 7a- Worker for user-xxx consumes event from channel
+        Geode-->>+Worker: 7a- CqListener on worker for user-xxx is invoked
         Worker->>Worker: 8a- Sends 'MESSAGE_REMOVED' via SSE
     else DLT Path (Orchestrator Fails)
         Orchestrator-->>+KafkaOrch: 5b- Throws exception after retries

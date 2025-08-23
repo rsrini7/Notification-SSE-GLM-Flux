@@ -7,12 +7,12 @@ graph TD
     subgraph "Orchestration (Fan-out on Read)"
         C --> D[Kafka: broadcast-orchestration topic];
         D --> E["User Service (Orchestrator Pod) <br/> consumes the single event"];
-        E --> F["Dynamically determines target user list <br/> & looks up their pod locations in Redis"];
-        F --> G["'Scatters' N user-specific events <br/> to pod-specific Redis channels"];
+        E --> F["Dynamically determines target user list <br/> & looks up their pod locations in Geode"];
+        F --> G["'Scatters' N user-specific events by <br/> PUT-ting them into the 'sse-messages' Geode region"];
     end
     
     subgraph "Delivery (Worker Pods)"
-        G --> J["Redis: Pub/Sub Channels <br/> (e.g., notifications:cluster:pod-name)"];
-        J --> K["User Service (Worker Pods) <br/> receive events from their subscribed Redis channel"];
-        K --> L[Push message to online user via SSE <br/> or cache for offline user in Redis];
+        G --> J["Apache Geode Server"];
+        J -- "Notifies clients via<br/>Continuous Query (CQ)" --> K["User Service (Worker Pods) <br/> CqListener is invoked with relevant events"];
+        K --> L[Push message to online user via SSE <br/> or cache for offline user in Geode"];
     end

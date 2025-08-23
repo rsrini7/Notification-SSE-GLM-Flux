@@ -1,34 +1,23 @@
-graph TD
-    subgraph "Inbox Loading Process"
-        direction TB
-        Start[Start: UI Requests Inbox] --> FetchTargeted
+sequenceDiagram
+    participant UserUI as User UI
+    participant SseSvc as SseService
+    participant UserMsgSvc as UserMessageService
+    participant GeodeCache as Geode Cache Service
+    participant DB as Database
 
-        subgraph "Path A: Targeted (SELECTED) Messages"
-            FetchTargeted[1- Fetch Targeted Messages] --> CheckInboxCache{"2- Check Redis for<br/>'user-msg:<userId>'"}
-            CheckInboxCache -->|Cache Hit| UseCachedInbox["3a- Use Cached List of<br/>PersistentUserMessageInfo"]
-            UseCachedInbox --> CheckContentCache{"4- For each message,<br/>Check Redis for<br/>'broadcast-content:<id>'"}
-            CheckContentCache -->|Hit| UseCachedContent[5a- Use Cached Content]
-            CheckContentCache -->|Miss| QueryDbForContent[5b- Query DB for Content]
-            QueryDbForContent --> PopulateContentCache["6- SET 'broadcast-content:<id>'<br/>in Redis"]
-            PopulateContentCache --> UseCachedContent
-
-            CheckInboxCache -->|Cache Miss| QueryDbForInbox["3b- Query DB for<br/>User's Full Inbox"]
-            QueryDbForInbox --> PopulateInboxCache["7- Cache the results:<br/>SET 'user-msg:<userId>'<br/>SET 'broadcast-content:<id>' for each"]
-            
-            UseCachedContent --> CombineLists
-            PopulateInboxCache --> CombineLists
-        end
-
-        subgraph "Path B: Group (ALL/ROLE) Messages"
-            FetchGroup[8- Fetch Group Messages] --> CheckGroupCache{"9- Check Redis for<br/>'active-group-bcast:*'"}
-            CheckGroupCache -->|Cache Hit| UseCachedGroupList["10a- Use Cached List of<br/>Active Group Broadcasts"]
-            CheckGroupCache -->|Cache Miss| QueryDbForGroup["10b- Query DB for<br/>ACTIVE Group Broadcasts"]
-            QueryDbForGroup --> PopulateGroupCache["11- SET 'active-group-bcast:*'<br/>in Redis"]
-            PopulateGroupCache --> UseCachedGroupList
-        end
-
-        Start --> FetchGroup
-        CombineLists --> Filter[12- Combine & Filter Lists]
-        UseCachedGroupList --> Filter
-        Filter --> End[End: Display Final Inbox to User]
+    UserUI->>+SseSvc: 1- Establishes SSE Connection
+    Note over SseSvc: Handles connection registration in Geode...
+    SseSvc->>SseSvc: 2- Delivers pending messages from 'pending-events' region
+    SseSvc-->>-UserUI: Pushes any pending messages via SSE
+    
+    UserUI->>+UserMsgSvc: 3- GET /api/user/messages (to populate inbox)
+    Note over UserMsgSvc: 4- Begins complex fetch logic...
+    UserMsgSvc->>+GeodeCache: 5- Checks various Geode regions (user-messages, active-group-broadcasts, broadcast-content)
+    alt Some regions have cache misses
+        GeodeCache-->>UserMsgSvc: 
+        UserMsgSvc->>+DB: 6- Queries database for required information
+        DB-->>-UserMsgSvc: 
+        UserMsgSvc->>GeodeCache: 7- Populates the missing Geode regions
     end
+    GeodeCache-->>-UserMsgSvc: 
+    UserMsgSvc-->>-UserUI: 8- Returns the complete and up-to-date inbox

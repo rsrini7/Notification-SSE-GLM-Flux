@@ -14,7 +14,7 @@ graph TD
         subgraph "Infrastructure"
             Kafka["<div style='font-weight:bold'>Kafka Broker</div><div style='font-size: smaller;'>Event Streaming</div>"]
             Postgres["<div style='font-weight:bold'>PostgreSQL Database</div><div style='font-size: smaller;'>Relational Data Store</div>"]
-            Redis["<div style='font-weight:bold'>Redis</div><div style='font-size: smaller;'>Cache & Session Store</div>"]
+            Geode["<div style='font-weight:bold'>Apache Geode</div><div style='font-size: smaller;'>Distributed Cache & Eventing</div>"]
         end
     end
 
@@ -29,8 +29,7 @@ graph TD
 
     AdminService -- "Produces Events (TCP)" --> Kafka
     AdminService -- "Reads/Writes State (JDBC)" --> Postgres
-    AdminService -- "Manage Cache (TCP)" --> Redis
 
     UserService -- "Consumes Events (TCP)" --> Kafka
     UserService -- "Reads/Writes State (JDBC)" --> Postgres
-    UserService -- "Manages Connections & Cache (TCP)" --> Redis
+    UserService -- "Manages Connections & State (TCP)" --> Geode

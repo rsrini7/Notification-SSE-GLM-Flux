@@ -14,6 +14,7 @@ graph TD
         AsyncPrecomputation["Async TargetingService<br/>(Fan-out on Write)"]
     end
     
+
     subgraph "3. Activation (Admin Service)"
         ActivationScheduler["Activation Scheduler<br/>(Every 1 min)"]
     end
@@ -24,10 +25,10 @@ graph TD
 
     subgraph "5. Delivery (User Service & Infra)"
         OrchestratorConsumer["Orchestrator Consumer (Kafka)"]
-        WorkerRedisListener["Worker Redis Listener"]
+        WorkerCqListener["Worker CqListener (Geode)"]
         SseService["SSE Service"]
         Kafka["Kafka (Orchestration Topic)"]
-        Redis["Redis (Cache & Pub/Sub)"]
+        Geode["Geode (Cache & Eventing)"]
         Postgres["PostgreSQL DB"]
         User[User Browser]
     end
@@ -67,8 +68,7 @@ graph TD
 
     %% --- DELIVERY ---
     Kafka --> OrchestratorConsumer
-    OrchestratorConsumer -- "Determines Audience & Pod" --> Redis
-    OrchestratorConsumer -- "Publishes to Redis Channel" --> Redis
-    Redis --> WorkerRedisListener
-    WorkerRedisListener --> SseService
+    OrchestratorConsumer -- "Determines Audience & Pod, <br/> Puts event into Geode Region" --> Geode
+    Geode -- "CQ invokes Listener" --> WorkerCqListener
+    WorkerCqListener --> SseService
     SseService --> User

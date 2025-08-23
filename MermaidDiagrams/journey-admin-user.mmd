@@ -1,5 +1,5 @@
 journey
-    title Broadcast System User Journeys (Updated)
+    title Broadcast System User Journeys (Geode)
     
     section Admin User Journey
       Login: 5: Admin
@@ -8,6 +8,7 @@ journey
         - Set Content & Priority: 5: Admin
         - Send Immediately or Schedule: 5: Admin
       API Responds Immediately (202 Accepted): 5: Admin
+      
       Monitor Broadcast Status: 4: Admin
         - View Status change to PREPARING: 5: Admin
         - View Status change to READY: 5: Admin
@@ -26,7 +27,7 @@ journey
       Mark Message as Read: 4: User
         - UI status updates to 'READ': 5: User
       Offline Experience: 3: User
-        - Messages are cached in Redis by backend: 5: User
+        - Messages are cached in Geode by backend: 5: User
         - Receives pending messages upon reconnect: 5: User
       Force Disconnect (Fire and Forget): 2: User
         - Receives 'Force Logoff' message: 5: User
