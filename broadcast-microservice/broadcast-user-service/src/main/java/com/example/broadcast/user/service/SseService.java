@@ -19,8 +19,12 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -51,8 +55,10 @@ public class SseService {
         return Mono.fromRunnable(() -> {
             try {
                 log.info("Starting async fetch of initial messages for user: {}", userId);
-                sendPendingMessages(userId);
-                sendActiveGroupMessages(userId);
+                // First, process pending messages and get the IDs of what was sent
+                Set<Long> processedIds = sendPendingMessages(userId);
+                // Then, process general active messages, excluding what was just sent
+                sendActiveGroupMessages(userId, processedIds);
             } catch (Exception e) {
                 log.error("Error during async initial message delivery for user: {}", userId, e);
             }
@@ -69,8 +75,6 @@ public class SseService {
 
     public void handleMessageEvent(MessageDeliveryEvent event) {
         log.debug("Orchestrating message event: {} for user: {}", event.getEventType(), event.getUserId());
-        
-
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
                 broadcastRepository.findById(event.getBroadcastId()).ifPresentOrElse(
@@ -98,47 +102,53 @@ public class SseService {
         userMessageService.processAndCountGroupMessageDelivery(userId, broadcast);
     }
     
-    private void sendPendingMessages(String userId) {
+    private Set<Long> sendPendingMessages(String userId) {
         List<MessageDeliveryEvent> pendingEvents = cacheService.getPendingEvents(userId);
-        if (pendingEvents != null && !pendingEvents.isEmpty()) {
-            log.info("Found {} pending events in cache for user: {}", pendingEvents.size(), userId);
-            for (MessageDeliveryEvent event : pendingEvents) {
-                switch (Constants.EventType.valueOf(event.getEventType())) {
-                    case CREATED:
-                        broadcastRepository.findById(event.getBroadcastId()).ifPresent(broadcast -> {
-                            log.info("Processing pending CREATED event for user {} and broadcast {}", userId, event.getBroadcastId());
-                            deliverFanOutOnReadMessage(event.getUserId(), broadcast);
-                        });
-                        break;
-                    case CANCELLED:
-                    case EXPIRED:
-                        log.info("Processing pending CANCELLED/EXPIRED event for user {} and broadcast {}", userId, event.getBroadcastId());
-                        sendRemoveMessageEvent(userId, event.getBroadcastId());
-                        break;
-                    default:
-                        log.warn("Unhandled pending event type: {}", event.getEventType());
-                        break;
-                }
-            }
-            cacheService.clearPendingEvents(userId);
+        if (pendingEvents == null || pendingEvents.isEmpty()) {
+            return Collections.emptySet();
         }
+
+        log.info("Found {} pending events in cache for user: {}", pendingEvents.size(), userId);
+        Set<Long> processedIds = new HashSet<>();
+        for (MessageDeliveryEvent event : pendingEvents) {
+            processedIds.add(event.getBroadcastId());
+            switch (Constants.EventType.valueOf(event.getEventType())) {
+                case CREATED:
+                    broadcastRepository.findById(event.getBroadcastId()).ifPresent(broadcast -> {
+                        log.info("Processing pending CREATED event for user {} and broadcast {}", userId, event.getBroadcastId());
+                        deliverFanOutOnReadMessage(event.getUserId(), broadcast);
+                    });
+                    break;
+                case CANCELLED:
+                case EXPIRED:
+                    log.info("Processing pending CANCELLED/EXPIRED event for user {} and broadcast {}", userId, event.getBroadcastId());
+                    sendRemoveMessageEvent(userId, event.getBroadcastId());
+                    break;
+                default:
+                    log.warn("Unhandled pending event type: {}", event.getEventType());
+                    break;
+            }
+        }
+        cacheService.clearPendingEvents(userId);
+        return processedIds;
     }
 
-    private void sendReadReceiptEvent(String userId, Long broadcastId) {
-        Map<String, Long> payload = Map.of("broadcastId", broadcastId);
-        sendSseEvent(userId, SseEventType.READ_RECEIPT, broadcastId.toString(), payload);
-    }
-
-    private void sendActiveGroupMessages(String userId) {
-        log.info("Checking for active group (ALL/ROLE) messages for newly connected user: {}", userId);
+    private void sendActiveGroupMessages(String userId, Set<Long> excludedIds) {
+        log.info("Checking for active group (ALL/ROLE) messages for newly connected user: {}, excluding {} already processed.", userId, excludedIds.size());
         userMessageService.getActiveBroadcastsForUser(userId)
             .subscribe(groupMessages -> {
                 if (!groupMessages.isEmpty()) {
-                    log.info("Delivering {} active group messages to user: {}", groupMessages.size(), userId);
-                    for (BroadcastMessage broadcast : groupMessages) {
-                        UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
-                        sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
-                        userMessageService.processAndCountGroupMessageDelivery(userId, broadcast);
+                    List<BroadcastMessage> messagesToDeliver = groupMessages.stream()
+                        .filter(broadcast -> !excludedIds.contains(broadcast.getId()))
+                        .collect(Collectors.toList());
+                    
+                    if (!messagesToDeliver.isEmpty()) {
+                        log.info("Delivering {} new active group messages to user: {}", messagesToDeliver.size(), userId);
+                        for (BroadcastMessage broadcast : messagesToDeliver) {
+                            UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
+                            sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
+                            userMessageService.processAndCountGroupMessageDelivery(userId, broadcast);
+                        }
                     }
                 }
             }, error -> log.error("Failed to fetch active group messages for user {}", userId, error));
@@ -147,6 +157,11 @@ public class SseService {
     private void sendRemoveMessageEvent(String userId, Long broadcastId) {
         Map<String, Long> payload = Map.of("broadcastId", broadcastId);
         sendSseEvent(userId, SseEventType.MESSAGE_REMOVED, broadcastId.toString(), payload);
+    }
+
+    private void sendReadReceiptEvent(String userId, Long broadcastId) {
+        Map<String, Long> payload = Map.of("broadcastId", broadcastId);
+        sendSseEvent(userId, SseEventType.READ_RECEIPT, broadcastId.toString(), payload);
     }
 
     private void sendSseEvent(String userId, SseEventType eventType, String eventId, Object data) {

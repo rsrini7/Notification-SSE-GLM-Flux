@@ -17,17 +17,14 @@ query --query="SELECT entry.key, msg FROM /user-messages.entrySet entry, entry.v
 
 ---
 
-query --query="SELECT e.key, e.value FROM /heartbeat.entries e"
-query --query="SELECT e.key, e.value FROM /connection-to-user.entries e"
+query --query="SELECT e.key, e.value FROM /connection-metadata.entries e"
 query --query="SELECT e.key, e.value FROM /broadcast-content.entries e"
 query --query="SELECT e.key, e.value FROM /user-messages.entries e"
 query --query="SELECT e.key, e.value FROM /pending-events.entries e"
 query --query="SELECT e.key, e.value FROM /pod-connections.entries e"
 query --query="SELECT e.key, e.value FROM /user-connections.entries e"
 query --query="SELECT e.key, e.value FROM /active-group-broadcasts.entries e"
-query --query="SELECT e.key, e.value FROM /online-users.entries e"
 query --query="SELECT e.key, e.value FROM /sse-messages.entries e"
-
 
 query --query="SELECT * FROM /sse-messages"
 

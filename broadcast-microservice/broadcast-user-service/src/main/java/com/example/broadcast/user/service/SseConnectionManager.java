@@ -3,15 +3,17 @@ package com.example.broadcast.user.service;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.apache.geode.cache.CacheClosedException;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.scheduling.annotation.Scheduled;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import org.springframework.stereotype.Service;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -20,6 +22,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@DependsOn("geodeClientCache")
 public class SseConnectionManager {
 
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> connectionSinks = new ConcurrentHashMap<>();
@@ -46,20 +50,31 @@ public class SseConnectionManager {
 
     @PreDestroy
     public void cleanup() {
+        log.info("Commencing SseConnectionManager graceful shutdown...");
         if (serverHeartbeatSubscription != null && !serverHeartbeatSubscription.isDisposed()) {
             serverHeartbeatSubscription.dispose();
+            log.info("Server heartbeat task stopped.");
         }
+        if (!connectionIdToUserIdMap.isEmpty()) {
+            log.info("Unregistering {} active user connections from Geode...", connectionIdToUserIdMap.size());
+            new ArrayList<>(connectionIdToUserIdMap.keySet()).forEach(connectionId -> {
+                String userId = connectionIdToUserIdMap.get(connectionId);
+                if (userId != null) {
+                    removeEventStream(userId, connectionId);
+                }
+            });
+        }
+        log.info("SseConnectionManager cleanup complete.");
     }
 
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
         log.debug("Creating SSE event stream for user: {}, connection: {}", userId, connectionId);
         Sinks.Many<ServerSentEvent<String>> sink = Sinks.many().multicast().onBackpressureBuffer();
-        
-        // Store the sink before sending the initial event
+
         connectionSinks.put(connectionId, sink);
         userToConnectionIdsMap.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(connectionId);
         connectionIdToUserIdMap.put(connectionId, userId);
-        // Immediately send a "CONNECTED" event to trigger the client's onopen handler.
+        
         try {
             String connectedPayload = objectMapper.writeValueAsString(Map.of(
                 "message", "SSE connection established",
@@ -70,8 +85,6 @@ public class SseConnectionManager {
                 .event(Constants.SseEventType.CONNECTED.name())
                 .data(connectedPayload)
                 .build();
-            
-            // Emit the event directly into the newly created sink
             sink.tryEmitNext(connectedEvent);
             log.debug("Sent initial CONNECTED event for connection {}", connectionId);
 
@@ -81,12 +94,20 @@ public class SseConnectionManager {
         
         return sink.asFlux()
                 .doOnCancel(() -> removeEventStream(userId, connectionId))
-                .doOnError(throwable -> removeEventStream(userId, connectionId))
+                .doOnError(throwable -> {
+                    // This is the main change. Catch the specific error on shutdown.
+                    if (throwable.getCause() instanceof CacheClosedException) {
+                        log.warn("Connection for user {} closed during application shutdown. Suppressing error.", userId);
+                    } else {
+                        log.error("SSE stream error for user {}: {}", userId, throwable.getMessage());
+                        removeEventStream(userId, connectionId);
+                    }
+                })
                 .doOnTerminate(() -> removeEventStream(userId, connectionId));
     }
 
+    // ... (rest of the file is unchanged) ...
     public void registerConnection(String userId, String connectionId) {
-        // CHANGED: Get both cluster and pod names to store the complete address.
         String podName = appProperties.getPod().getId();
         String clusterName = appProperties.getClusterName();
         cacheService.registerUserConnection(userId, connectionId, podName, clusterName);
@@ -118,6 +139,7 @@ public class SseConnectionManager {
             long thresholdTimestamp = ZonedDateTime.now().minusSeconds(staleThresholdSeconds).toEpochSecond();
             Set<String> staleConnectionIds = cacheService.getStaleConnectionIds(thresholdTimestamp);
             if (staleConnectionIds.isEmpty()) return;
+            
             log.warn("Found {} total stale connections cluster-wide to clean up.", staleConnectionIds.size());
             for (String connectionId : staleConnectionIds) {
                 String userId = connectionIdToUserIdMap.get(connectionId);
@@ -138,10 +160,12 @@ public class SseConnectionManager {
                 try {
                     Set<String> connectionIdsOnThisPod = connectionSinks.keySet();
                     if (connectionIdsOnThisPod.isEmpty()) return;
+  
                     cacheService.updateHeartbeats(connectionIdsOnThisPod);
                     String payload = objectMapper.writeValueAsString(Map.of("timestamp", ZonedDateTime.now()));
                     ServerSentEvent<String> heartbeatEvent = ServerSentEvent.<String>builder()
                         .event("HEARTBEAT").data(payload).build();
+           
                     for (String connectionId : connectionIdsOnThisPod) {
                         Sinks.Many<ServerSentEvent<String>> sink = connectionSinks.get(connectionId);
                         if (sink != null) {
