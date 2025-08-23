@@ -6,10 +6,15 @@ Remove-Item -Path "logs\*" -Recurse -Force -ErrorAction SilentlyContinue
 mvn clean package
 
 try {
-    Write-Host "Starting admin-service... Press Ctrl+C to stop the service and trigger Geode cleanup." -ForegroundColor Green
-    # Run the application in the foreground. The script will wait here until the process exits.
-    # Add -Dpod.name and -Dcluster.name to give this service a unique identity
-    java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg,admin-only" "-Dpod.name=broadcast-admin-service-0" "-Dcluster.name=cluster-a" -jar target/broadcast-admin-service-1.0.0.jar
+    # --- MODIFICATION START ---
+    # Generate a random suffix to create a dynamic pod name
+    $randomSuffix = -join ((65..90) + (97..122) | Get-Random -Count 5 | ForEach-Object { [char]$_ })
+    $podName = "broadcast-admin-service-$randomSuffix"
+    # --- MODIFICATION END ---
+
+    Write-Host "Starting admin-service with DYNAMIC pod name: $podName... Press Ctrl+C to stop." -ForegroundColor Green
+    
+    java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg,admin-only" "-Dpod.name=$podName" "-Dcluster.name=cluster-a" -jar target/broadcast-admin-service-1.0.0.jar
 }
 catch [System.Management.Automation.PipelineStoppedException] {
     # This block specifically catches the Ctrl+C interrupt.
