@@ -1,6 +1,7 @@
 package com.example.broadcast.shared.config;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
+import com.example.broadcast.shared.dto.cache.ConnectionMetadata;
 import com.example.broadcast.shared.dto.cache.PersistentUserMessageInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
 
@@ -50,21 +51,7 @@ public class GeodeClientConfig {
         return clientCache.<String, String>createClientRegionFactory(ClientRegionShortcut.PROXY)
                 .create("user-connections");
     }
-
-    // Region for reverse lookup: connectionId -> userId
-    @Bean("connectionToUserRegion")
-    public Region<String, String> connectionToUserRegion(ClientCache clientCache) {
-        return clientCache.<String, String>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("connection-to-user");
-    }
-
-    // Used like a distributed Set for checking if a user is online
-    @Bean("onlineUsersRegion")
-    public Region<String, Boolean> onlineUsersRegion(ClientCache clientCache) {
-        return clientCache.<String, Boolean>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("online-users");
-    }
-    
+   
     // Used like a distributed Set for tracking connections per pod
     @Bean("podConnectionsRegion")
     public Region<String, Set<String>> podConnectionsRegion(ClientCache clientCache) {
@@ -72,11 +59,11 @@ public class GeodeClientConfig {
                 .create("pod-connections");
     }
 
-    // Used like a Redis Sorted Set: connectionId -> heartbeat timestamp
-    @Bean("heartbeatRegion")
-    public Region<String, Long> heartbeatRegion(ClientCache clientCache) {
-        return clientCache.<String, Long>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("heartbeat");
+    // NEW CONSOLIDATED REGION for connectionId -> {userId, heartbeatTimestamp}
+    @Bean("connectionMetadataRegion")
+    public Region<String, ConnectionMetadata> connectionMetadataRegion(ClientCache clientCache) {
+        return clientCache.<String, ConnectionMetadata>createClientRegionFactory(ClientRegionShortcut.PROXY)
+                .create("connection-metadata");
     }
 
     @Bean("pendingEventsRegion")

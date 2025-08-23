@@ -12,16 +12,9 @@
     <region name="user-connections">
         <region-attributes refid="REPLICATE"/>
     </region>
-    <region name="connection-to-user">
-        <region-attributes refid="REPLICATE"/>
-    </region>
-    <region name="online-users">
-        <region-attributes refid="REPLICATE"/>
+    <region name="connection-metadata"> <region-attributes refid="REPLICATE"/>
     </region>
     <region name="pod-connections">
-        <region-attributes refid="REPLICATE"/>
-    </region>
-    <region name="heartbeat">
         <region-attributes refid="REPLICATE"/>
     </region>
     <region name="pending-events">
@@ -39,5 +32,4 @@
     <region name="sse-messages">
         <region-attributes refid="REPLICATE"/>
     </region>
-
 </cache>

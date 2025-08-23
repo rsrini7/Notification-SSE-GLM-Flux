@@ -1,6 +1,7 @@
 package com.example.broadcast.shared.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
+import com.example.broadcast.shared.dto.cache.ConnectionMetadata;
 import com.example.broadcast.shared.dto.cache.PersistentUserMessageInfo;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
@@ -10,8 +11,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.ClientCache;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.stereotype.Service;
 import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Service;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -26,10 +27,8 @@ public class GeodeCacheService implements CacheService {
     private final ObjectMapper objectMapper;
     private final ClientCache clientCache;
     private final Region<String, String> userConnectionsRegion;
-    private final Region<String, String> connectionToUserRegion;
-    private final Region<String, Boolean> onlineUsersRegion;
+    private final Region<String, ConnectionMetadata> connectionMetadataRegion; // CONSOLIDATED
     private final Region<String, Set<String>> podConnectionsRegion;
-    private final Region<String, Long> heartbeatRegion;
     private final Region<String, List<MessageDeliveryEvent>> pendingEventsRegion;
     private final Region<Long, BroadcastMessage> broadcastContentRegion;
     private final Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion;
@@ -38,10 +37,8 @@ public class GeodeCacheService implements CacheService {
     public GeodeCacheService(ObjectMapper objectMapper,
                              ClientCache clientCache,
                              @Qualifier("userConnectionsRegion") Region<String, String> userConnectionsRegion,
-                             @Qualifier("connectionToUserRegion") Region<String, String> connectionToUserRegion,
-                             @Qualifier("onlineUsersRegion") Region<String, Boolean> onlineUsersRegion,
+                             @Qualifier("connectionMetadataRegion") Region<String, ConnectionMetadata> connectionMetadataRegion,
                              @Qualifier("podConnectionsRegion") Region<String, Set<String>> podConnectionsRegion,
-                             @Qualifier("heartbeatRegion") Region<String, Long> heartbeatRegion,
                              @Qualifier("pendingEventsRegion") Region<String, List<MessageDeliveryEvent>> pendingEventsRegion,
                              @Qualifier("broadcastContentRegion") Region<Long, BroadcastMessage> broadcastContentRegion,
                              @Qualifier("activeGroupBroadcastsRegion") Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion,
@@ -50,10 +47,8 @@ public class GeodeCacheService implements CacheService {
         this.objectMapper = objectMapper;
         this.clientCache = clientCache;
         this.userConnectionsRegion = userConnectionsRegion;
-        this.connectionToUserRegion = connectionToUserRegion;
-        this.onlineUsersRegion = onlineUsersRegion;
+        this.connectionMetadataRegion = connectionMetadataRegion;
         this.podConnectionsRegion = podConnectionsRegion;
-        this.heartbeatRegion = heartbeatRegion;
         this.pendingEventsRegion = pendingEventsRegion;
         this.broadcastContentRegion = broadcastContentRegion;
         this.activeGroupBroadcastsRegion = activeGroupBroadcastsRegion;
@@ -68,8 +63,10 @@ public class GeodeCacheService implements CacheService {
         try {
             String infoJson = objectMapper.writeValueAsString(info);
             userConnectionsRegion.put(userId, infoJson);
-            connectionToUserRegion.put(connectionId, userId);
-            onlineUsersRegion.put(userId, true);
+
+            // NEW LOGIC: Put a single metadata object
+            ConnectionMetadata metadata = new ConnectionMetadata(userId, now.toEpochSecond());
+            connectionMetadataRegion.put(connectionId, metadata);
 
             Set<String> podConnections = podConnectionsRegion.get(podId);
             if (podConnections == null) {
@@ -78,7 +75,6 @@ public class GeodeCacheService implements CacheService {
             podConnections.add(connectionId);
             podConnectionsRegion.put(podId, podConnections);
 
-            heartbeatRegion.put(connectionId, now.toEpochSecond());
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize UserConnectionInfo", e);
         }
@@ -88,7 +84,6 @@ public class GeodeCacheService implements CacheService {
     public void unregisterUserConnection(String userId, String connectionId) {
         getConnectionInfo(connectionId).ifPresent(info -> {
             String podId = info.getPodId();
-            // --- REFACTORED to remove .computeIfPresent() ---
             Set<String> podConnections = podConnectionsRegion.get(podId);
             if (podConnections != null) {
                 podConnections.remove(connectionId);
@@ -100,10 +95,66 @@ public class GeodeCacheService implements CacheService {
             }
         });
         userConnectionsRegion.remove(userId);
-        connectionToUserRegion.remove(connectionId);
-        onlineUsersRegion.remove(userId);
-        heartbeatRegion.remove(connectionId);
+        // NEW LOGIC: Remove from the single metadata region
+        connectionMetadataRegion.remove(connectionId);
     }
+    
+    @Override
+    public boolean isUserOnline(String userId) {
+        // NEW LOGIC: A user is online if an entry exists for them in the user-connections region.
+        return userConnectionsRegion.containsKey(userId);
+    }
+
+    @Override
+    public void updateHeartbeats(Set<String> connectionIds) {
+        long now = ZonedDateTime.now(ZoneOffset.UTC).toEpochSecond();
+        Map<String, ConnectionMetadata> updates = new HashMap<>();
+        for (String connId : connectionIds) {
+            ConnectionMetadata currentMeta = connectionMetadataRegion.get(connId);
+            if (currentMeta != null) {
+                // Create a new object with the updated timestamp
+                updates.put(connId, currentMeta.withLastHeartbeatTimestamp(now));
+            }
+        }
+        if (!updates.isEmpty()) {
+            connectionMetadataRegion.putAll(updates);
+        }
+    }
+
+    @Override
+    public Set<String> getStaleConnectionIds(long thresholdTimestamp) {
+        // NEW LOGIC: Filter based on the timestamp within the metadata object
+        return connectionMetadataRegion.entrySet().stream()
+                .filter(entry -> entry.getValue().getLastHeartbeatTimestamp() < thresholdTimestamp)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+    }
+
+    @Override
+    public Optional<UserConnectionInfo> getConnectionDetails(String connectionId) {
+        return getConnectionInfo(connectionId);
+    }
+
+    @Override
+    public void removeConnections(Set<String> connectionIds) {
+        connectionIds.forEach(connId -> {
+            // NEW LOGIC: Get userId from the metadata object
+            ConnectionMetadata metadata = connectionMetadataRegion.get(connId);
+            if (metadata != null) {
+                unregisterUserConnection(metadata.getUserId(), connId);
+            }
+        });
+    }
+    
+    private Optional<UserConnectionInfo> getConnectionInfo(String connectionId) {
+        // NEW LOGIC: Get userId from the metadata object
+        ConnectionMetadata metadata = connectionMetadataRegion.get(connectionId);
+        if (metadata == null) {
+            return Optional.empty();
+        }
+        return getConnectionInfoByUserId(metadata.getUserId());
+    }
+
 
     @Override
     public void addMessageToUserCache(String userId, PersistentUserMessageInfo message) {
@@ -158,45 +209,10 @@ public class GeodeCacheService implements CacheService {
                 .map(info -> Map.of(info.getConnectionId(), info))
                 .orElse(Collections.emptyMap());
     }
-
-    @Override
-    public boolean isUserOnline(String userId) {
-        return onlineUsersRegion.containsKey(userId);
-    }
-
-    @Override
-    public void updateHeartbeats(Set<String> connectionIds) {
-        long now = ZonedDateTime.now(ZoneOffset.UTC).toEpochSecond();
-        Map<String, Long> updates = connectionIds.stream().collect(Collectors.toMap(id -> id, id -> now));
-        heartbeatRegion.putAll(updates);
-    }
-
-    @Override
-    public Set<String> getStaleConnectionIds(long thresholdTimestamp) {
-        return heartbeatRegion.entrySet().stream()
-                .filter(entry -> entry.getValue() < thresholdTimestamp)
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toSet());
-    }
-
-    @Override
-    public Optional<UserConnectionInfo> getConnectionDetails(String connectionId) {
-        return getConnectionInfo(connectionId);
-    }
-
-    @Override
-    public void removeConnections(Set<String> connectionIds) {
-        connectionIds.forEach(connId -> {
-            String userId = connectionToUserRegion.get(connId);
-            if (userId != null) {
-                unregisterUserConnection(userId, connId);
-            }
-        });
-    }
-
+    
     @Override
     public long getTotalActiveUsers() {
-        return onlineUsersRegion.size();
+        return userConnectionsRegion.size(); // Use userConnectionsRegion for total count
     }
 
     @Override
@@ -208,7 +224,7 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public List<String> getOnlineUsers() {
-        return new ArrayList<>(onlineUsersRegion.keySet());
+        return new ArrayList<>(userConnectionsRegion.keySet());
     }
 
     @Override
@@ -235,7 +251,7 @@ public class GeodeCacheService implements CacheService {
     public Map<String, Object> getCacheStats() {
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("totalOnlineUsers", getTotalActiveUsers());
-        stats.put("totalTrackedConnections", heartbeatRegion.size());
+        stats.put("totalTrackedConnections", connectionMetadataRegion.size());
         stats.put("regionSizes", clientCache.rootRegions().stream()
                 .collect(Collectors.toMap(Region::getName, Region::size)));
         return stats;
@@ -253,10 +269,7 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public void evictBroadcastContent(Long broadcastId) {
-        if (broadcastId != null){
-            broadcastContentRegion.remove(broadcastId);
-            log.warn("Cleared all entries from broadcastContentRegion from client-side.");
-        }
+        if (broadcastId != null) broadcastContentRegion.remove(broadcastId);
     }
 
     @Override
@@ -268,15 +281,7 @@ public class GeodeCacheService implements CacheService {
     public void cacheActiveGroupBroadcasts(String cacheKey, List<BroadcastMessage> broadcasts) {
         activeGroupBroadcastsRegion.put(cacheKey, broadcasts);
     }
-
-    private Optional<UserConnectionInfo> getConnectionInfo(String connectionId) {
-        String userId = connectionToUserRegion.get(connectionId);
-        if (userId == null) {
-            return Optional.empty();
-        }
-        return getConnectionInfoByUserId(userId);
-    }
-    
+   
     private Optional<UserConnectionInfo> getConnectionInfoByUserId(String userId) {
         String infoJson = userConnectionsRegion.get(userId);
         if (infoJson == null) {

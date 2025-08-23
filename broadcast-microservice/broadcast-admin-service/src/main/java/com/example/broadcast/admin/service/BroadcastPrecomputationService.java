@@ -1,5 +1,3 @@
-// file: broadcast-microservice/broadcast-admin-service/src/main/java/com/example/broadcast/admin/service/BroadcastPrecomputationService.java
-
 package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.config.AppProperties;

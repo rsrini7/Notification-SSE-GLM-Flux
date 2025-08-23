@@ -13,13 +13,11 @@
 $DockerImage = "custom-geode:1.0"
 $LocatorAddress = "localhost[10334]"
 
-# List of all regions to be cleared
+# UPDATED: List of all regions to be cleared
 $regions = @(
     "active-group-broadcasts",
     "broadcast-content",
-    "connection-to-user",
-    "heartbeat",
-    "online-users",
+    "connection-metadata",
     "pending-events",
     "pod-connections",
     "sse-messages",
@@ -36,11 +34,10 @@ $commandList.Add("connect --locator=$LocatorAddress")
 
 # Add a 'remove --all' command for each region
 foreach ($region in $regions) {
-    # Using the 'remove --all' command as it has been confirmed to work reliably.
     $commandList.Add("remove --region=/$region --all")
 }
 
-# Join all commands into a single string, with each command on a new line
+# Join all commands into a single string
 $commandScript = $commandList -join "`n"
 
 Write-Host "`nGenerated gfsh script to be executed:"
@@ -49,7 +46,6 @@ Write-Host "`nExecuting cleanup script via Docker..." -ForegroundColor Yellow
 
 try {
     # Pipe the script into the gfsh process running inside the Docker container.
-    # The '-i' flag is essential for this to work.
     $commandScript | docker run -i --rm --network host $DockerImage gfsh
 
     Write-Host "`n✅ Geode regions cleared successfully." -ForegroundColor Green

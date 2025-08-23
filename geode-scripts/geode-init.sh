@@ -12,14 +12,12 @@ echo "--> Cluster is ready."
 echo "--> Creating regions..."
 gfsh -e "connect --locator=localhost[10334]" \
      -e "create region --name=user-connections --type=REPLICATE" \
-     -e "create region --name=connection-to-user --type=REPLICATE" \
-     -e "create region --name=online-users --type=REPLICATE" \
+     -e "create region --name=connection-metadata --type=REPLICATE" \
      -e "create region --name=pod-connections --type=REPLICATE" \
-     -e "create region --name=heartbeat --type=REPLICATE" \
      -e "create region --name=pending-events --type=REPLICATE" \
      -e "create region --name=broadcast-content --type=REPLICATE" \
      -e "create region --name=active-group-broadcasts --type=REPLICATE" \
      -e "create region --name=user-messages --type=REPLICATE" \
-     -e "create region --name=sse-messages --type=REPLICATE" 
-     
+     -e "create region --name=sse-messages --type=REPLICATE"
+
 echo "--> All regions created successfully!"
