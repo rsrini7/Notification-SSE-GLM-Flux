@@ -22,7 +22,6 @@ spec:
         env:
         - name: NGINX_ENV
           value: "prod"
-        # UPDATED: Point to the internal K8s service names and ports
         - name: ADMIN_BACKEND_URL
           value: "https://broadcast-admin-service:8081"
         - name: USER_BACKEND_URL

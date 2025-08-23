@@ -26,7 +26,7 @@ class SseSimulation extends Simulation {
       sse("Connect and Wait for Message")
         .get("/api/user/sse/connect?userId=#{ID}")
         .await(60 seconds)(
-          // MODIFIED: The check is now updated to match the new SSE message format.
+          // The check is now updated to match the new SSE message format.
           sse.checkMessage("Check for Broadcast")
             .check(
               // 1. We now check for the existence of the 'content' field, which is only in broadcast messages.

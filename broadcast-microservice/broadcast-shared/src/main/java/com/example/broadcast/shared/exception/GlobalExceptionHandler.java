@@ -70,7 +70,7 @@ public class GlobalExceptionHandler {
                 exchange.getRequest().getPath().toString()
         );
 
-        // MODIFIED: Simplified the log message and removed the incorrect method call.
+        // Simplified the log message and removed the incorrect method call.
         if (ex.getStatusCode().is4xxClientError()) {
             log.warn("Client error: {} on path '{}' - Reason: {}", ex.getStatusCode().value(), exchange.getRequest().getPath(), ex.getReason());
         } 

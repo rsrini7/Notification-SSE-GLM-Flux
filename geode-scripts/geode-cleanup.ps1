@@ -13,7 +13,7 @@
 $DockerImage = "custom-geode:1.0"
 $LocatorAddress = "localhost[10334]"
 
-# UPDATED: List of all regions to be cleared
+# List of all regions to be cleared
 $regions = @(
     "active-group-broadcasts",
     "broadcast-content",

@@ -46,7 +46,6 @@ public class SseController {
                 userId, connectionId,
                 exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
 
-        // MODIFIED: This entire block is now a reactive chain
         return Mono.fromRunnable(() -> sseService.registerConnection(userId, connectionId))
                 .subscribeOn(jdbcScheduler)
                 .doOnSuccess(v -> log.info("[CONNECT_SUCCESS] SSE connection established for userId='{}', connection='{}'", userId, connectionId))

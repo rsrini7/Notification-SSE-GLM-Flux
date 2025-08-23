@@ -68,7 +68,7 @@ public class MessageStatusService {
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
 
-        // MODIFIED: All user actions are now sent to the central orchestration topic for routing.
+        // All user actions are now sent to the central orchestration topic for routing.
         String topicName = appProperties.getKafka().getTopic().getNameOrchestration();
         outboxEventPublisher.publish(event, userId, Constants.EventType.READ.name(), topicName);
         log.info("Published READ event for user: {}, broadcast: {} to orchestration topic.", userId, broadcastId);
