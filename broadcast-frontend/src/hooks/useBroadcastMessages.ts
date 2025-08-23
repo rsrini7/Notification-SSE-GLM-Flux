@@ -97,7 +97,11 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
   }, [toast, userId]);
 
-  const onDisconnect = useCallback(() => { /* Silent */ }, []);
+  const onDisconnect = useCallback(() => {
+    // Clear the message list on disconnect to ensure a fresh state on reconnect.
+    setMessages([]);
+  }, []);
+  
   const onError = useCallback(() => { /* Silent */ }, []);
 
   const sseConnection = useSseConnection({

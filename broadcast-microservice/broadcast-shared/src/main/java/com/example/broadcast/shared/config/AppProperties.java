@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.beans.factory.annotation.Value;
 
 @Data
 @Validated
