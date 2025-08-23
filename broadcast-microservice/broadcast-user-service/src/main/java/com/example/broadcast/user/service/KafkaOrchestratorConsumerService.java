@@ -158,8 +158,9 @@ public class KafkaOrchestratorConsumerService {
     
     private void scatterToUser(MessageDeliveryEvent userSpecificEvent) {
         String userId = userSpecificEvent.getUserId();
-        String podName = appProperties.getPodName();
-        Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId, podName);
+        String clusterName = appProperties.getClusterName();
+        
+        Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId, clusterName);
 
         if (!userConnections.isEmpty()) {
             UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
@@ -170,6 +171,8 @@ public class KafkaOrchestratorConsumerService {
 
             sseMessagesRegion.put(messageKey, payload);
         } else {
+            String podName = appProperties.getPodName();
+            
             switch (Constants.EventType.valueOf(userSpecificEvent.getEventType())) {
                 case CREATED:
                     log.debug("User {} is offline. Caching pending CREATED event for broadcast {}.", userId, userSpecificEvent.getBroadcastId());

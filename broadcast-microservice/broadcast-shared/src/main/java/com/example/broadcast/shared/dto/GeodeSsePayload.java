@@ -10,6 +10,6 @@ import lombok.ToString;
 @ToString
 @RequiredArgsConstructor
 public class GeodeSsePayload implements Serializable {
-    private final String targetPodId;
+    private final String targetClusterPodName;
     private final MessageDeliveryEvent event;
 }

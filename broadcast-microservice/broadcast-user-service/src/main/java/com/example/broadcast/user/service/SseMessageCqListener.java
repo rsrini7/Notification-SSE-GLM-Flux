@@ -24,16 +24,16 @@ public class SseMessageCqListener extends CqListenerAdapter {
     @PostConstruct
     public void registerCq() {
         try {
-            String podId = appProperties.getPodName();
+            String podName = appProperties.getPodName();
             String clusterName = appProperties.getClusterName();
-            String uniqueClusterPodName = clusterName + ":" + podId;
+            String uniqueClusterPodName = clusterName + ":" + podName;
 
             QueryService queryService = clientCache.getQueryService();
             CqAttributesFactory cqf = new CqAttributesFactory();
             cqf.addCqListener(this);
             CqAttributes cqa = cqf.create();
 
-            String query = "SELECT * FROM /sse-messages s WHERE s.getTargetPodId = '" + uniqueClusterPodName + "'";
+            String query = "SELECT * FROM /sse-messages s WHERE s.getTargetClusterPodName = '" + uniqueClusterPodName + "'";
             CqQuery cq = queryService.newCq("SseMessageCQ_" + uniqueClusterPodName.replace(":", "_"), query, cqa, true);
 
             cq.execute();
