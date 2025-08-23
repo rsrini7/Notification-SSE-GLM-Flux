@@ -68,6 +68,7 @@ public class KafkaOrchestratorConsumerService {
             case EXPIRED:
                 cacheService.evictActiveGroupBroadcastsCache();
                 cacheService.evictBroadcastContent(event.getBroadcastId());
+                cacheService.cacheBroadcastContent(broadcast);
                 handleBroadcastLifecycleEvent(broadcast, event);
                 break;
             case FAILED:
