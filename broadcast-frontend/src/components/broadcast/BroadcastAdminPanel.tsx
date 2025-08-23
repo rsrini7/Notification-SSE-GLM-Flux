@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import BroadcastCreationForm from './BroadcastCreationForm';
 import BroadcastManagementList from './BroadcastManagementList';
 import BroadcastStatisticsView from './BroadcastStatisticsView';

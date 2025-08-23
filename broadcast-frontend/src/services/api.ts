@@ -136,10 +136,6 @@ export const userService = {
     const response = await userApi.get(`/messages?userId=${userId}`);
     return response.data;
   },
-  getGroupMessages: async (userId: string): Promise<UserBroadcastMessage[]> => {
-    const response = await userApi.get(`/messages/groups?userId=${userId}`);
-    return response.data;
-  },
   getAllUsers: async (): Promise<string[]> => {
     const response = await adminApi.get('/broadcasts/users/all-ids');
     return response.data;
