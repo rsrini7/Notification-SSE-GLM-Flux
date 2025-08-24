@@ -1,0 +1,45 @@
+mindmap
+  root(("🌐 Apache Geode Regions"))
+    %% Connection & Presence Management
+    ("👤 Connection Management")
+      ("user-connections")
+        ("<b>Data Stored:</b><br/>K: 'cluster:userId'<br/>V: Serialized UserConnectionInfo")
+        ("<b>Purpose:</b><br/>Acts as the primary presence indicator. Quickly answers 'Is this user online?'")
+        ("<b>Interacting Service:</b><br/>User Service")
+      ("connection-metadata")
+        ("<b>Data Stored:</b><br/>K: connectionId<br/>V: ConnectionMetadata object")
+        ("<b>Purpose:</b><br/>Tracks individual connection liveness via heartbeats and provides a reverse lookup from a connection to a user")
+        ("<b>Interacting Service:</b><br/>User Service")
+
+    %% Cluster State Management
+    ("🖥️ Cluster State")
+      ("cluster-pod-connections")
+        ("<b>Data Stored:</b><br/>K: 'cluster:podId'<br/>V: Set of connectionIds")
+        ("<b>Purpose:</b><br/>Maintains a set of active connections for each pod, which is essential for dead pod detection and resource cleanup")
+        ("<b>Interacting Service:</b><br/>User Service (PodLifecycleManager)")
+      ("cluster-pod-heartbeats")
+        ("<b>Data Stored:</b><br/>K: 'cluster:podId'<br/>V: Timestamp (Long)")
+        ("<b>Purpose:</b><br/>A lightweight mechanism where each pod periodically updates its own timestamp to signal it's alive. A scheduled job finds pods with stale heartbeats")
+        ("<b>Interacting Service:</b><br/>User Service (PodLifecycleManager)")
+
+    %% Event & Message Caching
+    ("⚡ Event & Message Caching")
+      ("pending-events")
+        ("<b>Data Stored:</b><br/>K: 'cluster:userId'<br/>V: List of MessageDeliveryEvent objects")
+        ("<b>Purpose:</b><br/>Caches messages for offline users. When a user reconnects, the SseService retrieves and delivers these events, then clears the entry")
+        ("<b>Interacting Service:</b><br/>User Service (Kafka Orchestrator writes, SseService reads)")
+      ("broadcast-content")
+        ("<b>Data Stored:</b><br/>K: broadcastId (Long)<br/>V: BroadcastMessage object")
+        ("<b>Purpose:</b><br/>A read-through cache for the full content of active broadcasts, reducing database load when assembling user inboxes")
+        ("<b>Interacting Service:</b><br/>User Service (read/write), Admin Service (invalidates)")
+      ("active-group-broadcasts")
+        ("<b>Data Stored:</b><br/>K: Group Name (e.g., 'ALL', 'ROLE:ADMIN')<br/>V: List of BroadcastMessage objects")
+        ("<b>Purpose:</b><br/>Caches lists of active broadcasts for large groups (ALL/ROLE). This is a key optimization to avoid expensive DB queries when users connect")
+        ("<b>Interacting Service:</b><br/>User Service")
+
+    %% Intra-Cluster Eventing
+    ("🚀 Real-time Eventing")
+      ("sse-messages")
+        ("<b>Data Stored:</b><br/>K: UUID (String)<br/>V: GeodeSsePayload object")
+        ("<b>Purpose:</b><br/>A transient, high-speed message bus. The orchestrator `puts` events here, and worker pods are notified instantly via Continuous Query (CQ), triggering SSE pushes to clients")
+        ("<b>Interacting Service:</b><br/>User Service (Orchestrator writes, CqListener on workers reads)")
