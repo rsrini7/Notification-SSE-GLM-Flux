@@ -2,7 +2,6 @@ package com.example.broadcast.shared.config;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.ConnectionMetadata;
-import com.example.broadcast.shared.dto.cache.PersistentUserMessageInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.util.Constants.GeodeRegionNames;
 
@@ -89,12 +88,6 @@ public class GeodeClientConfig {
     public Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion(ClientCache clientCache) {
         return clientCache.<String, List<BroadcastMessage>>createClientRegionFactory(ClientRegionShortcut.PROXY)
                 .create(GeodeRegionNames.ACTIVE_GROUP_BROADCASTS);
-    }
-
-    @Bean("userMessagesRegion")
-    public Region<String, List<PersistentUserMessageInfo>> userMessagesRegion(ClientCache clientCache) {
-        return clientCache.<String, List<PersistentUserMessageInfo>>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create(GeodeRegionNames.USER_MESSAGES);
     }
 
     @Bean("sseMessagesRegion")

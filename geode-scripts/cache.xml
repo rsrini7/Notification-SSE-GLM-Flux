@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <cache
-    xmlns="http://geode.incubator.apache.org/schema/cache"
+    xmlns="http://geode.apache.org/schema/cache"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://geode.incubator.apache.org/schema/cache http://geode.incubator.apache.org/schema/cache/cache-1.0.xsd"
     version="1.0">
@@ -27,9 +27,6 @@
         <region-attributes refid="REPLICATE"/>
     </region>
     <region name="active-group-broadcasts">
-        <region-attributes refid="REPLICATE"/>
-    </region>
-    <region name="user-messages">
         <region-attributes refid="REPLICATE"/>
     </region>
     <region name="sse-messages">

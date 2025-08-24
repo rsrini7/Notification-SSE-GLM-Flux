@@ -2,7 +2,6 @@ package com.example.broadcast.shared.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.ConnectionMetadata;
-import com.example.broadcast.shared.dto.cache.PersistentUserMessageInfo;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -33,7 +32,6 @@ public class GeodeCacheService implements CacheService {
     private final Region<String, List<MessageDeliveryEvent>> pendingEventsRegion;
     private final Region<Long, BroadcastMessage> broadcastContentRegion;
     private final Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion;
-    private final Region<String, List<PersistentUserMessageInfo>> userMessagesRegion;
 
     public GeodeCacheService(ObjectMapper objectMapper,
                              ClientCache clientCache,
@@ -43,8 +41,7 @@ public class GeodeCacheService implements CacheService {
                              @Qualifier("clusterPodHeartbeatsRegion") Region<String, Long> clusterPodHeartbeatsRegion,
                              @Qualifier("pendingEventsRegion") Region<String, List<MessageDeliveryEvent>> pendingEventsRegion,
                              @Qualifier("broadcastContentRegion") Region<Long, BroadcastMessage> broadcastContentRegion,
-                             @Qualifier("activeGroupBroadcastsRegion") Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion,
-                             @Qualifier("userMessagesRegion") Region<String, List<PersistentUserMessageInfo>> userMessagesRegion
+                             @Qualifier("activeGroupBroadcastsRegion") Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion
     ) {
         this.objectMapper = objectMapper;
         this.clientCache = clientCache;
@@ -55,7 +52,6 @@ public class GeodeCacheService implements CacheService {
         this.pendingEventsRegion = pendingEventsRegion;
         this.broadcastContentRegion = broadcastContentRegion;
         this.activeGroupBroadcastsRegion = activeGroupBroadcastsRegion;
-        this.userMessagesRegion = userMessagesRegion;
     }
 
 
@@ -170,29 +166,6 @@ public class GeodeCacheService implements CacheService {
 
 
     @Override
-    public void addMessageToUserCache(String userId, PersistentUserMessageInfo message) {
-        List<PersistentUserMessageInfo> messages = userMessagesRegion.get(userId);
-        if (messages == null) {
-            messages = new ArrayList<>();
-        }
-        messages.add(0, message);
-        userMessagesRegion.put(userId, messages);
-    }
-
-    @Override
-    public void removeMessageFromUserCache(String userId, Long broadcastId) {
-        List<PersistentUserMessageInfo> messages = userMessagesRegion.get(userId);
-        if (messages != null) {
-            messages.removeIf(msg -> msg.getBroadcastId().equals(broadcastId));
-            if (messages.isEmpty()) {
-                userMessagesRegion.remove(userId);
-            } else {
-                userMessagesRegion.put(userId, messages);
-            }
-        }
-    }
-
-    @Override
     public void cachePendingEvent(MessageDeliveryEvent event, String clusterName) {
         String key = getClusterUserKey(event.getUserId(), clusterName);
         List<MessageDeliveryEvent> pendingEvents = pendingEventsRegion.get(key);
@@ -238,16 +211,6 @@ public class GeodeCacheService implements CacheService {
     @Override
     public List<String> getOnlineUsers() {
         return new ArrayList<>(userConnectionsRegion.keySet());
-    }
-
-    @Override
-    public void cacheUserMessages(String userId, List<PersistentUserMessageInfo> messages) {
-        userMessagesRegion.put(userId, messages);
-    }
-
-    @Override
-    public List<PersistentUserMessageInfo> getCachedUserMessages(String userId) {
-        return userMessagesRegion.get(userId);
     }
 
    @Override

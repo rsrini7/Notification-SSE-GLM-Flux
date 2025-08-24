@@ -22,8 +22,7 @@ $regions = @(
     "cluster-pod-connections",
     "cluster-pod-heartbeats",
     "sse-messages",
-    "user-connections",
-    "user-messages"
+    "user-connections"
 )
 
 # --- Script Logic ---
