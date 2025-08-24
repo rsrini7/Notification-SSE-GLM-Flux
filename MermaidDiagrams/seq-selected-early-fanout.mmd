@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+
+    participant AdminUI
+    participant AdminSvc as Admin Service
+    participant DB
+    participant Scheduler as BroadcastSchedulingService
+    participant OutboxPoller
+    participant Kafka
+    participant UserSvc as User Service (Consumer)
+    participant UserClient
+
+    note over AdminUI, DB: Stage 1: Broadcast Creation & Scheduling
+    AdminUI->>+AdminSvc: 1- POST /broadcasts (targetType=SELECTED, scheduledAt=FutureTime)
+    AdminSvc->>+DB: 2- INSERT into broadcast_messages with status='SCHEDULED'
+    DB-->>-AdminSvc: 
+    AdminSvc-->>-AdminUI: 3- 200 OK (No events published yet)
+
+    note over AdminUI, DB: ..- Time passes until the scheduled moment ...
+
+    note over Scheduler, UserClient: Stage 2: Activation and Delivery
+    Scheduler->>+DB: 4- Polls for due broadcasts (status='SCHEDULED')
+    DB-->>-Scheduler: 5- Returns the broadcast record
+
+    Scheduler->>+AdminSvc: 6- Activates the broadcast
+    note over AdminSvc, DB: Transaction Begins for Early Fan-Out
+    AdminSvc->>DB: 7- UPDATE broadcast status to 'ACTIVE'
+    AdminSvc->>DB: 8- BATCH INSERT user-specific events into outbox_events
+    note over AdminSvc, DB: Transaction Commits
+    
+    OutboxPoller->>+DB: 9- Polls and locks the batch of new events
+    DB-->>-OutboxPoller: ...
+    
+    loop For each event in the batch
+        OutboxPoller->>+Kafka: 10- Publishes user-specific event
+        Kafka-->>-OutboxPoller: ...
+    end
+
+    Kafka->>+UserSvc: 11- Delivers event to a consumer
+    note over UserSvc: Bypasses fan-out logic as userId is present
+    UserSvc->>+UserClient: 12- Pushes message via Geode/SSE
+    UserClient-->>-UserSvc: ...
+    UserSvc-->>-Kafka: 13- Acknowledges Kafka message

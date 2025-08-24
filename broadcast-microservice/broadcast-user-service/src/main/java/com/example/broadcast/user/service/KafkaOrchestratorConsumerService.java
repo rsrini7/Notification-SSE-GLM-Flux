@@ -58,6 +58,15 @@ public class KafkaOrchestratorConsumerService {
                                            Acknowledgment acknowledgment) {
 
         log.info("Orchestration event received for type '{}' on broadcast ID: {}. [Topic: {}, Partition: {}, Offset: {}]", event.getEventType(), event.getBroadcastId(), topic, partition, offset);
+        
+        // Route user-specific events directly
+        if (event.getUserId() != null) {
+            log.info("Received a user-specific event for user {}. Scattering directly.", event.getUserId());
+            handleUserSpecificEvent(event);
+            acknowledgment.acknowledge();
+            return;
+        }
+        
         BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId()).orElse(null);
 
         if (broadcast == null) {
@@ -94,6 +103,17 @@ public class KafkaOrchestratorConsumerService {
         }
 
         acknowledgment.acknowledge();
+    }
+
+    private void handleUserSpecificEvent(MessageDeliveryEvent event) {
+        switch (Constants.EventType.valueOf(event.getEventType())) {
+            case CREATED, READ:
+                scatterToUser(event);
+                break;
+            default:
+                log.warn("Unhandled user-specific event type in orchestrator: {}", event.getEventType());
+                break;
+        }
     }
 
     /**

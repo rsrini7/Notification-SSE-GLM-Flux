@@ -28,6 +28,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.UUID;
 
 @Service
@@ -67,7 +68,28 @@ public class BroadcastLifecycleService {
             return broadcastMapper.toBroadcastResponse(broadcast, 0); // Target count is unknown until preparation is complete.
         }
 
-        // ALL, ROLE, and SELECTED are handled as immediate Fan-out-on-Read types.
+        if (Constants.TargetType.SELECTED.name().equals(request.getTargetType())) {
+            broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
+            broadcast = broadcastRepository.save(broadcast);
+            
+            List<String> targetUserIds = request.getTargetIds();
+            if (targetUserIds != null && !targetUserIds.isEmpty()) {
+                // Create a batch of user-specific outbox events
+                List<OutboxEvent> outboxEvents = new ArrayList<>();
+                for (String userId : targetUserIds) {
+                    MessageDeliveryEvent eventPayload = createOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent())
+                            .toBuilder().userId(userId).build(); // Add userId to each event
+                    outboxEvents.add(createOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
+                }
+                outboxEventPublisher.publishBatch(outboxEvents);
+                log.info("Published a batch of {} user-specific events to the outbox for broadcast ID: {}", outboxEvents.size(), broadcast.getId());
+            }
+            
+            int totalTargeted = targetUserIds != null ? targetUserIds.size() : 0;
+            return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
+        }
+
+        // ALL, ROLE are handled as immediate Fan-out-on-Read types.
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
         long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
         ZonedDateTime precomputationThreshold = now.plus(fetchDelayMs, ChronoUnit.MILLIS);
