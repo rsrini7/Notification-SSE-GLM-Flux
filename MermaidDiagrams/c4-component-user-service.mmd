@@ -40,7 +40,7 @@ graph TD
     UserMessageService --> GeodeManager
 
     Orchestrator -- "Consumes Orchestration Events" --> Kafka
-    Orchestrator -- "Puts events into Geode Region" --> GeodeManager
+    Orchestrator -- "Puts events into Geode" --> GeodeManager
     
     CqListener -- "Receives CQ events from" --> Geode
     CqListener --> SseService

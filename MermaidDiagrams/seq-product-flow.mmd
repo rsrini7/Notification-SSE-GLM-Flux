@@ -1,28 +1,40 @@
 sequenceDiagram
-    participant AdminUI as Admin UI
-    participant AdminSvc as BroadcastLifecycleService
-    participant TargetingSvc as BroadcastTargetingService (Async)
-    participant DB as PostgreSQL DB
+    autonumber
+
+    participant AdminUI
+    participant AdminSvc as Admin Service (Targeting)
+    participant DB
+    participant Kafka
+    participant UserSvc as User Service (Consumer)
+    participant GeodeCache
     participant Scheduler as BroadcastSchedulingService
-
+    
+    note over AdminUI, DB: Stage 1: Pre-computation & Cache Priming
     AdminUI->>+AdminSvc: 1- POST /broadcasts (targetType=PRODUCT)
-    AdminSvc->>+DB: 2- INSERT broadcast_message (status='PREPARING')
-    DB-->>-AdminSvc: Returns new Broadcast ID
-    AdminSvc-->>-AdminUI: 3- Returns 202 Accepted (Immediately)
-    
-    AdminSvc-)+TargetingSvc: 4- precomputeAndStoreTargetUsers() [Async Call]
-    Note over TargetingSvc, DB: 5- Long-running user fetch starts...
+    AdminSvc->>+DB: 2- INSERT broadcast (status='PREPARING')
+    AdminSvc-->>-AdminUI: 3- 202 Accepted
 
-    TargetingSvc->>DB: 6- INSERT user list into broadcast_user_targets
-    TargetingSvc->>DB: 7- UPDATE broadcast_message SET status='READY'
+    note over AdminSvc: Async pre-computation begins...
+    AdminSvc->>+DB: 4- Saves full user list to 'broadcast_user_targets'
+    AdminSvc->>+DB: 5- Writes 'TARGETS_PRECOMPUTED' event to Outbox
+    AdminSvc->>+DB: 6- UPDATE broadcast status to 'READY'
     
-    deactivate TargetingSvc
+    note over AdminSvc, Kafka: Outbox poller publishes the event...
+    DB-->>-AdminSvc: ...
     
-    Note over Scheduler, DB: ...Time passes...
+    Kafka->>+UserSvc: 7- Delivers 'TARGETS_PRECOMPUTED' event
+    UserSvc->>+DB: 8- Reads user list from 'broadcast_user_targets'
+    DB-->>-UserSvc: ...
+    UserSvc->>+GeodeCache: 9- Caches user list in 'precomputed-targets' region
+    GeodeCache-->>-UserSvc: ...
+    UserSvc-->>-Kafka: 10- Acknowledges Kafka message
+
+    note over AdminUI, DB: Stage 2: Scheduled Activation
+    note over Scheduler, DB: ...Time passes...
+    Scheduler->>+DB: 11- Finds READY broadcast
+    DB-->>-Scheduler: ...
     
-    Scheduler->>+DB: 8- Finds READY broadcasts
-    DB-->>-Scheduler: Returns the broadcast
-    
-    Scheduler->>+AdminSvc: 9- processReadyBroadcast()
-    AdminSvc->>DB: 10- UPDATE status to 'ACTIVE' & Write to Outbox
-    Note over AdminSvc: 11- Fan-out to Kafka via Orchestrator begins...
+    Scheduler->>+AdminSvc: 12- Activates the broadcast
+    AdminSvc->>+DB: 13- UPDATE status to 'ACTIVE' & Writes CREATED event to Outbox
+    DB-->>-AdminSvc: ...
+    note over AdminSvc: Delivery flow for the main CREATED event now begins...

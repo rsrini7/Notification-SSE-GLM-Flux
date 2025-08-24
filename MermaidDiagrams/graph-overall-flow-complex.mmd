@@ -14,7 +14,6 @@ graph TD
         AsyncPrecomputation["Async TargetingService<br/>(Fan-out on Write)"]
     end
     
-
     subgraph "3. Activation (Admin Service)"
         ActivationScheduler["Activation Scheduler<br/>(Every 1 min)"]
     end
@@ -37,38 +36,34 @@ graph TD
     AdminUI --> AdminAPI --> LifecycleSvc --> CreationTriage
 
     %% --- PATH A: IMMEDIATE BROADCASTS ---
-    CreationTriage -- "Immediate" --> ImmediateType{"Fan-out on Read or Write?"}
-    ImmediateType -- "Read (ALL/ROLE/SELECTED)" --> SaveActiveAndOutbox["DB: status=ACTIVE<br/>INSERT into outbox_events"]
-    ImmediateType -- "Write (PRODUCT)" --> SavePreparing["DB: status=PREPARING"]
+    CreationTriage -- "Immediate" --> ImmediateType{"Targeting Strategy?"}
+    ImmediateType -- "Early Fan-out (SELECTED)" --> SaveActiveAndOutboxBatch["DB: status=ACTIVE<br/>BATCH INSERT N events into outbox_events"]
+    ImmediateType -- "Fan-out on Read (ALL/ROLE)" --> SaveActiveAndOutboxSingle["DB: status=ACTIVE<br/>INSERT ONE event into outbox_events"]
+    ImmediateType -- "Fan-out on Write (PRODUCT)" --> SavePreparing["DB: status=PREPARING"]
     
     SavePreparing -- "Triggers" --> AsyncPrecomputation
 
     %% --- PATH B: SCHEDULED BROADCASTS ---
     CreationTriage -- "Scheduled" --> SaveScheduled["DB: status=SCHEDULED"]
-    SaveScheduled --> ScheduledType{"Fan-out on Read or Write?"}
+    SaveScheduled -- "Handled by Schedulers" --> ActivationScheduler & PrecomputationScheduler
     
-    ScheduledType -- "Write (PRODUCT)" --> PrecomputationScheduler
-    PrecomputationScheduler -- "Polls for due broadcasts" --> Postgres
-    PrecomputationScheduler --> SavePreparing
-    
-    ScheduledType -- "Read (ALL/ROLE/SELECTED)" --> ActivationScheduler
-
     %% --- PRECOMPUTATION & ACTIVATION FLOW ---
-    AsyncPrecomputation -- "Saves targets & sets status=READY" --> Postgres
+    AsyncPrecomputation -- "Saves targets, publishes PRECOMPUTED event,<br/>& sets status=READY" --> Postgres
     Postgres -- "status=READY" --> ActivationScheduler
     
     ActivationScheduler -- "Polls for READY or<br/>due SCHEDULED broadcasts" --> Postgres
-    ActivationScheduler --> SaveActiveAndOutbox
+    ActivationScheduler --> SaveActiveAndOutboxSingle
     
     %% --- CONVERGENCE & PUBLISHING ---
-    SaveActiveAndOutbox --> Postgres
-    Postgres -- "Event waits in 'outbox_events'" --> OutboxPoller
-    OutboxPoller -- "Polls & Locks Event" --> Postgres
-    OutboxPoller -- "Publishes ONE Event" --> Kafka
+    SaveActiveAndOutboxSingle --> Postgres
+    SaveActiveAndOutboxBatch --> Postgres
+    Postgres -- "Events wait in 'outbox_events'" --> OutboxPoller
+    OutboxPoller -- "Polls & Locks Events" --> Postgres
+    OutboxPoller -- "Publishes Events" --> Kafka
 
     %% --- DELIVERY ---
     Kafka --> OrchestratorConsumer
-    OrchestratorConsumer -- "Determines Audience & Pod, <br/> Puts event into Geode Region" --> Geode
+    OrchestratorConsumer -- "Processes event, may PUT to Geode" --> Geode
     Geode -- "CQ invokes Listener" --> WorkerCqListener
     WorkerCqListener --> SseService
     SseService --> User
