@@ -1,7 +1,8 @@
 package com.example.broadcast.user.health;
 
 import com.example.broadcast.user.service.SseService;
-import com.example.broadcast.shared.service.cache.CacheService;
+import com.example.broadcast.user.service.cache.CacheService;
+
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.kafka.core.KafkaTemplate;

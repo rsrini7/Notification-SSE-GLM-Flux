@@ -1,4 +1,4 @@
-package com.example.broadcast.shared.service.cache;
+package com.example.broadcast.user.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.*;

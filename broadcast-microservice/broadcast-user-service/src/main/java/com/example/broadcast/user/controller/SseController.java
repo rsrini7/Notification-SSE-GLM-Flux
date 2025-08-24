@@ -1,8 +1,9 @@
 package com.example.broadcast.user.controller;
 
 import com.example.broadcast.shared.config.AppProperties;
-import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.user.service.SseService;
+import com.example.broadcast.user.service.cache.CacheService;
+
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;

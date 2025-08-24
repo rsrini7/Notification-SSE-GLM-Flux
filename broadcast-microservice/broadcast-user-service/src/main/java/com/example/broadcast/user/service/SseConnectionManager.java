@@ -1,8 +1,8 @@
 package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.config.AppProperties;
-import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.user.service.cache.CacheService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;

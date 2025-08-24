@@ -1,7 +1,8 @@
 package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.config.AppProperties;
-import com.example.broadcast.shared.service.cache.CacheService;
+import com.example.broadcast.user.service.cache.CacheService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;

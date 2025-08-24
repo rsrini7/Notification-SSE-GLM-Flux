@@ -1,4 +1,4 @@
-package com.example.broadcast.shared.service.cache;
+package com.example.broadcast.user.service.cache;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.ConnectionMetadata;
@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.ClientCache;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.time.ZoneOffset;
@@ -20,7 +19,6 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
-@Profile("!admin-only")
 public class GeodeCacheService implements CacheService {
 
     private final ObjectMapper objectMapper;

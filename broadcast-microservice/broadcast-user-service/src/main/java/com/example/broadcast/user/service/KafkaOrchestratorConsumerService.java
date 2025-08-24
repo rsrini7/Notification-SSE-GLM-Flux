@@ -9,8 +9,9 @@ import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
 import com.example.broadcast.shared.service.BroadcastStatisticsService;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
-import com.example.broadcast.shared.service.cache.CacheService;
 import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.user.service.cache.CacheService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.Region;
