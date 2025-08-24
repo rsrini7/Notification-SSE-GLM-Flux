@@ -1,120 +1,127 @@
 classDiagram
     direction TB
 
-    namespace model {
-        class BroadcastMessage {
-            <<Entity>>
-            +Long id
-            +String content
-            +String status
-            +String targetType
-        }
-        class UserBroadcastMessage {
-            <<Entity>>
-            +Long id
-            +Long broadcastId
-            +String userId
-            +String readStatus
-        }
-        class BroadcastStatistics {
-            <<Entity>>
-            +Long broadcastId
-            +Integer totalTargeted
-            +Integer totalDelivered
-        }
-        class UserPreferences {
-            <<Entity>>
-            +String userId
-            +boolean notificationEnabled
-        }
-        class OutboxEvent {
-            <<Entity>>
-            +UUID id
-            +String eventType
-            +String payload
-        }
-    }
-
-    namespace dto.admin {
-        class BroadcastRequest {
-            +String content
-            +String targetType
-        }
-        class BroadcastResponse {
-            +Long id
-            +String content
-            +String status
-        }
-        class DltMessage {
-            +Long broadcastId
-            +String exceptionMessage
-            +String originalMessagePayload
-        }
-        class RedriveAllResult {
-            +int successCount
-            +int failureCount
-            +List~RedriveFailureDetail~ failures
-        }
-        class RedriveFailureDetail {
-            +String dltMessageId
-            +String reason
-        }
-    }
-
-    namespace dto.user {
-        class UserBroadcastResponse {
-            +Long broadcastId
-            +String userId
-            +String content
-            +String readStatus
-        }
-        class MessageReadRequest {
-            +String userId
-            +Long broadcastId
-        }
-    }
-
-    namespace dto.cache {
-        class UserConnectionInfo {
-            +String userId
-            +String connectionId
-            +String podId
-        }
-        class PendingEventInfo {
-            +String eventId
-            +Long broadcastId
-            +String message
-        }
-        class PersistentUserMessageInfo {
-            +Long messageId
-            +Long broadcastId
-            +String readStatus
-        }
-    }
-    
     namespace dto {
-         class MessageDeliveryEvent {
-            <<Kafka Payload>>
-            +String eventId
-            +Long broadcastId
-            +String userId
-            +String eventType
+        class MessageDeliveryEvent {
+            <<DTO>>
+            String eventId
+            Long broadcastId
+            String userId
+            String eventType
+            ZonedDateTime timestamp
+            String message
+            String errorDetails
+            boolean isFireAndForget
         }
         class ErrorResponse {
-           +int status
-           +String error
-           +String message
+            <<DTO>>
+            ZonedDateTime timestamp
+            int status
+            String error
+            String message
+            String path
+        }
+        class GeodeSsePayload {
+            <<DTO>>
+            String targetClusterPodName
+            MessageDeliveryEvent event
         }
     }
 
-    %% Relationships
-    dto.admin.BroadcastRequest ..> model.BroadcastMessage : (creates)
-    dto.admin.BroadcastResponse ..> model.BroadcastMessage : (is a view of)
-    dto.user.UserBroadcastResponse ..> model.UserBroadcastMessage : (represents status of)
-    dto.user.UserBroadcastResponse ..> model.BroadcastMessage : (includes content from)
-    dto.admin.DltMessage ..> dto.MessageDeliveryEvent : (stores original payload of)
-    model.OutboxEvent ..> dto.MessageDeliveryEvent : (stores payload of)
-    dto.cache.PersistentUserMessageInfo ..> model.UserBroadcastMessage : (is a cached summary of)
-    dto.admin.RedriveAllResult "1" *-- "0..*" dto.admin.RedriveFailureDetail : contains
+    namespace admin {
+        class BroadcastRequest {
+            <<DTO>>
+            String senderId
+            String senderName
+            String content
+            String targetType
+            List~String~ targetIds
+            String priority
+            String category
+            ZonedDateTime scheduledAt
+            ZonedDateTime expiresAt
+            boolean isImmediate
+            boolean isFireAndForget
+        }
+        class BroadcastResponse {
+            <<DTO>>
+            Long id
+            String content
+            String status
+            ZonedDateTime createdAt
+            ZonedDateTime scheduledAt
+            Integer totalTargeted
+            Integer totalDelivered
+            Integer totalRead
+        }
+        class DltMessage {
+            <<DTO>>
+            String id
+            Long broadcastId
+            String originalKey
+            String originalTopic
+            int originalPartition
+            long originalOffset
+            String exceptionMessage
+            ZonedDateTime failedAt
+            String originalMessagePayload
+        }
+        class RedriveAllResult {
+            <<DTO>>
+            int totalMessages
+            int successCount
+            int failureCount
+            List~RedriveFailureDetail~ failures
+        }
+        class RedriveFailureDetail {
+            <<DTO>>
+            String dltMessageId
+            String reason
+        }
+    }
+
+    namespace user {
+        class UserBroadcastResponse {
+            <<DTO>>
+            Long broadcastId
+            String userId
+            String content
+            String readStatus
+            String deliveryStatus
+            String priority
+            String category
+            ZonedDateTime broadcastCreatedAt
+        }
+        class MessageReadRequest {
+            <<DTO>>
+            String userId
+            Long broadcastId
+        }
+    }
+
+    namespace cache {
+        class UserConnectionInfo {
+            <<DTO>>
+            String userId
+            String connectionId
+            String podName
+            String clusterName
+            ZonedDateTime connectedAt
+        }
+        class ConnectionMetadata {
+            <<DTO>>
+            String userId
+            String clusterName
+            long lastHeartbeatTimestamp
+        }
+        class PendingEventInfo {
+            <<DTO>>
+            String eventId
+            Long broadcastId
+            String eventType
+            String message
+        }
+    }
     
-    dto.MessageDeliveryEvent --|> dto.cache.PendingEventInfo : (is stored as)
+    RedriveAllResult "1" *-- "1" RedriveFailureDetail : contains
+    GeodeSsePayload o-- "1" MessageDeliveryEvent : contains
