@@ -5,7 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
 import java.time.ZonedDateTime;
 
 /**
@@ -16,7 +15,7 @@ import java.time.ZonedDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class BroadcastStatistics implements Serializable{
+public class BroadcastStatistics{
     private Long id;
     private Long broadcastId;
     private Integer totalTargeted;
