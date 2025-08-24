@@ -32,6 +32,7 @@ public class GeodeCacheService implements CacheService {
     private final Region<String, List<MessageDeliveryEvent>> pendingEventsRegion;
     private final Region<Long, BroadcastMessage> broadcastContentRegion;
     private final Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion;
+    private final Region<Long, List<String>> precomputedTargetsRegion;
 
     public GeodeCacheService(ObjectMapper objectMapper,
                              ClientCache clientCache,
@@ -41,7 +42,8 @@ public class GeodeCacheService implements CacheService {
                              @Qualifier("clusterPodHeartbeatsRegion") Region<String, Long> clusterPodHeartbeatsRegion,
                              @Qualifier("pendingEventsRegion") Region<String, List<MessageDeliveryEvent>> pendingEventsRegion,
                              @Qualifier("broadcastContentRegion") Region<Long, BroadcastMessage> broadcastContentRegion,
-                             @Qualifier("activeGroupBroadcastsRegion") Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion
+                             @Qualifier("activeGroupBroadcastsRegion") Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion,
+                             @Qualifier("precomputedTargetsRegion") Region<Long, List<String>> precomputedTargetsRegion
     ) {
         this.objectMapper = objectMapper;
         this.clientCache = clientCache;
@@ -52,6 +54,7 @@ public class GeodeCacheService implements CacheService {
         this.pendingEventsRegion = pendingEventsRegion;
         this.broadcastContentRegion = broadcastContentRegion;
         this.activeGroupBroadcastsRegion = activeGroupBroadcastsRegion;
+        this.precomputedTargetsRegion = precomputedTargetsRegion;
     }
 
 
@@ -206,6 +209,19 @@ public class GeodeCacheService implements CacheService {
         return Optional.ofNullable(clusterPodConnectionsRegion.get(podId))
                        .map(Set::size)
                        .orElse(0);
+    }
+
+    @Override
+    public void cachePrecomputedTargets(Long broadcastId, List<String> userIds) {
+        if (broadcastId != null && userIds != null && !userIds.isEmpty()) {
+            precomputedTargetsRegion.put(broadcastId, userIds);
+            log.info("[CACHE-WRITE] Cached {} pre-computed targets for broadcast ID: {}", userIds.size(), broadcastId);
+        }
+    }
+
+    @Override
+    public Optional<List<String>> getPrecomputedTargets(Long broadcastId) {
+        return Optional.ofNullable(precomputedTargetsRegion.get(broadcastId));
     }
 
     @Override

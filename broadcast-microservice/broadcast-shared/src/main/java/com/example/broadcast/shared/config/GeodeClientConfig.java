@@ -45,14 +45,12 @@ public class GeodeClientConfig {
                 .create();
     }
 
-    // Region for: userId -> serialized UserConnectionInfo JSON String
     @Bean("userConnectionsRegion")
     public Region<String, String> userConnectionsRegion(ClientCache clientCache) {
         return clientCache.<String, String>createClientRegionFactory(ClientRegionShortcut.PROXY)
                 .create(GeodeRegionNames.USER_CONNECTIONS);
     }
    
-    // Used like a distributed Set for tracking connections per pod
     @Bean("clusterPodConnectionsRegion")
     public Region<String, Set<String>> clusterPodConnectionsRegion(ClientCache clientCache) {
         return clientCache.<String, Set<String>>createClientRegionFactory(ClientRegionShortcut.PROXY)
@@ -65,7 +63,6 @@ public class GeodeClientConfig {
                 .create(GeodeRegionNames.CLUSTER_POD_HEARTBEATS);
     }
 
-    // NEW CONSOLIDATED REGION for connectionId -> {userId, heartbeatTimestamp}
     @Bean("connectionMetadataRegion")
     public Region<String, ConnectionMetadata> connectionMetadataRegion(ClientCache clientCache) {
         return clientCache.<String, ConnectionMetadata>createClientRegionFactory(ClientRegionShortcut.PROXY)
@@ -88,6 +85,12 @@ public class GeodeClientConfig {
     public Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion(ClientCache clientCache) {
         return clientCache.<String, List<BroadcastMessage>>createClientRegionFactory(ClientRegionShortcut.PROXY)
                 .create(GeodeRegionNames.ACTIVE_GROUP_BROADCASTS);
+    }
+
+    @Bean("precomputedTargetsRegion")
+    public Region<Long, List<String>> precomputedTargetsRegion(ClientCache clientCache) {
+        return clientCache.<Long, List<String>>createClientRegionFactory(ClientRegionShortcut.PROXY)
+                .create(GeodeRegionNames.PRECOMPUTED_TARGETS);
     }
 
     @Bean("sseMessagesRegion")

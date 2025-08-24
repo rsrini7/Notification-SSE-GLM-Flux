@@ -7,6 +7,7 @@ import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
 import com.example.broadcast.shared.exception.UserServiceUnavailableException;
+import com.example.broadcast.shared.service.cache.CacheService;
 
 import com.example.broadcast.shared.util.Constants;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
@@ -31,6 +32,7 @@ public class BroadcastTargetingService {
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
     private final AppProperties appProperties;
+    private final CacheService cacheService;
 
     /**
      * Efficiently counts the number of target users for 'ALL' or 'ROLE' broadcasts without fetching all user IDs.
@@ -87,7 +89,10 @@ public class BroadcastTargetingService {
             // 3. Store the results in the new table
             userBroadcastTargetRepository.batchInsert(broadcastId, targetUserIds);
 
-            // 4. Mark the broadcast as READY for activation
+            // 4. Cache the result after saving to DB
+            cacheService.cachePrecomputedTargets(broadcastId, targetUserIds);
+
+            // 5. Mark the broadcast as READY for activation
             broadcastRepository.updateStatus(broadcastId, Constants.BroadcastStatus.READY.name());
             log.info("Successfully pre-computed and stored {} users for broadcast ID: {}", targetUserIds.size(), broadcastId);
 

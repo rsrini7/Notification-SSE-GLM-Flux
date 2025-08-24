@@ -12,7 +12,7 @@ sequenceDiagram
     
     UserUI->>+UserMsgSvc: 3- GET /api/user/messages (to populate inbox)
     Note over UserMsgSvc: 4- Begins complex fetch logic... 
-    UserMsgSvc->>+GeodeCache: 5- Checks various Geode regions (active-group-broadcasts, broadcast-content)
+    UserMsgSvc->>+GeodeCache: 5- Checks various Geode regions (precomputed-targets, active-group-broadcasts, broadcast-content)
     alt Some regions have cache misses
         GeodeCache-->>UserMsgSvc: 
         UserMsgSvc->>+DB: 6- Queries database for required information

@@ -192,8 +192,18 @@ public class KafkaOrchestratorConsumerService {
     private List<String> determineTargetUsers(BroadcastMessage broadcast) {
         String targetType = broadcast.getTargetType();
         if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
+            // 1. Try to get the list from the cache
+            Optional<List<String>> cachedTargets = cacheService.getPrecomputedTargets(broadcast.getId());
+            if (cachedTargets.isPresent()) {
+                log.info("[CACHE_HIT] Found pre-computed targets for broadcast {} in Geode.", broadcast.getId());
+                return cachedTargets.get();
+            }
+            
+            // 2. Fall back to the database if not in cache (for resilience)
+            log.warn("[CACHE_MISS] Pre-computed targets for broadcast {} not found in cache. Falling back to DB.", broadcast.getId());
             return userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
         }
+        
         
         if (Constants.TargetType.ALL.name().equals(targetType)) {
             return userService.getAllUserIds();
