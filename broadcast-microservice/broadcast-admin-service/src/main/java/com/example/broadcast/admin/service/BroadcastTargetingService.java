@@ -1,15 +1,20 @@
 package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.config.AppProperties;
+import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
+import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
 import com.example.broadcast.shared.exception.UserServiceUnavailableException;
-import com.example.broadcast.shared.service.cache.CacheService;
 
 import com.example.broadcast.shared.util.Constants;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
@@ -19,9 +24,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.scheduling.annotation.Async;
 
 import java.util.concurrent.ThreadLocalRandom;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -32,7 +40,9 @@ public class BroadcastTargetingService {
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastTargetRepository userBroadcastTargetRepository;
     private final AppProperties appProperties;
-    private final CacheService cacheService;
+    private final OutboxEventPublisher outboxEventPublisher;
+    private final ObjectMapper objectMapper;
+
 
     /**
      * Efficiently counts the number of target users for 'ALL' or 'ROLE' broadcasts without fetching all user IDs.
@@ -89,8 +99,8 @@ public class BroadcastTargetingService {
             // 3. Store the results in the new table
             userBroadcastTargetRepository.batchInsert(broadcastId, targetUserIds);
 
-            // 4. Cache the result after saving to DB
-            cacheService.cachePrecomputedTargets(broadcastId, targetUserIds);
+            // 4. Notify kafka orchestrator to Cache the result after saving to DB
+            publishTargetsPrecomputedEvent(broadcastId);
 
             // 5. Mark the broadcast as READY for activation
             broadcastRepository.updateStatus(broadcastId, Constants.BroadcastStatus.READY.name());
@@ -99,6 +109,32 @@ public class BroadcastTargetingService {
         } catch (Exception e) {
             log.error("Failed to pre-compute users for broadcast ID: {}. Setting status to FAILED.", broadcastId, e);
             broadcastRepository.updateStatus(broadcastId, Constants.BroadcastStatus.FAILED.name());
+        }
+    }
+
+    private void publishTargetsPrecomputedEvent(Long broadcastId) {
+        MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .broadcastId(broadcastId)
+                .eventType(Constants.EventType.TARGETS_PRECOMPUTED.name())
+                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                .build();
+
+        String topicName = appProperties.getKafka().getTopic().getNameOrchestration();
+        try {
+            String payloadJson = objectMapper.writeValueAsString(eventPayload);
+            OutboxEvent outboxEvent = OutboxEvent.builder()
+                    .id(UUID.fromString(eventPayload.getEventId()))
+                    .aggregateType(eventPayload.getClass().getSimpleName())
+                    .aggregateId(broadcastId.toString())
+                    .eventType(eventPayload.getEventType())
+                    .topic(topicName)
+                    .payload(payloadJson)
+                    .createdAt(eventPayload.getTimestamp())
+                    .build();
+            outboxEventPublisher.publish(outboxEvent);
+        } catch (JsonProcessingException e) {
+            log.error("Critical: Failed to serialize TARGETS_PRECOMPUTED event for outbox for broadcastId {}.", broadcastId, e);
         }
     }
     

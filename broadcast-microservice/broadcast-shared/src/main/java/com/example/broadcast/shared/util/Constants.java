@@ -54,7 +54,8 @@ public final class Constants {
         READ,
         CANCELLED,
         EXPIRED,
-        FAILED
+        FAILED,
+        TARGETS_PRECOMPUTED
     }
 
     public enum SseEventType {

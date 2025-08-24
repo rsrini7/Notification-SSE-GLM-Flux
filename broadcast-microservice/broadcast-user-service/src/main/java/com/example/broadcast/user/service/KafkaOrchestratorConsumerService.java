@@ -60,9 +60,8 @@ public class KafkaOrchestratorConsumerService {
         log.info("Orchestration event received for type '{}' on broadcast ID: {}. [Topic: {}, Partition: {}, Offset: {}]", event.getEventType(), event.getBroadcastId(), topic, partition, offset);
         
         // Route user-specific events directly
-        if (event.getUserId() != null) {
-            log.info("Received a user-specific event for user {}. Scattering directly.", event.getUserId());
-            handleUserSpecificEvent(event);
+        if (Constants.EventType.TARGETS_PRECOMPUTED.name().equals(event.getEventType())) {
+            handleTargetsPrecomputedEvent(event);
             acknowledgment.acknowledge();
             return;
         }
@@ -105,14 +104,18 @@ public class KafkaOrchestratorConsumerService {
         acknowledgment.acknowledge();
     }
 
-    private void handleUserSpecificEvent(MessageDeliveryEvent event) {
-        switch (Constants.EventType.valueOf(event.getEventType())) {
-            case CREATED, READ:
-                scatterToUser(event);
-                break;
-            default:
-                log.warn("Unhandled user-specific event type in orchestrator: {}", event.getEventType());
-                break;
+    private void handleTargetsPrecomputedEvent(MessageDeliveryEvent event) {
+        Long broadcastId = event.getBroadcastId();
+        log.info("Processing TARGETS_PRECOMPUTED event for broadcast ID: {}", broadcastId);
+        try {
+            List<String> targetUserIds = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcastId);
+            if (targetUserIds.isEmpty()) {
+                log.warn("No pre-computed targets found in DB for broadcast ID: {}. Cache will not be populated.", broadcastId);
+                return;
+            }
+            cacheService.cachePrecomputedTargets(broadcastId, targetUserIds);
+        } catch (Exception e) {
+            log.error("Failed to process TARGETS_PRECOMPUTED event for broadcast ID: {}. The cache may not be populated.", broadcastId, e);
         }
     }
 
