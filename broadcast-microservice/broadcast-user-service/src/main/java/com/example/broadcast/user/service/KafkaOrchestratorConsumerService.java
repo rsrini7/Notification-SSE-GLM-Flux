@@ -190,33 +190,35 @@ public class KafkaOrchestratorConsumerService {
     }
 
     private List<String> determineTargetUsers(BroadcastMessage broadcast) {
-        String targetType = broadcast.getTargetType();
-        if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
-            // 1. Try to get the list from the cache
-            Optional<List<String>> cachedTargets = cacheService.getPrecomputedTargets(broadcast.getId());
-            if (cachedTargets.isPresent()) {
-                log.info("[CACHE_HIT] Found pre-computed targets for broadcast {} in Geode.", broadcast.getId());
-                return cachedTargets.get();
+        Constants.TargetType targetTypeEnum;
+        try {
+            // Convert the string to our type-safe enum
+            targetTypeEnum = Constants.TargetType.valueOf(broadcast.getTargetType());
+        } catch (IllegalArgumentException e) {
+            log.warn("Unknown broadcast targetType '{}' for broadcast ID {}. No users will be targeted.", broadcast.getTargetType(), broadcast.getId());
+            return Collections.emptyList();
+        }
+
+        // Use a modern switch expression for clarity and conciseness
+        return switch (targetTypeEnum) {
+            case PRODUCT -> {
+                // 1. Try to get the list from the cache
+                Optional<List<String>> cachedTargets = cacheService.getPrecomputedTargets(broadcast.getId());
+                if (cachedTargets.isPresent()) {
+                    log.info("[CACHE_HIT] Found pre-computed targets for broadcast {} in Geode.", broadcast.getId());
+                    yield cachedTargets.get();
+                }
+
+                // 2. Fall back to the database if not in cache (for resilience)
+                log.warn("[CACHE_MISS] Pre-computed targets for broadcast {} not found in cache. Falling back to DB.", broadcast.getId());
+                yield userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
             }
-            
-            // 2. Fall back to the database if not in cache (for resilience)
-            log.warn("[CACHE_MISS] Pre-computed targets for broadcast {} not found in cache. Falling back to DB.", broadcast.getId());
-            return userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
-        }
-        
-        
-        if (Constants.TargetType.ALL.name().equals(targetType)) {
-            return userService.getAllUserIds();
-        }
-        if (Constants.TargetType.ROLE.name().equals(targetType)) {
-            return broadcast.getTargetIds().stream()
+            case ALL -> userService.getAllUserIds();
+            case ROLE -> broadcast.getTargetIds().stream()
                     .flatMap(role -> userService.getUserIdsByRole(role).stream())
                     .distinct()
                     .collect(Collectors.toList());
-        }
-        if (Constants.TargetType.SELECTED.name().equals(targetType)) {
-            return broadcast.getTargetIds();
-        }
-        return Collections.emptyList();
+            case SELECTED -> broadcast.getTargetIds();
+        };
     }
 }
