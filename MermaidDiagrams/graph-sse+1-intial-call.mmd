@@ -1,0 +1,29 @@
+graph TD
+    subgraph "✅ Current Architecture: Decoupled Calls (Recommended)"
+        direction TB
+        A1(User UI Loads) --> A2(Establishes SSE Connection<br/>/sse/connect);
+        A1 --> B1(Fetches Full Inbox<br/>/api/user/messages);
+
+        A2 --> A3("<div style='background-color:#dcfce7; padding: 5px; border-radius: 5px;'>SSE Stream Opens Immediately (ms)</div>");
+        A3 --> A4(Real-time Channel is Ready);
+
+        B1 --> B2{DB Query & Logic};
+        B2 -- Success --> B3("<div style='background-color:#dcfce7; padding: 5px; border-radius: 5px;'>Full Inbox State Received</div>");
+        B2 -- Failure --> B4("<div style='background-color:#fee2e2; padding: 5px; border-radius: 5px;'>DB Query Fails</div>");
+
+        B4 --> B5(UI Shows Error, Can Retry API Call.<br/><b>SSE Connection is Unaffected.</b>);
+
+        A4 & B3 --> C1(<b>Final State:</b><br/>UI is Fully Loaded & Real-time);
+    end
+
+    subgraph "❌ Alternative: Combined Call(Not Recommended)"
+        direction TB
+        D1(User UI Loads) --> D2(Connects to /sse/connect with<br/>embedded inbox logic);
+        D2 --> D3{DB Query & Logic};
+        
+        D3 -- Success --> D4("<div style='background-color:#ffedd5; padding: 5px; border-radius: 5px;'>⚠️ SSE Stream Opens After Delay (seconds)</div>");
+        D4 --> E1(<b>Final State:</b><br/>UI is Fully Loaded & Real-time);
+
+        D3 -- Failure --> D5("<div style='background-color:#fee2e2; padding: 5px; border-radius: 5px;'>DB Query Fails</div>");
+        D5 --> D6("<b>ENTIRE Connection Fails (500 Error).</b><br/>Must retry the whole process.");
+    end

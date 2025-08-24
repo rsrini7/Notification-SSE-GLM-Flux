@@ -1,0 +1,44 @@
+sequenceDiagram
+    autonumber
+
+    participant UserUI
+    participant UserService as User Service (Controllers)
+    participant SseService
+    participant UserMessageService
+    participant GeodeCache
+    participant DB as PostgreSQL DB
+    participant AdminService
+    participant Kafka
+
+    note over UserUI, DB: Stage 1: Initial Data Fetch (Parallel Operations)
+
+    par "Establish SSE Connection" AND "Fetch Full Inbox via API"
+        UserUI->>+UserService: 1a- GET /sse/connect
+        UserService->>+SseService: 2a- createEventStream()
+        SseService->>+GeodeCache: 3a- Registers connection
+        GeodeCache-->>-SseService: ...
+        note over SseService: Pushes any pending offline messages immediately
+        SseService-->>-UserUI: 4a- SSE Stream is established for future events
+
+    and
+        UserUI->>+UserService: 1b- GET /api/user/messages
+        UserService->>+UserMessageService: 2b- getUserMessages()
+        UserMessageService->>+GeodeCache: 3b- Gets cached group broadcasts (ALL/ROLE)
+        GeodeCache-->>-UserMessageService: ...
+        UserMessageService->>+DB: 4b- Gets user-specific messages (SELECTED) & read status
+        DB-->>-UserMessageService: ...
+        UserMessageService-->>-UserService: 5b- Returns full, assembled inbox list
+        UserService-->>-UserUI: 6b- 200 OK with JSON payload
+    end
+
+    note over UserUI: 7- UI renders the complete inbox from the API call response.
+
+    note over AdminService, UserUI: Stage 2: A New Real-time Message Arrives
+    AdminService->>+Kafka: 8- A new broadcast event is published
+    Kafka-->>-AdminService: ...
+
+    Kafka->>+UserService: 9- Event is consumed by orchestrator
+    note over UserService: Event is scattered to the correct worker pod via Geode CQs.
+    
+    UserService->>+SseService: 10- Forwards event to the live connection handler
+    SseService-->>-UserUI: 11- Pushes NEW message via the open SSE connection
