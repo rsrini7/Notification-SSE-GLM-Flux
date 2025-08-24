@@ -95,6 +95,9 @@ broadcast-microservice/
 ├── broadcast-shared/                 # Shared module
 │   ├── pom.xml                       # Shared module Maven file
 │   ├── src/                          # Shared source code
+├── broadcast-geode-shared/           # Shared module
+│   ├── pom.xml                       # Shared module Maven file
+│   ├── src/                          # Shared source code
 ├── broadcast-user-service/           # User service module
 │   ├── pom.xml                       # User service Maven file
 │   ├── src/                          # Source code

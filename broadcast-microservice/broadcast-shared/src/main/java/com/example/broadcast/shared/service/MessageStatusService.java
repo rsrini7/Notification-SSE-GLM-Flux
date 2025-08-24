@@ -1,4 +1,3 @@
-// file: broadcast-microservice/broadcast-shared/src/main/java/com/example/broadcast/shared/service/MessageStatusService.java
 package com.example.broadcast.shared.service;
 
 import com.example.broadcast.shared.config.AppProperties;

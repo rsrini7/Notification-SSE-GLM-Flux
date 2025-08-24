@@ -18,7 +18,7 @@ RUN apt-get update && \
 # Copy the scripts and JAR file into the image
 USER root
 COPY *.sh /geode-scripts/
-COPY broadcast-shared-1.0.0.jar /geode-server/classpath/app.jar
+COPY broadcast-geode-shared-1.0.0.jar /geode-server/classpath/app.jar
 RUN chmod +x /geode-scripts/*.sh && \
     chown -R geode:geode /geode-scripts /geode-server
 

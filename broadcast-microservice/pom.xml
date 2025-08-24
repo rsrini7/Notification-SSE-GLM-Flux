@@ -20,6 +20,7 @@
     <description>Parent POM for the Broadcast Messaging System</description>
 
     <modules>
+        <module>broadcast-geode-shared</module>
         <module>broadcast-shared</module>
         <module>broadcast-admin-service</module>
         <module>broadcast-user-service</module>

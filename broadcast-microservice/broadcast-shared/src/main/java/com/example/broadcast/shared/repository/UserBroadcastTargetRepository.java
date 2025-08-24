@@ -1,5 +1,3 @@
-// file: broadcast-microservice/broadcast-shared/src/main/java/com/example/broadcast/shared/repository/UserBroadcastTargetRepository.java
-
 package com.example.broadcast.shared.repository;
 
 import lombok.RequiredArgsConstructor;
