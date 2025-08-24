@@ -142,7 +142,7 @@ services:
       - "8081:8081"
     environment:
       - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g
-      - SPRING_PROFILES_ACTIVE=dev-pg,admin-only
+      - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - BROADCAST_GEODE_LOCATOR_HOST=geode-locator
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-prod:29093

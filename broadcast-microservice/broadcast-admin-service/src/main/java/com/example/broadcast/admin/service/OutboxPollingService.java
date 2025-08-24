@@ -1,4 +1,4 @@
-package com.example.broadcast.shared.service;
+package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.OutboxEvent;
@@ -10,7 +10,6 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.context.annotation.Profile;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -22,7 +21,6 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
-@Profile("admin-only")
 public class OutboxPollingService {
 
     private final OutboxRepository outboxRepository;

@@ -1,1 +1,1 @@
-mvn spring-boot:run "-Dspring-boot.run.profiles=dev-pg,admin-only"
+mvn spring-boot:run "-Dspring-boot.run.profiles=dev-pg"

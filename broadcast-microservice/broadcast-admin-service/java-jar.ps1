@@ -14,7 +14,7 @@ try {
 
     Write-Host "Starting admin-service with DYNAMIC pod name: $podName... Press Ctrl+C to stop." -ForegroundColor Green
     
-    java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg,admin-only" "-Dpod.name=$podName" "-Dcluster.name=cluster-a" -jar target/broadcast-admin-service-1.0.0.jar
+    java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" "-Dpod.name=$podName" "-Dcluster.name=cluster-a" -jar target/broadcast-admin-service-1.0.0.jar
 }
 catch [System.Management.Automation.PipelineStoppedException] {
     # This block specifically catches the Ctrl+C interrupt.

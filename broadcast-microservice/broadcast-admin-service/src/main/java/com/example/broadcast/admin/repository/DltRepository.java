@@ -1,4 +1,4 @@
-package com.example.broadcast.shared.repository;
+package com.example.broadcast.admin.repository;
 
 import com.example.broadcast.shared.dto.admin.DltMessage;
 import lombok.RequiredArgsConstructor;

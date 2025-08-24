@@ -7,7 +7,6 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.repository.BroadcastRepository;
-import com.example.broadcast.shared.repository.DltRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -17,6 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.example.broadcast.admin.repository.DltRepository;
 import com.example.broadcast.shared.config.AppProperties;
 
 import java.util.Collection;

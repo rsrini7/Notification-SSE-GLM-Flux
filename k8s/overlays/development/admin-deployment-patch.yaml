@@ -17,7 +17,7 @@ spec:
               memory: "2Gi"
           env:
             - name: SPRING_PROFILES_ACTIVE
-              value: "dev-pg,admin-only"
+              value: "dev-pg"
             - name: SPRING_DATASOURCE_URL
               value: "jdbc:postgresql://postgres-service:5432/broadcastdb"
             - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME

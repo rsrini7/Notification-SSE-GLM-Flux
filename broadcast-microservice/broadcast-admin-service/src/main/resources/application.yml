@@ -9,9 +9,6 @@ server:
     key-store: "classpath:keystore.p12"
     key-store-password: "password"
     key-alias: "netty"
-spring:
-  profiles:
-    default: admin-only
   application:
     name: broadcast-admin-service # Admin service name
   threads:

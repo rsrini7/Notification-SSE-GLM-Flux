@@ -1,9 +1,9 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.admin.repository.DltRepository;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.admin.DltMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
-import com.example.broadcast.shared.repository.DltRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.fasterxml.jackson.core.JsonProcessingException;
