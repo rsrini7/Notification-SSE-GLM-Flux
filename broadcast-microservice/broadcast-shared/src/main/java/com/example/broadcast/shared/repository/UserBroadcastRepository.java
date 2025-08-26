@@ -124,11 +124,6 @@ public class UserBroadcastRepository {
         String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND broadcast_id = ?";
         return jdbcTemplate.query(sql, userBroadcastRowMapper, userId, broadcastId).stream().findFirst();
     }
-    
-    public int updateStatusToPending(Long id) {
-        String sql = "UPDATE user_broadcast_messages SET delivery_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
-        return jdbcTemplate.update(sql, DeliveryStatus.PENDING.name(), id);
-    }
 
     public List<UserBroadcastMessage> findByBroadcastId(Long broadcastId) {
         String sql = "SELECT * FROM user_broadcast_messages WHERE broadcast_id = ? ORDER BY user_id";
@@ -170,15 +165,6 @@ public class UserBroadcastRepository {
         });
     }
 
-    public int updatePendingStatusesByBroadcastId(Long broadcastId, String newStatus) {
-        String sql = """
-            UPDATE user_broadcast_messages 
-            SET delivery_status = ?, updated_at = CURRENT_TIMESTAMP 
-            WHERE broadcast_id = ? AND delivery_status = 'PENDING'
-        """;
-        return jdbcTemplate.update(sql, newStatus, broadcastId);
-    }
-
      /**
      * NEW METHOD: Updates all user messages for a broadcast (both PENDING and DELIVERED) to a new status.
      * This is used during expiration to ensure consistency for all targeted users.
@@ -190,11 +176,6 @@ public class UserBroadcastRepository {
             WHERE broadcast_id = ? AND delivery_status IN ('PENDING', 'DELIVERED')
         """;
         return jdbcTemplate.update(sql, newStatus, broadcastId);
-    }
-
-    public List<String> findBroadcastReceivers(Long broadcastId) {
-        String sql = "SELECT user_id FROM user_broadcast_messages WHERE broadcast_id = ?";
-        return jdbcTemplate.queryForList(sql, String.class, broadcastId);
     }
 
     public List<Long> findReadBroadcastIdsByUserId(String userId) {

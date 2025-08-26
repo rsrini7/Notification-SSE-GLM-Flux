@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+
+    participant Scheduler as Unified Activation Service
+    participant DB as PostgreSQL DB
+    participant TargetingSvc as BroadcastTargetingService (Async)
+    participant LifecycleSvc as BroadcastLifecycleService
+
+    loop Every 1 Minute
+        note over Scheduler, DB: Phase 1: Find & Start Pre-computation for PRODUCT broadcasts
+        Scheduler->>+DB: 1- Find scheduled PRODUCT broadcasts in pre-fetch window
+        DB-->>-Scheduler: 2- Returns list of broadcasts to prepare
+
+        loop For each broadcast to prepare
+            Scheduler-)+TargetingSvc: 3- precomputeAndStoreTargetUsers() [Async Call]
+        end
+
+        note over Scheduler, DB: Phase 2: Activate READY broadcasts (PRODUCT)
+        Scheduler->>+DB: 4- Find READY broadcasts where scheduled_at <= now()
+        DB-->>-Scheduler: 5- Returns list of prepared broadcasts
+
+        loop For each READY broadcast
+            Scheduler->>+LifecycleSvc: 6- processReadyBroadcast(id)
+            LifecycleSvc-->>-Scheduler: 
+        end
+
+        note over Scheduler, DB: Phase 3: Activate SCHEDULED broadcasts (ALL/ROLE/SELECTED)
+        Scheduler->>+DB: 7- Find SCHEDULED (non-PRODUCT) broadcasts where scheduled_at <= now()
+        DB-->>-Scheduler: 8- Returns list of simple scheduled broadcasts
+
+        loop For each SCHEDULED broadcast
+            Scheduler->>+LifecycleSvc: 9- activateAndPublishFanOutOnReadBroadcast(id)
+            LifecycleSvc-->>-Scheduler: 
+        end
+    end

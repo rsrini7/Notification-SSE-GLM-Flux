@@ -43,17 +43,6 @@ public class UserBroadcastTargetRepository {
     }
 
     /**
-     * Counts the number of targeted users for a broadcast.
-     * @param broadcastId The ID of the broadcast.
-     * @return The total count of targeted users.
-     */
-    public int countByBroadcastId(Long broadcastId) {
-        String sql = "SELECT COUNT(*) FROM broadcast_user_targets WHERE broadcast_id = ?";
-        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, broadcastId);
-        return count != null ? count : 0;
-    }
-
-    /**
      * Deletes all target user entries for a given broadcast.
      * @param broadcastId The ID of the broadcast to clean up.
      */

@@ -198,17 +198,6 @@ public class BroadcastRepository {
         return jdbcTemplate.query(sql, broadcastResponseRowMapper);
     }
 
-    @Transactional
-    public List<BroadcastMessage> findAndLockScheduledBroadcastsToProcess(ZonedDateTime now, int limit) {
-        String sql = """
-            SELECT * FROM broadcast_messages
-            WHERE status = 'SCHEDULED' AND scheduled_at <= ?
-            ORDER BY scheduled_at
-            LIMIT ?
-            """;
-        return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime(), limit);
-    }
-
     public List<BroadcastMessage> findExpiredBroadcasts(ZonedDateTime now) {
         String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at <= ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime());
@@ -241,12 +230,7 @@ public class BroadcastRepository {
         String sql = "UPDATE broadcast_messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
         return jdbcTemplate.update(sql, status, broadcastId);
     }
-
-    public List<BroadcastMessage> findScheduledBroadcastsWithinWindow(ZonedDateTime cutoffTime) {
-        String sql = "SELECT * FROM broadcast_messages WHERE status = 'SCHEDULED' AND scheduled_at <= ?";
-        return jdbcTemplate.query(sql, broadcastRowMapper, cutoffTime.toOffsetDateTime());
-    }
-
+    
     // NEW METHOD for the Scheduling Service
     @Transactional
     public List<BroadcastMessage> findAndLockReadyBroadcastsToProcess(ZonedDateTime now, int limit) {

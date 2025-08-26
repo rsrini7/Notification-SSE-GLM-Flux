@@ -84,12 +84,4 @@ public class BroadcastStatisticsRepository {
         String sql = "UPDATE broadcast_statistics SET total_read = total_read + 1, calculated_at = CURRENT_TIMESTAMP WHERE broadcast_id = ?";
         return jdbcTemplate.update(sql, broadcastId);
     }
-
-    public int incrementDeliveredCountBy(Long broadcastId, int count) {
-        if (count <= 0) {
-            return 0;
-        }
-        String sql = "UPDATE broadcast_statistics SET total_delivered = total_delivered + ?, calculated_at = CURRENT_TIMESTAMP WHERE broadcast_id = ?";
-        return jdbcTemplate.update(sql, count, broadcastId);
-    }
 }
