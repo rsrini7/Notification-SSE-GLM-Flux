@@ -22,9 +22,6 @@ public interface CacheService {
     void removeConnections(Set<String> connectionIds);
     long getTotalActiveUsers();
     long getPodActiveUsers(String podId);
-    void cachePrecomputedTargets(Long broadcastId, List<String> userIds);
-    Optional<List<String>> getPrecomputedTargets(Long broadcastId);
-
     List<String> getOnlineUsers();
     void cachePendingEvent(MessageDeliveryEvent event, String podName);
     List<MessageDeliveryEvent> getPendingEvents(String userId, String clusterName);

@@ -24,7 +24,6 @@ query --query="SELECT e.key, e.value FROM /cluster-pod-connections.entries e"
 query --query="SELECT e.key, e.value FROM /cluster-pod-heartbeats.entries e"
 query --query="SELECT e.key, e.value FROM /user-connections.entries e"
 query --query="SELECT e.key, e.value FROM /active-group-broadcasts.entries e"
-query --query="SELECT e.key, e.value FROM /precomputed-targets.entries e"
 query --query="SELECT e.key, e.value FROM /sse-messages.entries e"
 
 query --query="SELECT * FROM /sse-messages"

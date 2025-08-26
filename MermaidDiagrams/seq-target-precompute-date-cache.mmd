@@ -25,7 +25,4 @@ sequenceDiagram
     Orchestrator->>+DB: 5- Reads the pre-computed user list from 'broadcast_user_targets'
     DB-->>-Orchestrator: Returns user list
 
-    Orchestrator->>+GeodeCache: 6- Caches the user list in the 'precomputed-targets' region
-    GeodeCache-->>-Orchestrator: ... 
-    
-    Orchestrator-->>-Kafka: 7- Acknowledges Kafka message
+    Orchestrator-->>-Kafka: 6- Acknowledges Kafka message

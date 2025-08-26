@@ -182,4 +182,28 @@ public class UserBroadcastRepository {
         String sql = "SELECT broadcast_id FROM user_broadcast_messages WHERE user_id = ? AND read_status = 'READ'";
         return jdbcTemplate.queryForList(sql, Long.class, userId);
     }
+
+    /**
+     * NEW METHOD: Finds all message records for a user that have not been read.
+     * This is used to fetch the primary list of messages for a user's inbox.
+     * @param userId The ID of the user.
+     * @return A list of unread UserBroadcastMessage objects, sorted by most recent first.
+     */
+    public List<UserBroadcastMessage> findUnreadByUserId(String userId) {
+        String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND read_status = 'UNREAD' ORDER BY created_at DESC";
+        return jdbcTemplate.query(sql, userBroadcastRowMapper, userId);
+    }
+
+    /**
+     * NEW METHOD: Deletes all message records for a specific broadcast
+     * that have NOT been marked as 'READ'.
+     * This is used by the cleanup service to enforce data retention policies.
+     * @param broadcastId The ID of the finalized (EXPIRED or CANCELLED) broadcast.
+     * @return The number of rows deleted.
+     */
+    public int deleteUnreadMessagesByBroadcastId(Long broadcastId) {
+        String sql = "DELETE FROM user_broadcast_messages WHERE broadcast_id = ? AND read_status <> 'READ'";
+        return jdbcTemplate.update(sql, broadcastId);
+    }
+
 }

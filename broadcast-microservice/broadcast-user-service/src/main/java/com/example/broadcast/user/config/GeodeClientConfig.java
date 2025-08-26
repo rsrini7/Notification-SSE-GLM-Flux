@@ -86,12 +86,6 @@ public class GeodeClientConfig {
                 .create(GeodeRegionNames.ACTIVE_GROUP_BROADCASTS);
     }
 
-    @Bean("precomputedTargetsRegion")
-    public Region<Long, List<String>> precomputedTargetsRegion(ClientCache clientCache) {
-        return clientCache.<Long, List<String>>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create(GeodeRegionNames.PRECOMPUTED_TARGETS);
-    }
-
     @Bean("sseMessagesRegion")
     public Region<String, Object> sseMessagesRegion(ClientCache clientCache) {
         return clientCache.<String, Object>createClientRegionFactory(ClientRegionShortcut.PROXY)

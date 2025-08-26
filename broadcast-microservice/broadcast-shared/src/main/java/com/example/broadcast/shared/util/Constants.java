@@ -16,7 +16,6 @@ public final class Constants {
         public static final String PENDING_EVENTS = "pending-events";
         public static final String BROADCAST_CONTENT = "broadcast-content";
         public static final String ACTIVE_GROUP_BROADCASTS = "active-group-broadcasts";
-        public static final String PRECOMPUTED_TARGETS = "precomputed-targets";
         public static final String SSE_MESSAGES = "sse-messages";
     }
 
@@ -54,8 +53,7 @@ public final class Constants {
         READ,
         CANCELLED,
         EXPIRED,
-        FAILED,
-        TARGETS_PRECOMPUTED
+        FAILED
     }
 
     public enum SseEventType {

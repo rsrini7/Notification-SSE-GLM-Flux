@@ -8,7 +8,6 @@ import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.service.MessageStatusService;
-import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.user.service.cache.CacheService;
 
@@ -29,6 +28,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -40,58 +40,48 @@ public class UserMessageService {
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final MessageStatusService messageStatusService;
     private final CacheService cacheService;
-    private final UserService userService;
     private final BroadcastMapper broadcastMapper;
     private final Scheduler jdbcScheduler;
 
     @Transactional(readOnly = true)
     public Mono<List<UserBroadcastResponse>> getUserMessages(String userId) {
-        log.info("Getting all unread messages for user: {}", userId);
-        
-        // getActiveBroadcastsForUser now fetches ALL, ROLE, and SELECTED messages, and filters out read ones.
-        return this.getActiveBroadcastsForUser(userId)
-            .map(allUnreadBroadcasts -> {
-                log.info("Assembled a total of {} messages for user {}", allUnreadBroadcasts.size(), userId);
-                return allUnreadBroadcasts.stream()
-                    .map(broadcast -> broadcastMapper.toUserBroadcastResponse(null, broadcast))
-                    .sorted(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed())
-                    .collect(Collectors.toList());
-            });
-    }
+        log.info("Assembling inbox for user: {}", userId);
 
-    @Transactional(readOnly = true)
-    public Mono<List<BroadcastMessage>> getActiveBroadcastsForUser(String userId) {
         return Mono.fromCallable(() -> {
-            List<Long> readBroadcastIds = userBroadcastRepository.findReadBroadcastIdsByUserId(userId);
-            Set<Long> readBroadcastIdSet = new HashSet<>(readBroadcastIds);
+            // Step 1: Directly fetch all unread targeted messages for the user.
+            // This now covers SELECTED, ROLE, and PRODUCT types efficiently.
+            List<UserBroadcastMessage> unreadTargetedMessages = userBroadcastRepository.findUnreadByUserId(userId);
 
-            List<String> userRoles = userService.getRolesForUser(userId);
-            List<BroadcastMessage> roleBroadcasts = userRoles.stream()
-                    .flatMap(role -> getActiveBroadcastsForRole(role).stream())
-                    .distinct()
-                    .collect(Collectors.toList());
-            List<BroadcastMessage> allUserBroadcasts = getActiveBroadcastsForAll();
-            List<BroadcastMessage> selectedBroadcasts = broadcastRepository.findActiveSelectedBroadcastsForUser(userId);
+            // Step 2: Fetch all active 'ALL' type broadcasts (fan-out on read).
+            List<BroadcastMessage> allTypeBroadcasts = getActiveBroadcastsForAll();
+
+            // Step 3: Get IDs of 'ALL' broadcasts the user has already marked as read to filter them out.
+            Set<Long> readBroadcastIds = new HashSet<>(userBroadcastRepository.findReadBroadcastIdsByUserId(userId));
+
+            // Step 4: Convert the unread targeted messages into response DTOs.
+            // This uses a read-through cache pattern for performance.
+            Stream<UserBroadcastResponse> targetedResponses = unreadTargetedMessages.stream()
+                .map(msg -> {
+                    BroadcastMessage broadcast = cacheService.getBroadcastContent(msg.getBroadcastId())
+                        .orElseGet(() -> broadcastRepository.findById(msg.getBroadcastId()).orElse(null));
+                    return broadcast != null ? broadcastMapper.toUserBroadcastResponse(msg, broadcast) : null;
+                })
+                .filter(Objects::nonNull);
+
+            // Step 5: Convert the unread 'ALL' type broadcasts into response DTOs.
+            Stream<UserBroadcastResponse> allTypeResponses = allTypeBroadcasts.stream()
+                .filter(broadcast -> !readBroadcastIds.contains(broadcast.getId()))
+                .map(broadcast -> broadcastMapper.toUserBroadcastResponse(null, broadcast));
+
+            // Step 6: Combine both streams, sort by creation date, and collect into the final list.
+            List<UserBroadcastResponse> finalInbox = Stream.concat(targetedResponses, allTypeResponses)
+                .sorted(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed())
+                .collect(Collectors.toList());
             
-            return Stream.of(roleBroadcasts, allUserBroadcasts, selectedBroadcasts)
-                    .flatMap(List::stream)
-                    .distinct()
-                    .filter(broadcast -> !readBroadcastIdSet.contains(broadcast.getId()))
-                    .collect(Collectors.toList());
-        }).subscribeOn(jdbcScheduler);
-    }
+            log.info("Assembled a total of {} messages for user {}", finalInbox.size(), userId);
+            return finalInbox;
 
-    private List<BroadcastMessage> getActiveBroadcastsForRole(String role) {
-        final String cacheKey = "ROLE:" + role;
-        List<BroadcastMessage> cachedBroadcasts = cacheService.getActiveGroupBroadcasts(cacheKey);
-        if (cachedBroadcasts != null) {
-            log.debug("[CACHE_HIT] Active broadcasts for role='{}' found in cache", role);
-            return cachedBroadcasts;
-        }
-        log.info("[CACHE_MISS] Active broadcasts for role='{}' not in cache. Fetching from DB.", role);
-        List<BroadcastMessage> dbBroadcasts = broadcastRepository.findActiveBroadcastsByTargetTypeAndIds("ROLE", List.of(role));
-        cacheService.cacheActiveGroupBroadcasts(cacheKey, dbBroadcasts);
-        return dbBroadcasts;
+        }).subscribeOn(jdbcScheduler);
     }
 
     private List<BroadcastMessage> getActiveBroadcastsForAll() {
@@ -142,7 +132,9 @@ public class UserMessageService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void processAndCountGroupMessageDelivery(String userId, BroadcastMessage broadcast) {
         if (broadcast == null || userId == null) return;
+        
+        // This is the only action needed. No database writes to the user_broadcast_messages table.
         broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
-        log.info("Counted delivery of group broadcast {} to user {}", broadcast.getId(), userId);
+        log.info("Counted delivery of 'ALL' broadcast {} to user {}", broadcast.getId(), userId);
     }
 }

@@ -36,10 +36,6 @@ mindmap
         ("<b>Data Stored:</b><br/>K: Group Name (e.g., 'ALL', 'ROLE:ADMIN')<br/>V: List of BroadcastMessage objects")
         ("<b>Purpose:</b><br/>Caches lists of active broadcasts for large groups (ALL/ROLE). This is a key optimization to avoid expensive DB queries when users connect")
         ("<b>Interacting Service:</b><br/>User Service")
-      ("precomputed-targets")
-        ("<b>Data Stored:</b><br/>K: broadcastId (Long)<br/>V: List of userIds (String)")
-        ("<b>Purpose:</b><br/>Caches the large, pre-computed user lists for PRODUCT broadcasts to avoid expensive DB reads during the real-time consumption path")
-        ("<b>Interacting Service:</b><br/>Admin Service (writes), User Service (reads)")
 
     %% Intra-Cluster Eventing
     ("🚀 Real-time Eventing")

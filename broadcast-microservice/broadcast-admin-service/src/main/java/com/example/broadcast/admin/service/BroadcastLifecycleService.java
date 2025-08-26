@@ -9,6 +9,8 @@ import com.example.broadcast.shared.exception.UserServiceUnavailableException;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.BroadcastStatistics;
+import com.example.broadcast.shared.model.UserBroadcastMessage;
+import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.repository.*;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
@@ -26,10 +28,11 @@ import org.springframework.transaction.annotation.Propagation;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.Collections;
 
 @Service
 @RequiredArgsConstructor
@@ -39,7 +42,7 @@ public class BroadcastLifecycleService {
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
-    private final UserBroadcastTargetRepository userBroadcastTargetRepository;
+    private final UserService userService;
     private final OutboxEventPublisher outboxEventPublisher;
     private final BroadcastMapper broadcastMapper;
     private final AppProperties appProperties;
@@ -57,76 +60,148 @@ public class BroadcastLifecycleService {
             broadcast = broadcastRepository.save(broadcast);
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
+
+        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
+            broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
+            broadcast = broadcastRepository.save(broadcast);
+            log.info("Broadcast ID {} has been scheduled for {}. No fan-out will occur yet.", broadcast.getId(), broadcast.getScheduledAt());
+            return broadcastMapper.toBroadcastResponse(broadcast, 0);
+        }
              
         // ONLY the 'PRODUCT' type requires the intensive user list preparation (Fan-out-on-Write).
         if (Constants.TargetType.PRODUCT.name().equals(request.getTargetType())) {
-            log.info("Broadcast is for PRODUCT users. Saving with PREPARING status to trigger user pre-computation.", broadcast.getId());
+            log.info("Immediate PRODUCT broadcast. Saving with PREPARING status.", broadcast.getId());
             broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
             broadcast = broadcastRepository.save(broadcast);
-            
             eventPublisher.publishEvent(new BroadcastCreatedEvent(broadcast.getId()));
-            return broadcastMapper.toBroadcastResponse(broadcast, 0); // Target count is unknown until preparation is complete.
+            return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
 
-        if (Constants.TargetType.SELECTED.name().equals(request.getTargetType())) {
+        // For 'ALL' type, we use the fan-out-on-read strategy
+        if (Constants.TargetType.ALL.name().equals(request.getTargetType())) {
+            log.info("Immediate ALL broadcast. Publishing single orchestration event for fan-out-on-read.");
             broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
             broadcast = broadcastRepository.save(broadcast);
             
-            List<String> targetUserIds = request.getTargetIds();
-            if (targetUserIds != null && !targetUserIds.isEmpty()) {
-                // Create a batch of user-specific outbox events
+            // Initialize stats with 0. The consumer will update the delivered count.
+            initializeStatistics(broadcast.getId(), 0);
+
+            // Publish one generic event to the main orchestration topic
+            publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
+            
+            return broadcastMapper.toBroadcastResponse(broadcast, 0);
+        }
+
+         if (Constants.TargetType.SELECTED.name().equals(request.getTargetType()) ||
+            Constants.TargetType.ROLE.name().equals(request.getTargetType())) {
+
+            log.info("Immediate {} broadcast. Using early fan-out-on-write strategy.", request.getTargetType());
+            broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
+            broadcast = broadcastRepository.save(broadcast);
+
+            List<String> targetUserIds = determineTargetUsersForWrite(broadcast);
+            
+            if (!targetUserIds.isEmpty()) {
+                // Persist the user message records for inbox history
+                persistUserMessages(broadcast, targetUserIds);
+
+                // --- CORE CHANGE ---
+                // Create and publish one outbox event for EACH user.
+                log.info("Creating a batch of {} outbox events for broadcast ID: {}", targetUserIds.size(), broadcast.getId());
                 List<OutboxEvent> outboxEvents = new ArrayList<>();
                 for (String userId : targetUserIds) {
                     MessageDeliveryEvent eventPayload = createOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent())
-                            .toBuilder().userId(userId).build(); // Add userId to each event
+                            .toBuilder()
+                            .userId(userId) // Set the specific user ID here
+                            .build();
+                    // The aggregateId for Kafka partitioning is now the userId
                     outboxEvents.add(createOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
                 }
                 outboxEventPublisher.publishBatch(outboxEvents);
-                log.info("Published a batch of {} user-specific events to the outbox for broadcast ID: {}", outboxEvents.size(), broadcast.getId());
+                log.info("Successfully published batch of {} events to outbox.", outboxEvents.size());
             }
-            
-            int totalTargeted = targetUserIds != null ? targetUserIds.size() : 0;
-            return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
+
+            return broadcastMapper.toBroadcastResponse(broadcast, targetUserIds.size());
         }
 
-        // ALL, ROLE are handled as immediate Fan-out-on-Read types.
-        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
-        long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
-        ZonedDateTime precomputationThreshold = now.plus(fetchDelayMs, ChronoUnit.MILLIS);
-        boolean isImmediatelyActive = true;
-
-        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(precomputationThreshold)) {
-            broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
-            isImmediatelyActive = false; // It's not active yet, the scheduler will handle it.
-        } else {
-            broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
-        }
-        
+        // Fallback for any unhandled type
         broadcast = broadcastRepository.save(broadcast);
-
-        // If it's an immediate broadcast, we MUST publish the single orchestration event to the outbox.
-        // This now correctly includes ALL, ROLE, and SELECTED types.
-        if (isImmediatelyActive) {
-            publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
-        }
-
-        // This is for display purposes only on the API response.
-        int totalTargeted = Constants.TargetType.SELECTED.name().equals(request.getTargetType()) ? request.getTargetIds().size() : 0;
-        
-        return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
+        return broadcastMapper.toBroadcastResponse(broadcast, 0);
     }
 
+    // NEW private helper method to determine users for write strategies
+    private List<String> determineTargetUsersForWrite(BroadcastMessage broadcast) {
+        return switch (Constants.TargetType.valueOf(broadcast.getTargetType())) {
+            case SELECTED -> broadcast.getTargetIds();
+            case ROLE -> broadcast.getTargetIds().stream()
+                    .flatMap(role -> userService.getUserIdsByRole(role).stream())
+                    .distinct()
+                    .collect(Collectors.toList());
+            case PRODUCT -> {
+                // For PRODUCT, we must read from the database where the async task saved them.
+                // This will be replaced in the next step. For now, we simulate.
+                 yield broadcast.getTargetIds().stream()
+                    .flatMap(productId -> userService.getUserIdsByProduct(productId).stream())
+                    .distinct()
+                    .collect(Collectors.toList());
+            }
+            default -> Collections.emptyList();
+        };
+    }
+
+    // NEW private helper to perform the batch insert and stats initialization
+    private void persistUserMessages(BroadcastMessage broadcast, List<String> userIds) {
+        log.info("Persisting {} user_broadcast_messages records for broadcast ID: {}", userIds.size(), broadcast.getId());
+        List<UserBroadcastMessage> userMessages = userIds.stream()
+                .map(userId -> UserBroadcastMessage.builder()
+                        .broadcastId(broadcast.getId())
+                        .userId(userId)
+                        .deliveryStatus(Constants.DeliveryStatus.PENDING.name())
+                        .readStatus(Constants.ReadStatus.UNREAD.name())
+                        .build())
+                .collect(Collectors.toList());
+
+        userBroadcastRepository.batchInsert(userMessages);
+        initializeStatistics(broadcast.getId(), userIds.size());
+    }
+
+     /**
+     * Activates a broadcast that has been fully prepared (i.e., its target user
+     * list has already been persisted).
+     *
+     * This method's ONLY job is to change the status to ACTIVE and publish the
+     * orchestration event to trigger the real-time delivery.
+     */
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public void processReadyBroadcast(Long broadcastId) {
         BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + broadcastId));
         
+        // 1. Update status from READY to ACTIVE
         broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
         broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
         broadcastRepository.update(broadcast);
         
-        List<String> targetUserIds = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcastId);
-        triggerCreateBroadcastEventFromPrefetchedUsers(broadcast, targetUserIds);
+        // 2. --- NEW EARLY FAN-OUT LOGIC ---
+        // Fetch the list of users that the async task already persisted.
+        List<String> targetUserIds = userBroadcastRepository.findByBroadcastId(broadcastId).stream()
+                .map(UserBroadcastMessage::getUserId)
+                .collect(Collectors.toList());
+
+        if (!targetUserIds.isEmpty()) {
+            log.info("Activating PRODUCT broadcast {}. Creating a batch of {} outbox events.", broadcastId, targetUserIds.size());
+            List<OutboxEvent> outboxEvents = new ArrayList<>();
+            for (String userId : targetUserIds) {
+                MessageDeliveryEvent eventPayload = createOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent())
+                        .toBuilder()
+                        .userId(userId) // Set the specific user ID
+                        .build();
+                // Partition Kafka messages by userId for better distribution
+                outboxEvents.add(createOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
+            }
+            outboxEventPublisher.publishBatch(outboxEvents);
+            log.info("Successfully published batch of {} events to outbox for broadcast {}.", outboxEvents.size(), broadcastId);
+        }
     }
 
     @Transactional
@@ -163,18 +238,6 @@ public class BroadcastLifecycleService {
            log.info("Broadcast {} was already in a non-active state ({}). No expiration action needed.", broadcastId, broadcast.getStatus());
         }
     }
-
-    private BroadcastResponse triggerCreateBroadcastEventFromPrefetchedUsers(BroadcastMessage broadcast, List<String> targetUserIds) {
-        int totalTargeted = targetUserIds.size();
-        if (totalTargeted == 0) {
-            log.warn("Broadcast {} created, but no users were targeted.", broadcast.getId());
-            return broadcastMapper.toBroadcastResponse(broadcast, 0);
-        }
-
-        initializeStatistics(broadcast.getId(), totalTargeted);
-        publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
-        return broadcastMapper.toBroadcastResponse(broadcast, totalTargeted);
-    }
     
     private void publishSingleOrchestrationEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
         String topicName = appProperties.getKafka().getTopic().getNameOrchestration();
@@ -182,7 +245,7 @@ public class BroadcastLifecycleService {
         outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, broadcast.getId().toString()));
     }
 
-    private void initializeStatistics(Long broadcastId, int totalTargeted) {
+    public void initializeStatistics(Long broadcastId, int totalTargeted) {
         BroadcastStatistics stats = BroadcastStatistics.builder()
                 .broadcastId(broadcastId)
                 .totalTargeted(totalTargeted)

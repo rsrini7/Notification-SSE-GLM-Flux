@@ -5,8 +5,6 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
-import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
-import com.example.broadcast.shared.service.BroadcastStatisticsService;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.util.Constants;
@@ -24,23 +22,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.Optional;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class KafkaOrchestratorConsumerService {
 
-    private final UserBroadcastTargetRepository userBroadcastTargetRepository;
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
     private final UserService userService;
-    private final BroadcastStatisticsService broadcastStatisticsService;
     private final AppProperties appProperties;
     
     @Qualifier("sseMessagesRegion")
@@ -58,65 +51,63 @@ public class KafkaOrchestratorConsumerService {
                                            @Header(KafkaHeaders.OFFSET) long offset,
                                            Acknowledgment acknowledgment) {
 
-        log.info("Orchestration event received for type '{}' on broadcast ID: {}. [Topic: {}, Partition: {}, Offset: {}]", event.getEventType(), event.getBroadcastId(), topic, partition, offset);
-        
-        // Route user-specific events directly
-        if (Constants.EventType.TARGETS_PRECOMPUTED.name().equals(event.getEventType())) {
-            handleTargetsPrecomputedEvent(event);
+        // 1. Handle user-specific events immediately.
+        // This now covers SELECTED, ROLE, and PRODUCT broadcasts.
+        if (event.getUserId() != null) {
+            handleUserSpecificEvent(event);
             acknowledgment.acknowledge();
             return;
         }
-        
+
+        // 2. If no userId, it can only be a group event for an 'ALL' type broadcast.
+        handleAllUsersBroadcast(event);
+        acknowledgment.acknowledge();
+    }
+
+    private void handleUserSpecificEvent(MessageDeliveryEvent event) {
+        // Cache logic is not needed here because there's no "group" to cache.
+        // We just deliver the message.
+        log.debug("Processing user-specific event for user {}", event.getUserId());
+        scatterToUser(event);
+    }
+
+    private void handleAllUsersBroadcast(MessageDeliveryEvent event) {
         BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId()).orElse(null);
-
         if (broadcast == null) {
-            log.error("Cannot orchestrate event. BroadcastMessage with ID {} not found. Acknowledging to avoid retry.", event.getBroadcastId());
-            acknowledgment.acknowledge();
+            log.error("BroadcastMessage {} not found for 'ALL' broadcast.", event.getBroadcastId());
             return;
         }
-
+        
+        
+        // The cache logic is ONLY needed for 'ALL' type broadcasts.
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
-                // Cache the content of the new broadcast
                 cacheService.cacheBroadcastContent(broadcast);
-                // Surgically add this new broadcast to the active group caches
                 updateActiveGroupCaches(broadcast, true);
-                handleBroadcastLifecycleEvent(broadcast, event);
                 break;
             case CANCELLED:
             case EXPIRED:
-                // Evict the content of the specific broadcast that is no longer active
-                cacheService.evictBroadcastContent(event.getBroadcastId());
-                // Surgically remove this broadcast from the active group caches
+                cacheService.evictBroadcastContent(broadcast.getId());
                 updateActiveGroupCaches(broadcast, false);
-                handleBroadcastLifecycleEvent(broadcast, event);
-                break;
-            case FAILED:
-                log.warn("Broadcast Failed.");
                 break;
             case READ:
                 handleReadEvent(event);
                 break;
             default:
-                log.warn("Unhandled event type in orchestrator: {}", event.getEventType());
+                log.warn("Received an unexpected group-level event type '{}' for an 'ALL' broadcast. Ignoring cache logic.", event.getEventType());
                 break;
         }
+        
+        // Fan out to all users
+        List<String> onlineUsers = cacheService.getOnlineUsers();
+        if (onlineUsers.isEmpty()) {
+            log.info("No users are currently online to receive the 'ALL' broadcast {}.", broadcast.getId());
+            return;
+        }
 
-        acknowledgment.acknowledge();
-    }
-
-    private void handleTargetsPrecomputedEvent(MessageDeliveryEvent event) {
-        Long broadcastId = event.getBroadcastId();
-        log.info("Processing TARGETS_PRECOMPUTED event for broadcast ID: {}", broadcastId);
-        try {
-            List<String> targetUserIds = userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcastId);
-            if (targetUserIds.isEmpty()) {
-                log.warn("No pre-computed targets found in DB for broadcast ID: {}. Cache will not be populated.", broadcastId);
-                return;
-            }
-            cacheService.cachePrecomputedTargets(broadcastId, targetUserIds);
-        } catch (Exception e) {
-            log.error("Failed to process TARGETS_PRECOMPUTED event for broadcast ID: {}. The cache may not be populated.", broadcastId, e);
+        log.info("Scattering 'ALL' type broadcast {} to {} online users.", broadcast.getId(), onlineUsers.size());
+        for (String userId : onlineUsers) {
+            scatterToUser(event.toBuilder().userId(userId).build());
         }
     }
 
@@ -157,26 +148,7 @@ public class KafkaOrchestratorConsumerService {
         // Put the modified list back into the cache
         cacheService.cacheActiveGroupBroadcasts(cacheKey, cachedList);
     }
-
-    private void handleBroadcastLifecycleEvent(BroadcastMessage broadcast, MessageDeliveryEvent event) {
-        final List<String> targetUsers = determineTargetUsers(broadcast);
-        if (targetUsers.isEmpty()) {
-            log.warn("Orchestrator found no target users for broadcast ID {}. No events will be scattered.", broadcast.getId());
-            return;
-        }
-
-        if (Constants.EventType.CREATED.name().equals(event.getEventType()) &&
-                (!Constants.TargetType.PRODUCT.name().equals(broadcast.getTargetType()))) {
-            broadcastStatisticsService.initializeStatistics(broadcast.getId(), targetUsers.size());
-        }
-
-        log.info("Scattering {} user-specific '{}' events to Geode Region for broadcast ID {}", targetUsers.size(), event.getEventType(), broadcast.getId());
-        for (String userId : targetUsers) {
-            scatterToUser(event.toBuilder().userId(userId).build());
-        }
-    }
-
-    private void handleReadEvent(MessageDeliveryEvent event) {
+     private void handleReadEvent(MessageDeliveryEvent event) {
         log.info("Scattering single '{}' event to Geode Region for user {}", event.getEventType(), event.getUserId());
         scatterToUser(event);
     }
@@ -212,38 +184,5 @@ public class KafkaOrchestratorConsumerService {
                     break;
             }
         }
-    }
-
-    private List<String> determineTargetUsers(BroadcastMessage broadcast) {
-        Constants.TargetType targetTypeEnum;
-        try {
-            // Convert the string to our type-safe enum
-            targetTypeEnum = Constants.TargetType.valueOf(broadcast.getTargetType());
-        } catch (IllegalArgumentException e) {
-            log.warn("Unknown broadcast targetType '{}' for broadcast ID {}. No users will be targeted.", broadcast.getTargetType(), broadcast.getId());
-            return Collections.emptyList();
-        }
-
-        // Use a modern switch expression for clarity and conciseness
-        return switch (targetTypeEnum) {
-            case PRODUCT -> {
-                // 1. Try to get the list from the cache
-                Optional<List<String>> cachedTargets = cacheService.getPrecomputedTargets(broadcast.getId());
-                if (cachedTargets.isPresent()) {
-                    log.info("[CACHE_HIT] Found pre-computed targets for broadcast {} in Geode.", broadcast.getId());
-                    yield cachedTargets.get();
-                }
-
-                // 2. Fall back to the database if not in cache (for resilience)
-                log.warn("[CACHE_MISS] Pre-computed targets for broadcast {} not found in cache. Falling back to DB.", broadcast.getId());
-                yield userBroadcastTargetRepository.findUserIdsByBroadcastId(broadcast.getId());
-            }
-            case ALL -> userService.getAllUserIds();
-            case ROLE -> broadcast.getTargetIds().stream()
-                    .flatMap(role -> userService.getUserIdsByRole(role).stream())
-                    .distinct()
-                    .collect(Collectors.toList());
-            case SELECTED -> broadcast.getTargetIds();
-        };
     }
 }
