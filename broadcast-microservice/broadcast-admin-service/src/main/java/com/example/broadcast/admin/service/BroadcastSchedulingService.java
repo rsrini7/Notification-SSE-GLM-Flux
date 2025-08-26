@@ -14,7 +14,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 
-@Service
+// @Service
 @RequiredArgsConstructor
 @Slf4j
 public class BroadcastSchedulingService {

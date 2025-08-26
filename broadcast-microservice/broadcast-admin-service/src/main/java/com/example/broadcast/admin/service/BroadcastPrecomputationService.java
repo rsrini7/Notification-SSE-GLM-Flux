@@ -16,7 +16,7 @@ import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
-@Service
+// @Service
 @RequiredArgsConstructor
 @Slf4j
 public class BroadcastPrecomputationService {
