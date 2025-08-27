@@ -1,0 +1,46 @@
+# File: broadcast-microservice/Dockerfile.crac (NEW LOCATION AND CONTENT)
+
+# --- Stage 1: Build the entire multi-module project ---
+FROM maven:3.9-eclipse-temurin-21 AS builder
+WORKDIR /app
+
+# Copy the parent pom.xml first
+COPY pom.xml .
+
+# Copy all the module subdirectories. This provides the full project context.
+COPY broadcast-admin-service ./broadcast-admin-service
+COPY broadcast-user-service ./broadcast-user-service
+COPY broadcast-shared ./broadcast-shared
+COPY broadcast-geode-shared ./broadcast-geode-shared
+
+# Run the Maven build from the root. This builds all modules in the correct order.
+RUN mvn package -DskipTests
+
+# --- Stage 2: Run the app and create the checkpoint ---
+FROM bellsoft/liberica-runtime-container:jdk-21-crac-cds-musl AS checkpoint
+WORKDIR /app
+
+RUN apk add --no-cache curl
+
+# CORRECTED: Copy the specific JAR from the admin-service's target directory
+COPY --from=builder /app/broadcast-admin-service/target/*.jar app.jar
+
+# This command starts the app, waits for it to be healthy, triggers the checkpoint,
+# and critically, WAITS for the JVM to exit cleanly after the checkpoint is written.
+RUN java -Dspring.profiles.active=checkpoint-build -XX:CRaCCheckpointTo=/app/checkpoint -jar app.jar & \
+    # Wait for the application's health endpoint to be available
+    while ! curl -k https://localhost:8081/actuator/health > /dev/null 2>&1; do sleep 0.5; done; \
+    # Trigger the checkpoint
+    jcmd app.jar JDK.checkpoint && \
+    # IMPORTANT: Wait for the background Java process to terminate after checkpointing
+    wait
+
+# --- Stage 3: Create the final, fast-starting runtime image ---
+FROM bellsoft/liberica-runtime-container:jdk-21-crac-cds-musl
+WORKDIR /app
+
+COPY --from=checkpoint /app/checkpoint /app/checkpoint
+
+EXPOSE 8081
+
+ENTRYPOINT ["java", "-XX:CRaCRestoreFrom=/app/checkpoint"]

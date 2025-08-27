@@ -2,9 +2,7 @@ package com.example.broadcast.admin;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.scheduling.annotation.EnableAsync;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.context.annotation.ComponentScan;
 
 
@@ -19,9 +17,7 @@ import org.springframework.context.annotation.ComponentScan;
  * - Support for 400K+ users with 30K+ concurrent connections
  */
 @SpringBootApplication
-@EnableKafka
 @EnableAsync
-@EnableScheduling
 @ComponentScan("com.example.broadcast")
 public class BroadcastAdminApplication {
 

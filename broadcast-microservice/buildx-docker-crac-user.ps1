@@ -1,0 +1,1 @@
+docker buildx build --progress=plain --allow security.insecure -f Dockerfile.crac.user -t broadcast-user-service:1.0.0-crac-final --load .

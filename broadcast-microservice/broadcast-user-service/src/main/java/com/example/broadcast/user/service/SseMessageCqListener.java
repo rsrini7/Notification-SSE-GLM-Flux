@@ -10,12 +10,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.client.ClientCache;
 import org.apache.geode.cache.query.*;
 import org.apache.geode.cache.util.CqListenerAdapter;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 
 @Component
 @Slf4j
 @RequiredArgsConstructor
+@Profile("!checkpoint-build") 
 public class SseMessageCqListener extends CqListenerAdapter {
 
     private final ClientCache clientCache;

@@ -5,6 +5,7 @@ import com.example.broadcast.user.service.cache.CacheService;
 
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.context.annotation.Profile;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,7 @@ import java.util.Map;
  * Provides detailed health status for all system components
  */
 @Component
+@Profile("!checkpoint-build")
 public class BroadcastHealthIndicator implements HealthIndicator {
 
     private final SseService sseService;

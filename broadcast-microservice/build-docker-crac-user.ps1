@@ -1,0 +1,1 @@
+docker build --progress=plain -f Dockerfile.crac.user -t broadcast-user-service:1.0.0-crac-final .

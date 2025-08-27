@@ -1,0 +1,1 @@
+docker buildx build --progress=plain --allow security.insecure -f Dockerfile.crac.admin -t broadcast-admin-service:1.0.0-crac-final --load .

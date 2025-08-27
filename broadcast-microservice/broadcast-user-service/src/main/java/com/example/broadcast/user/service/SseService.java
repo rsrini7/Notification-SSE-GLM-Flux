@@ -15,6 +15,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,10 +29,11 @@ import java.time.ZoneOffset;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@Profile("!checkpoint-build")
 public class SseService {
 
     private final BroadcastRepository broadcastRepository;
-     private final UserBroadcastRepository userBroadcastRepository; 
+    private final UserBroadcastRepository userBroadcastRepository; 
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;

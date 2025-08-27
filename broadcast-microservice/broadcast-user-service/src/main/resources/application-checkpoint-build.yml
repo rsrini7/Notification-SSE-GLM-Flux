@@ -1,0 +1,24 @@
+# This profile is ONLY for the 'docker build' of the user-service
+spring:
+  main:
+    lazy-initialization: true
+  
+  autoconfigure:
+    exclude:
+      # Exclude both Kafka and the Geode Client configuration
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+  
+  # Use an in-memory DB for the build
+  datasource:
+    url: jdbc:h2:mem:checkpointdb-user;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+
+  # The user-service does not create the schema, so this should be 'never'
+  sql:
+    init:
+      mode: never
+
+logging:
+  file:
+    # Setting the name to empty disables the file appender
+    name:

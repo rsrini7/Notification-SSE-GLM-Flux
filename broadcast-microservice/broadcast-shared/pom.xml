@@ -78,6 +78,18 @@
         </dependency>
 
         <dependency>
+            <groupId>io.github.crac.org.springframework.boot</groupId>
+            <artifactId>crac-spring-boot-starter</artifactId>
+            <version>3.4.3</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.crac</groupId>
+            <artifactId>crac</artifactId>
+            <version>1.5.0</version>
+        </dependency>
+
+        <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
              <optional>true</optional>

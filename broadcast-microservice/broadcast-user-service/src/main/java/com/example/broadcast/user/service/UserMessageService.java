@@ -14,6 +14,8 @@ import com.example.broadcast.shared.util.Constants.TargetType;
 import com.example.broadcast.user.service.cache.CacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -30,6 +32,7 @@ import java.util.stream.Stream;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Profile("!checkpoint-build")
 public class UserMessageService {
 
     private final UserBroadcastRepository userBroadcastRepository;

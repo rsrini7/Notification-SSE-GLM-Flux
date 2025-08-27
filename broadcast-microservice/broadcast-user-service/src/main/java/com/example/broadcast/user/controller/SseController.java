@@ -8,6 +8,8 @@ import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +27,7 @@ import java.util.UUID;
 @RequestMapping("/api/user/sse")
 @RequiredArgsConstructor
 @Slf4j
+@Profile("!checkpoint-build")
 public class SseController {
 
     private final SseService sseService;

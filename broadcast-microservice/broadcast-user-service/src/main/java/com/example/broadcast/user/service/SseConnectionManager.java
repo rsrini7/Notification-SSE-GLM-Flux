@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.CacheClosedException;
 import org.apache.geode.cache.client.ClientCache;
 import org.springframework.context.annotation.DependsOn;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.Disposable;
@@ -30,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @RequiredArgsConstructor
 @DependsOn("geodeClientCache")
+@Profile("!checkpoint-build")
 public class SseConnectionManager {
 
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> connectionSinks = new ConcurrentHashMap<>();

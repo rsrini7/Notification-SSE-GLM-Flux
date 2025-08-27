@@ -1,0 +1,28 @@
+# This profile is ONLY used during the 'docker build' to create the checkpoint.
+spring:
+  # Defer initialization to speed up the checkpointing process
+  main:
+    lazy-initialization: true
+  
+  # Disable Kafka auto-configuration entirely to prevent connection attempts
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+
+  # Switch to an in-memory H2 database for the build
+  datasource:
+    url: jdbc:h2:mem:checkpointdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+
+  # Ensure the database schema is created in the in-memory DB
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:sql/schema.sql
+      data-locations: classpath:sql/data.sql
+
+logging:
+  file:
+    # Setting the name to empty disables the file appender
+    name:

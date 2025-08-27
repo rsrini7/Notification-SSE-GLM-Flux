@@ -16,12 +16,14 @@ import org.apache.geode.cache.client.ClientCacheFactory;
 import org.apache.geode.cache.client.ClientRegionShortcut;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 import java.util.List;
 
 @Configuration
 @RequiredArgsConstructor
 @Slf4j
+@Profile("!checkpoint-build") 
 public class GeodeClientConfig {
 
     private final AppProperties appProperties;

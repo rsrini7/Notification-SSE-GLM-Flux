@@ -1,0 +1,1 @@
+docker build --progress=plain -f Dockerfile.crac.admin -t broadcast-admin-service:1.0.0-crac-final .
