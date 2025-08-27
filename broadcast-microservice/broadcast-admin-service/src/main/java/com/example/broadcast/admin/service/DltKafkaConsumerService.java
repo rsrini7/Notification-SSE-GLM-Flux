@@ -72,10 +72,12 @@ public class DltKafkaConsumerService {
             return;
         }
 
-        log.info("DLT Received Message. Failed Message: {}, Key: {}, Original Topic: {}, Reason: {}.\nStacktrace: {}", failedEvent.getMessage(), key, originalTopic, exceptionMessage, exceptionStacktrace);
+        log.info("DLT Received Message. Failed Message: {}, Key: {}, Original Topic: {}, Reason: {}.\nStacktrace: {}", failedEvent.getMessage(), key, originalTopic, exceptionMessage, filterStackTrace(exceptionStacktrace));
 
         String displayTitle;
         String payloadJson;
+
+        failedEvent.setErrorDetails(filterStackTrace(exceptionStacktrace));
 
         try {
             payloadJson = objectMapper.writeValueAsString(failedEvent);
@@ -135,5 +137,28 @@ public class DltKafkaConsumerService {
             userBroadcastRepository.updateDeliveryStatus(userMessage.getId(), Constants.DeliveryStatus.FAILED.name());
             log.info("Marked existing UserBroadcastMessage (ID: {}) as FAILED for user {} due to processing error.", userMessage.getId(), event.getUserId());
         } 
+    }
+
+    private String filterStackTrace(String fullStackTrace) {
+        if (fullStackTrace == null || fullStackTrace.isEmpty()) {
+            return "Stack trace not available.";
+        }
+
+        String[] lines = fullStackTrace.split("\n");
+        StringBuilder filteredTrace = new StringBuilder();
+        
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+            // Include the "Caused by" lines and any lines from our application code
+            if (trimmedLine.startsWith("Caused by:") || trimmedLine.contains("com.example.broadcast")) {
+                filteredTrace.append(trimmedLine).append("\n");
+            }
+        }
+
+        if (filteredTrace.length() == 0) {
+            return lines[0]; // Return the top-level exception message if no relevant lines found
+        }
+
+        return filteredTrace.toString().trim();
     }
 }
