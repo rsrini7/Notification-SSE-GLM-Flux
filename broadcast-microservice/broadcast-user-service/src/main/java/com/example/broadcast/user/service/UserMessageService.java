@@ -11,7 +11,6 @@ import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.user.service.cache.CacheService;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -53,7 +52,7 @@ public class UserMessageService {
 
         return Mono.fromCallable(() -> {
             // Step 1: Fetch all necessary data from the database
-            List<UserBroadcastMessage> unreadTargetedMessages = userBroadcastRepository.findUnreadByUserId(userId);
+            List<UserBroadcastMessage> unreadTargetedMessages = userBroadcastRepository.findUnreadDeliveredByUserId(userId);
             List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType("ALL");
             Set<Long> readBroadcastIds = new HashSet<>(userBroadcastRepository.findReadBroadcastIdsByUserId(userId));
 
@@ -121,11 +120,27 @@ public class UserMessageService {
     }
     
     private Map<Long, BroadcastMessage> getBroadcastContent(Set<Long> broadcastIds) {
-        return broadcastIds.stream().collect(Collectors.toMap(
-                id -> id,
-                id -> cacheService.getBroadcastContent(id)
-                        .orElseGet(() -> broadcastRepository.findById(id).orElse(null))
-        ));
+        return broadcastIds.stream()
+            .map(id -> {
+                BroadcastMessage message = cacheService.getBroadcastContent(id)
+                        .orElseGet(() -> broadcastRepository.findById(id).orElse(null));
+                return new AbstractMap.SimpleEntry<>(id, message);
+            })
+            .filter(entry -> entry.getValue() != null)
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    // THIS METHOD WAS MISSING IN THE PREVIOUS RESPONSE
+    @Async
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void updateDeliveryStatsForOfflineUsers(List<UserBroadcastResponse> newlyDeliveredBroadcasts) {
+        if (newlyDeliveredBroadcasts.isEmpty()) {
+            return;
+        }
+        log.info("Asynchronously updating delivery stats for {} broadcasts for a reconnected user.", newlyDeliveredBroadcasts.size());
+        for (UserBroadcastResponse broadcast : newlyDeliveredBroadcasts) {
+            broadcastStatisticsRepository.incrementDeliveredAndTargetedCount(broadcast.getBroadcastId(), 1);
+        }
     }
 
     @Transactional
@@ -160,17 +175,5 @@ public class UserMessageService {
         broadcastStatisticsRepository.incrementReadCount(broadcastId);
         messageStatusService.publishReadEvent(broadcastId, userId);
         log.info("Successfully processed 'mark as read' for broadcast {} for user {} and published READ event.", broadcastId, userId);
-    }
-
-    @Async
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void updateDeliveryStatsForOfflineUsers(List<UserBroadcastResponse> newlyDeliveredBroadcasts) {
-        if (newlyDeliveredBroadcasts.isEmpty()) {
-            return;
-        }
-        log.info("Asynchronously updating delivery stats for {} broadcasts for a reconnected user.", newlyDeliveredBroadcasts.size());
-        for (UserBroadcastResponse broadcast : newlyDeliveredBroadcasts) {
-            broadcastStatisticsRepository.incrementDeliveredAndTargetedCount(broadcast.getBroadcastId(), 1);
-        }
     }
 }

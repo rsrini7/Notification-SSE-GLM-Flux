@@ -4,6 +4,7 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
+import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.user.service.cache.CacheService;
@@ -22,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 
 @Service
 @Slf4j
@@ -30,6 +33,7 @@ public class KafkaOrchestratorConsumerService {
 
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
+    private final UserBroadcastRepository userBroadcastRepository;
     
     @Qualifier("sseMessagesRegion")
     private final Region<String, Object> sseMessagesRegion;
@@ -50,12 +54,21 @@ public class KafkaOrchestratorConsumerService {
         // This now covers SELECTED, ROLE, and PRODUCT broadcasts.
         if (event.getUserId() != null) {
             handleUserSpecificEvent(event);
-            acknowledgment.acknowledge();
-            return;
+
+            if (event.isFireAndForget()) {
+                userBroadcastRepository.findByUserIdAndBroadcastId(event.getUserId(), event.getBroadcastId())
+                    .ifPresent(message -> {
+                        log.info("Marking Fire-and-Forget message as read in DB for user {} and broadcast {}", event.getUserId(), event.getBroadcastId());
+                        userBroadcastRepository.markAsRead(message.getId(), ZonedDateTime.now(ZoneOffset.UTC));
+                    });
+                cacheService.evictUserInbox(event.getUserId());
+            }
+        } else {
+            // If no userId, it's a group event for an 'ALL' type broadcast.
+            // 2. If no userId, it can only be a group event for an 'ALL' type broadcast.
+            handleAllUsersBroadcast(event);
         }
 
-        // 2. If no userId, it can only be a group event for an 'ALL' type broadcast.
-        handleAllUsersBroadcast(event);
         acknowledgment.acknowledge();
     }
 
@@ -81,6 +94,7 @@ public class KafkaOrchestratorConsumerService {
             case CANCELLED:
             case EXPIRED:
                 cacheService.evictBroadcastContent(broadcast.getId());
+                cacheService.evictUserInbox(event.getUserId());
                 break;
             case READ:
                 handleReadEvent(event);

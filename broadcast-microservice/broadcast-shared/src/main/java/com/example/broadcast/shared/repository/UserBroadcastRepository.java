@@ -183,13 +183,13 @@ public class UserBroadcastRepository {
     }
 
     /**
-     * NEW METHOD: Finds all message records for a user that have not been read.
+     * Finds all message records for a user that have not been read and delivered.
      * This is used to fetch the primary list of messages for a user's inbox.
      * @param userId The ID of the user.
      * @return A list of unread UserBroadcastMessage objects, sorted by most recent first.
      */
-    public List<UserBroadcastMessage> findUnreadByUserId(String userId) {
-        String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND read_status = 'UNREAD' ORDER BY created_at DESC";
+    public List<UserBroadcastMessage> findUnreadDeliveredByUserId(String userId) {
+        String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND read_status = 'UNREAD' AND delivery_status = 'DELIVERED' ORDER BY created_at DESC";
         return jdbcTemplate.query(sql, userBroadcastRowMapper, userId);
     }
 

@@ -1,10 +1,12 @@
 package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
+import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
+import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.SseEventType;
@@ -18,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
 import java.util.Map;
+import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 
 @Service
 @Slf4j
@@ -25,6 +29,7 @@ import java.util.Map;
 public class SseService {
 
     private final BroadcastRepository broadcastRepository;
+     private final UserBroadcastRepository userBroadcastRepository; 
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
@@ -74,7 +79,13 @@ public class SseService {
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
                 broadcastRepository.findById(event.getBroadcastId()).ifPresentOrElse(
-                    broadcast -> deliverFanOutOnReadMessage(event.getUserId(), broadcast),
+                    broadcast -> {
+                        if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
+                            deliverFanOutOnReadMessage(event.getUserId(), broadcast);
+                        } else {
+                            deliverTargetedMessage(event.getUserId(), broadcast);
+                        }
+                    },
                     () -> log.error("Cannot process CREATED event. BroadcastMessage with ID {} not found.", event.getBroadcastId())
                 );
                 break;
@@ -91,9 +102,34 @@ public class SseService {
         }
     }
 
-    private void deliverFanOutOnReadMessage(String userId, BroadcastMessage broadcast) {
+    private void deliverTargetedMessage(String userId, BroadcastMessage broadcast) {
+        // This is the safeguard: we confirm a record exists for this user in user_broadcast_messages
+        userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcast.getId()).ifPresentOrElse(
+            userMessage -> {
+                log.info("Delivering targeted broadcast {} to user {}", broadcast.getId(), userId);
+                UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(userMessage, broadcast);
+                sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
+                broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
+            },
+            () -> log.warn("Prevented delivery of targeted broadcast {} to user {}. No user_broadcast_messages record found.", broadcast.getId(), userId)
+        );
+    }
+
+     private void deliverFanOutOnReadMessage(String userId, BroadcastMessage broadcast) {
         log.info("Delivering fan-out-on-read broadcast {} to online user {}", broadcast.getId(), userId);
-        UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(null, broadcast);
+
+        // Create a transient message object to ensure the final DTO is complete
+        UserBroadcastMessage transientMessage = UserBroadcastMessage.builder()
+                .id(broadcast.getId()) // Use broadcastId as a transient ID
+                .broadcastId(broadcast.getId())
+                .userId(userId)
+                .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
+                .readStatus(Constants.ReadStatus.UNREAD.name())
+                .deliveredAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .createdAt(broadcast.getCreatedAt())
+                .build();
+        
+        UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(transientMessage, broadcast);
         sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
         broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
     }
