@@ -19,7 +19,8 @@ $regions = @(
     "connection-heartbeat",
     "pending-events",
     "sse-messages",
-    "user-connections"
+    "user-connections",
+    "user-messages-inbox"
 )
 
 # --- Script Logic ---

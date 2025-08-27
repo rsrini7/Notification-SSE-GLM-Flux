@@ -4,6 +4,7 @@ import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
+import com.example.broadcast.shared.dto.cache.UserMessageInbox;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.util.Constants.GeodeRegionNames;
 
@@ -60,6 +61,12 @@ public class GeodeClientConfig {
     public Region<String, List<MessageDeliveryEvent>> pendingEventsRegion(ClientCache clientCache) {
         return clientCache.<String, List<MessageDeliveryEvent>>createClientRegionFactory(ClientRegionShortcut.PROXY)
                 .create(GeodeRegionNames.PENDING_EVENTS);
+    }
+
+    @Bean("userMessagesInboxRegion")
+    public Region<String, List<UserMessageInbox>> userMessagesInboxRegion(ClientCache clientCache) {
+        return clientCache.<String, List<UserMessageInbox>>createClientRegionFactory(ClientRegionShortcut.PROXY)
+                .create("user-messages-inbox");
     }
 
     @Bean("broadcastContentRegion")

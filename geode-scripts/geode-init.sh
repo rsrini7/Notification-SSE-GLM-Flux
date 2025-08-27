@@ -15,6 +15,7 @@ gfsh -e "connect --locator=localhost[10334]" \
      -e "create region --name=connection-heartbeat --type=REPLICATE" \
      -e "create region --name=pending-events --type=REPLICATE" \
      -e "create region --name=broadcast-content --type=REPLICATE" \
-     -e "create region --name=sse-messages --type=REPLICATE"
+     -e "create region --name=sse-messages --type=REPLICATE" \
+     -e "create region --name=user-messages-inbox --type=PARTITION_REDUNDANT"
 
 echo "--> All regions created successfully!"

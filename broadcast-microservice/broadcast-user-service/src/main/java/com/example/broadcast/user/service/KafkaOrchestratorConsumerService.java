@@ -112,6 +112,9 @@ public class KafkaOrchestratorConsumerService {
     
     private void scatterToUser(MessageDeliveryEvent userSpecificEvent) {
         String userId = userSpecificEvent.getUserId();
+
+        cacheService.evictUserInbox(userId);
+
         String clusterName = appProperties.getClusterName();
         
         Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId, clusterName);

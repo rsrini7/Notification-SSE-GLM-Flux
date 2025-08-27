@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.dto.cache.UserMessageInbox;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
@@ -20,14 +21,9 @@ import reactor.core.scheduler.Scheduler;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -46,47 +42,85 @@ public class UserMessageService {
     public Mono<List<UserBroadcastResponse>> getUserMessages(String userId) {
         log.info("Assembling inbox for user: {}", userId);
 
+        Optional<List<UserMessageInbox>> cachedInboxOpt = cacheService.getUserInbox(userId);
+        if (cachedInboxOpt.isPresent()) {
+            log.info("Cache HIT for user {} inbox.", userId);
+            return reconstructInboxFromCache(cachedInboxOpt.get());
+        }
+        log.info("Cache MISS for user {} inbox. Fetching from database.", userId);
+
         return Mono.fromCallable(() -> {
-            // Step 1: Directly fetch all unread targeted messages for the user.
-            // This now covers SELECTED, ROLE, and PRODUCT types efficiently.
             List<UserBroadcastMessage> unreadTargetedMessages = userBroadcastRepository.findUnreadByUserId(userId);
-
-            // Step 2: Fetch all active 'ALL' type broadcasts (fan-out on read).
             List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType("ALL");
-
-            // Step 3: Get IDs of 'ALL' broadcasts the user has already marked as read to filter them out.
             Set<Long> readBroadcastIds = new HashSet<>(userBroadcastRepository.findReadBroadcastIdsByUserId(userId));
 
-            // Step 4: Convert the unread targeted messages into response DTOs.
-            // This uses a read-through cache pattern for performance.
+            List<UserMessageInbox> inboxToCache = new ArrayList<>();
+            unreadTargetedMessages.forEach(msg -> inboxToCache.add(broadcastMapper.toUserMessageInbox(msg)));
+
+            Map<Long, BroadcastMessage> contentMap = getBroadcastContent(unreadTargetedMessages.stream()
+                    .map(UserBroadcastMessage::getBroadcastId).collect(Collectors.toSet()));
+
             Stream<UserBroadcastResponse> targetedResponses = unreadTargetedMessages.stream()
-                .map(msg -> {
-                    BroadcastMessage broadcast = cacheService.getBroadcastContent(msg.getBroadcastId())
-                        .orElseGet(() -> broadcastRepository.findById(msg.getBroadcastId()).orElse(null));
-                    return broadcast != null ? broadcastMapper.toUserBroadcastResponse(msg, broadcast) : null;
-                })
-                .filter(Objects::nonNull);
-
-            // Step 5: Convert the unread 'ALL' type broadcasts into response DTOs.
-            Stream<UserBroadcastResponse> allTypeResponses = allTypeBroadcasts.stream()
-                .filter(broadcast -> !readBroadcastIds.contains(broadcast.getId()))
-                .map(broadcast -> broadcastMapper.toUserBroadcastResponse(null, broadcast));
-
-            // Step 6: Combine both streams, sort by creation date, and collect into the final list.
-            List<UserBroadcastResponse> finalInbox = Stream.concat(targetedResponses, allTypeResponses)
-                .sorted(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed())
-                .collect(Collectors.toList());
+                    .map(msg -> {
+                        BroadcastMessage broadcast = contentMap.get(msg.getBroadcastId());
+                        return broadcast != null ? broadcastMapper.toUserBroadcastResponseFromEntity(msg, broadcast) : null;
+                    })
+                    .filter(Objects::nonNull);
             
-            log.info("Assembled a total of {} messages for user {}", finalInbox.size(), userId);
+            Stream<UserBroadcastResponse> allTypeResponses = allTypeBroadcasts.stream()
+                    .filter(broadcast -> !readBroadcastIds.contains(broadcast.getId()))
+                    .map(broadcast -> {
+                        UserMessageInbox transientInbox = new UserMessageInbox(broadcast.getId(), broadcast.getId(), "DELIVERED", "UNREAD", broadcast.getCreatedAt());
+                        inboxToCache.add(transientInbox);
+                        return broadcastMapper.toUserBroadcastResponseFromCache(transientInbox, broadcast);
+                    });
+
+            List<UserBroadcastResponse> finalInbox = Stream.concat(targetedResponses, allTypeResponses)
+                    .sorted(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed())
+                    .collect(Collectors.toList());
+
+            cacheService.cacheUserInbox(userId, inboxToCache);
+            log.info("Assembled and cached {} messages for user {}", finalInbox.size(), userId);
             return finalInbox;
 
         }).subscribeOn(jdbcScheduler);
     }
 
+    private Mono<List<UserBroadcastResponse>> reconstructInboxFromCache(List<UserMessageInbox> cachedInbox) {
+        if (cachedInbox.isEmpty()) {
+            return Mono.just(Collections.emptyList());
+        }
+        return Mono.fromCallable(() -> {
+            Set<Long> broadcastIds = cachedInbox.stream().map(UserMessageInbox::getBroadcastId).collect(Collectors.toSet());
+            Map<Long, BroadcastMessage> contentMap = getBroadcastContent(broadcastIds);
+
+            List<UserBroadcastResponse> reconstructedList = cachedInbox.stream()
+                    .map(inboxItem -> {
+                        BroadcastMessage content = contentMap.get(inboxItem.getBroadcastId());
+                        return content != null ? broadcastMapper.toUserBroadcastResponseFromCache(inboxItem, content) : null;
+                    })
+                    .filter(Objects::nonNull)
+                    .sorted(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed())
+                    .collect(Collectors.toList());
+            
+            return reconstructedList;
+        }).subscribeOn(jdbcScheduler);
+    }
     
+    private Map<Long, BroadcastMessage> getBroadcastContent(Set<Long> broadcastIds) {
+        return broadcastIds.stream().collect(Collectors.toMap(
+                id -> id,
+                id -> cacheService.getBroadcastContent(id)
+                        .orElseGet(() -> broadcastRepository.findById(id).orElse(null))
+        ));
+    }
+
     @Transactional
     public void markMessageAsRead(String userId, Long broadcastId) {
         log.info("Attempting to mark broadcast {} as read for user {}", broadcastId, userId);
+        
+        cacheService.evictUserInbox(userId);
+        
         Optional<UserBroadcastMessage> userMessageOpt = userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcastId);
         if (userMessageOpt.isPresent()) {
             UserBroadcastMessage existingMessage = userMessageOpt.get();
@@ -96,17 +130,17 @@ public class UserMessageService {
             }
             int updatedRows = userBroadcastRepository.markAsRead(existingMessage.getId(), ZonedDateTime.now(ZoneOffset.UTC));
             if (updatedRows == 0) {
-                log.warn("Message for broadcast {} was already read for user {} (concurrent update). No action taken.", broadcastId, userId);
+                 log.warn("Message for broadcast {} was already read for user {} (concurrent update). No action taken.", broadcastId, userId);
                 return;
             }
         } else {
             log.info("No existing message record for user {}, broadcast {}. Creating a new one.", userId, broadcastId);
             UserBroadcastMessage newMessage = UserBroadcastMessage.builder()
-                    .userId(userId)
+                     .userId(userId)
                     .broadcastId(broadcastId)
                     .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
                     .readStatus(Constants.ReadStatus.READ.name())
-                    .readAt(ZonedDateTime.now(ZoneOffset.UTC))
+                     .readAt(ZonedDateTime.now(ZoneOffset.UTC))
                     .build();
             userBroadcastRepository.save(newMessage);
         }
@@ -115,5 +149,4 @@ public class UserMessageService {
         messageStatusService.publishReadEvent(broadcastId, userId);
         log.info("Successfully processed 'mark as read' for broadcast {} for user {} and published READ event.", broadcastId, userId);
     }
-
 }

@@ -3,6 +3,7 @@ package com.example.broadcast.user.service.cache;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
+import com.example.broadcast.shared.dto.cache.UserMessageInbox;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.Region;
@@ -23,18 +24,21 @@ public class GeodeCacheService implements CacheService {
     private final Region<String, UserConnectionInfo> userConnectionsRegion;
     private final Region<String, ConnectionHeartbeat> connectionHeartbeatRegion;
     private final Region<String, List<MessageDeliveryEvent>> pendingEventsRegion;
+    private final Region<String, List<UserMessageInbox>> userMessagesInboxRegion;
     private final Region<Long, BroadcastMessage> broadcastContentRegion;
 
     public GeodeCacheService(ClientCache clientCache,
                              @Qualifier("userConnectionsRegion") Region<String, UserConnectionInfo> userConnectionsRegion,
-                             @Qualifier("connectionMetadataRegion") Region<String, ConnectionHeartbeat> connectionHeartbeatRegion,
+                             @Qualifier("connectionHeartbeatRegion") Region<String, ConnectionHeartbeat> connectionHeartbeatRegion,
                              @Qualifier("pendingEventsRegion") Region<String, List<MessageDeliveryEvent>> pendingEventsRegion,
+                             @Qualifier("userMessagesInboxRegion") Region<String, List<UserMessageInbox>> userMessagesInboxRegion,
                              @Qualifier("broadcastContentRegion") Region<Long, BroadcastMessage> broadcastContentRegion
     ) {
         this.clientCache = clientCache;
         this.userConnectionsRegion = userConnectionsRegion;
         this.connectionHeartbeatRegion = connectionHeartbeatRegion;
         this.pendingEventsRegion = pendingEventsRegion;
+        this.userMessagesInboxRegion = userMessagesInboxRegion;
         this.broadcastContentRegion = broadcastContentRegion;
     }
 
@@ -140,6 +144,23 @@ public class GeodeCacheService implements CacheService {
                 pendingEventsRegion.put(userId, pendingEvents);
             }
         }
+    }
+
+    @Override
+    public Optional<List<UserMessageInbox>> getUserInbox(String userId) {
+        return Optional.ofNullable(userMessagesInboxRegion.get(userId));
+    }
+
+    @Override
+    public void cacheUserInbox(String userId, List<UserMessageInbox> inbox) {
+        log.debug("Caching inbox for user: {}. Size: {}", userId, inbox.size());
+        userMessagesInboxRegion.put(userId, inbox);
+    }
+
+    @Override
+    public void evictUserInbox(String userId) {
+        log.info("Evicting inbox cache for user: {}", userId);
+        userMessagesInboxRegion.remove(userId);
     }
 
     @Override

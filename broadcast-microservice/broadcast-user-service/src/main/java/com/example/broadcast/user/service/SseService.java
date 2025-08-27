@@ -93,7 +93,7 @@ public class SseService {
 
     private void deliverFanOutOnReadMessage(String userId, BroadcastMessage broadcast) {
         log.info("Delivering fan-out-on-read broadcast {} to online user {}", broadcast.getId(), userId);
-        UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
+        UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(null, broadcast);
         sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
         broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
     }
