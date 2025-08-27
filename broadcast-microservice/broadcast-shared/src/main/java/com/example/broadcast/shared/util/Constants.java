@@ -10,7 +10,7 @@ public final class Constants {
     public static final class GeodeRegionNames {
         private GeodeRegionNames() {}
         public static final String USER_CONNECTIONS = "user-connections";
-        public static final String CONNECTION_METADATA = "connection-metadata";
+        public static final String CONNECTION_HEARTBEAT = "connection-heartbeat";
         public static final String PENDING_EVENTS = "pending-events";
         public static final String BROADCAST_CONTENT = "broadcast-content";
         public static final String SSE_MESSAGES = "sse-messages";

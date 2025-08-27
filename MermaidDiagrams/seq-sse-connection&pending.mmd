@@ -6,7 +6,7 @@ sequenceDiagram
     
     UserUI->>+UserSvc: 1- GET /api/user/sse/connect
     UserSvc->>+SseSvc: 2- createEventStream()
-    SseSvc->>+Geode: 3- Register Connection<br/>(in 'user-connections' & 'connection-metadata' regions)
+    SseSvc->>+Geode: 3- Register Connection<br/>(in 'user-connections' & 'connection-heartbeat' regions)
     Geode-->>-SseSvc: Success
     
     Note over SseSvc, Geode: 4- Check for messages missed while offline

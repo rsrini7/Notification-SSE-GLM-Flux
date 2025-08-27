@@ -2,7 +2,7 @@ package com.example.broadcast.user.config;
 
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
-import com.example.broadcast.shared.dto.cache.ConnectionMetadata;
+import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.util.Constants.GeodeRegionNames;
@@ -50,10 +50,10 @@ public class GeodeClientConfig {
                 .create(GeodeRegionNames.USER_CONNECTIONS);
     }
    
-    @Bean("connectionMetadataRegion")
-    public Region<String, ConnectionMetadata> connectionMetadataRegion(ClientCache clientCache) {
-        return clientCache.<String, ConnectionMetadata>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create(GeodeRegionNames.CONNECTION_METADATA);
+    @Bean("connectionHeartbeatRegion")
+    public Region<String, ConnectionHeartbeat> connectionHeartbeatRegion(ClientCache clientCache) {
+        return clientCache.<String, ConnectionHeartbeat>createClientRegionFactory(ClientRegionShortcut.PROXY)
+                .create(GeodeRegionNames.CONNECTION_HEARTBEAT);
     }
 
     @Bean("pendingEventsRegion")
