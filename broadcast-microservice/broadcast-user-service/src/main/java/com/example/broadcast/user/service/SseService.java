@@ -7,6 +7,7 @@ import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
+import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.SseEventType;
@@ -34,6 +35,7 @@ public class SseService {
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
     private final UserMessageService userMessageService;
+    private final MessageStatusService messageStatusService;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -109,7 +111,7 @@ public class SseService {
                 log.info("Delivering targeted broadcast {} to user {}", broadcast.getId(), userId);
                 UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(userMessage, broadcast);
                 sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
-                broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
+                messageStatusService.updateMessageToDelivered(userMessage.getId(), broadcast.getId());
             },
             () -> log.warn("Prevented delivery of targeted broadcast {} to user {}. No user_broadcast_messages record found.", broadcast.getId(), userId)
         );

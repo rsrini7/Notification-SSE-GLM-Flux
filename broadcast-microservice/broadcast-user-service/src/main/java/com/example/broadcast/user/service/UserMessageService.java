@@ -10,6 +10,7 @@ import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.shared.util.Constants.TargetType;
 import com.example.broadcast.user.service.cache.CacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,7 +45,7 @@ public class UserMessageService {
         log.info("Assembling inbox for user: {}", userId);
 
         Optional<List<UserMessageInbox>> cachedInboxOpt = cacheService.getUserInbox(userId);
-        if (cachedInboxOpt.isPresent()) {
+        if (cachedInboxOpt.isPresent() && !cachedInboxOpt.get().isEmpty()) {
             log.info("Cache HIT for user {} inbox.", userId);
             return reconstructInboxFromCache(cachedInboxOpt.get());
         }
@@ -52,8 +53,8 @@ public class UserMessageService {
 
         return Mono.fromCallable(() -> {
             // Step 1: Fetch all necessary data from the database
-            List<UserBroadcastMessage> unreadTargetedMessages = userBroadcastRepository.findUnreadDeliveredByUserId(userId);
-            List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType("ALL");
+            List<UserBroadcastMessage> unreadTargetedMessages = userBroadcastRepository.findUnreadPendingDeliveredByUserId(userId);
+            List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType(TargetType.ALL.name());
             Set<Long> readBroadcastIds = new HashSet<>(userBroadcastRepository.findReadBroadcastIdsByUserId(userId));
 
             // Step 2: Prepare a list that will be cached and assemble targeted responses

@@ -126,7 +126,7 @@ public class KafkaOrchestratorConsumerService {
 
         Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
 
-        if (!userConnections.isEmpty()) {
+        if (userConnections != null && !userConnections.isEmpty()) {
             UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
             String uniqueClusterPodName = connectionInfo.getClusterName() + ":" + connectionInfo.getPodName();
             

@@ -72,7 +72,7 @@ public class DltKafkaConsumerService {
             return;
         }
 
-        log.info("DLT Received Message. Failed Message: {}, Key: {}, Original Topic: {}, Reason: {}.", failedEvent.getMessage(), key, originalTopic, exceptionMessage);
+        log.info("DLT Received Message. Failed Message: {}, Key: {}, Original Topic: {}, Reason: {}.\nStacktrace: {}", failedEvent.getMessage(), key, originalTopic, exceptionMessage, exceptionStacktrace);
 
         String displayTitle;
         String payloadJson;
@@ -103,7 +103,7 @@ public class DltKafkaConsumerService {
             log.warn("Marked entire BroadcastMessage {} as FAILED due to DLT event.", failedEvent.getBroadcastId());
         }
 
-        log.error("DLT Received Message. Key: {}, Topic: {}, Reason: {}.", key, originalTopic, displayTitle);
+        log.error("DLT Received Message. Key: {}, Topic: {}, DisplayTitle: {}.", key, originalTopic, displayTitle);
         DltMessage dltMessage = DltMessage.builder()
                 .id(UUID.randomUUID().toString())
                 .broadcastId(failedEvent.getBroadcastId())

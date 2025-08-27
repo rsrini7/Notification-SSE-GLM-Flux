@@ -188,8 +188,8 @@ public class UserBroadcastRepository {
      * @param userId The ID of the user.
      * @return A list of unread UserBroadcastMessage objects, sorted by most recent first.
      */
-    public List<UserBroadcastMessage> findUnreadDeliveredByUserId(String userId) {
-        String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND read_status = 'UNREAD' AND delivery_status = 'DELIVERED' ORDER BY created_at DESC";
+    public List<UserBroadcastMessage> findUnreadPendingDeliveredByUserId(String userId) {
+        String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND read_status = 'UNREAD' AND (delivery_status = 'PENDING' OR delivery_status = 'DELIVERED') ORDER BY created_at DESC";
         return jdbcTemplate.query(sql, userBroadcastRowMapper, userId);
     }
 
