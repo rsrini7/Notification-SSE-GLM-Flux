@@ -19,6 +19,7 @@ query --query="SELECT entry.key, msg FROM /pending-events.entrySet entry, entry.
 
 query --query="SELECT e.key, e.value FROM /connection-heartbeat.entries e"
 query --query="SELECT e.key, e.value FROM /broadcast-content.entries e"
+query --query="SELECT e.key, e.value FROM /user-messages-inbox.entries e"
 query --query="SELECT e.key, e.value FROM /pending-events.entries e"
 query --query="SELECT e.key, e.value FROM /user-connections.entries e"
 query --query="SELECT e.key, e.value FROM /sse-messages.entries e"
