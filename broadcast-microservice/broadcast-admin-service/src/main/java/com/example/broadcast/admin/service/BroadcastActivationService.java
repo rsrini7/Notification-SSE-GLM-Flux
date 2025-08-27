@@ -2,8 +2,13 @@ package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
+import com.example.broadcast.shared.repository.UserBroadcastRepository;
+import com.example.broadcast.shared.service.BroadcastStatisticsService;
+import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.util.Constants;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -15,18 +20,22 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.Collections;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class BroadcastActivationService {
 
+    private final UserService userService;
+    private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
     private final BroadcastLifecycleService broadcastLifecycleService;
     private final BroadcastTargetingService broadcastTargetingService;
+    private final BroadcastStatisticsService broadcastStatisticsService;
     private final AppProperties appProperties;
 
-    private static final long PRECOMPUTATION_BUFFER_MS = 120_000L; // 2-minute buffer
     private static final int BATCH_LIMIT = 100;
 
     /**
@@ -42,8 +51,7 @@ public class BroadcastActivationService {
 
         // 1. PRE-COMPUTATION: Find upcoming PRODUCT broadcasts that need preparation
         long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
-        long totalWindowMs = fetchDelayMs + PRECOMPUTATION_BUFFER_MS;
-        ZonedDateTime prefetchCutoff = ZonedDateTime.now(ZoneOffset.UTC).plus(totalWindowMs, ChronoUnit.MILLIS);
+        ZonedDateTime prefetchCutoff = ZonedDateTime.now(ZoneOffset.UTC).plus(fetchDelayMs, ChronoUnit.MILLIS);
 
         List<BroadcastMessage> broadcastsToPrepare = broadcastRepository.findScheduledProductBroadcastsWithinWindow(prefetchCutoff);
         for (BroadcastMessage broadcast : broadcastsToPrepare) {
@@ -52,16 +60,60 @@ public class BroadcastActivationService {
             broadcastTargetingService.precomputeAndStoreTargetUsers(broadcast.getId());
         }
 
-        // 2. ACTIVATION (Fan-out-on-Write): Activate PRODUCT broadcasts that are prepared and due
+        // Phase 2: Activation for prepared PRODUCT broadcasts
+        // This logic remains the same: find READY broadcasts and activate them.
         List<BroadcastMessage> readyBroadcasts = broadcastRepository.findAndLockReadyBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
         for (BroadcastMessage broadcast : readyBroadcasts) {
             broadcastLifecycleService.processReadyBroadcast(broadcast.getId());
         }
 
-        // 3. ACTIVATION (Fan-out-on-Read): Activate ALL, ROLE, or SELECTED broadcasts that are due
-        List<BroadcastMessage> scheduledFanOutOnRead = broadcastRepository.findAndLockScheduledFanOutOnReadBroadcasts(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
-        for (BroadcastMessage broadcast : scheduledFanOutOnRead) {
-            broadcastLifecycleService.activateAndPublishFanOutOnReadBroadcast(broadcast.getId());
+        // Phase 3: Activation for all other due scheduled broadcasts (ALL, ROLE, SELECTED)
+        List<BroadcastMessage> scheduledFanOuts = broadcastRepository.findAndLockScheduledFanOutBroadcasts(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
+        for (BroadcastMessage broadcast : scheduledFanOuts) {
+            if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
+                log.info("Activating scheduled 'ALL' broadcast {}.", broadcast.getId());
+                // 1. Create the initial statistics record so consumers can update it.
+                broadcastStatisticsService.initializeStatistics(broadcast.getId(), 0);
+                // 2. Activate the broadcast, which publishes the single Kafka event.
+                broadcastLifecycleService.activateAndPublishFanOutOnReadBroadcast(broadcast.getId());
+            } else {
+                log.info("Activating scheduled fan-out-on-write broadcast ID: {}", broadcast.getId());
+                // 1. Determine the target user list.
+                List<String> targetUserIds = determineTargetUsersForWrite(broadcast);
+                // 2. Persist the user message records and initialize statistics.
+                if (!targetUserIds.isEmpty()) {
+                    persistUserMessages(broadcast, targetUserIds);
+                }
+                // 3. Activate the broadcast, which now publishes one event PER USER to the outbox.
+                broadcastLifecycleService.activateAndPublishFanOutOnWriteBroadcast(broadcast);
+            }
         }
+    }
+
+    private void persistUserMessages(BroadcastMessage broadcast, List<String> userIds) {
+        log.info("Persisting {} user_broadcast_messages records for scheduled broadcast ID: {}", userIds.size(), broadcast.getId());
+        List<UserBroadcastMessage> userMessages = userIds.stream()
+                .map(userId -> UserBroadcastMessage.builder()
+                        .broadcastId(broadcast.getId())
+                        .userId(userId)
+                        .deliveryStatus(Constants.DeliveryStatus.PENDING.name())
+                        .readStatus(Constants.ReadStatus.UNREAD.name())
+                        .build())
+                .collect(Collectors.toList());
+
+        userBroadcastRepository.batchInsert(userMessages);
+        broadcastLifecycleService.initializeStatistics(broadcast.getId(), userIds.size());
+        
+    }
+
+    private List<String> determineTargetUsersForWrite(BroadcastMessage broadcast) {
+        return switch (Constants.TargetType.valueOf(broadcast.getTargetType())) {
+            case SELECTED -> broadcast.getTargetIds();
+            case ROLE -> broadcast.getTargetIds().stream()
+                    .flatMap(role -> userService.getUserIdsByRole(role).stream())
+                    .distinct()
+                    .collect(Collectors.toList());
+            default -> Collections.emptyList();
+        };
     }
 }

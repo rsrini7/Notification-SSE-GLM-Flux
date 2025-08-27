@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-echo "--> Starting Geode Server..."
+echo "--> Starting Geode Server with cache.xml configuration..."
 gfsh <<EOF
-start server --name=$HOSTNAME --locators=locator[10334] --dir=/data/$HOSTNAME/ --hostname-for-clients=localhost --J=-Dgemfire.subscription-conflation-enabled=true --classpath=/geode-server/classpath/app.jar $@
+start server --name=$HOSTNAME --locators=locator[10334] --dir=/data/$HOSTNAME/ --hostname-for-clients=localhost --cache-xml-file=/geode-scripts/cache.xml --classpath=/geode-server/classpath/app.jar
 EOF
 
 echo "--> Server is running."

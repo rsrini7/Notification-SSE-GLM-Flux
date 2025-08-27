@@ -47,16 +47,16 @@ public class DltService {
         DltMessage dltMessage = dltRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("No DLT message found with ID: " + id));
 
-        // Step 1: Prepare the database synchronously in a new transaction.
         prepareDatabaseForRedrive(dltMessage);
 
-        // Step 2: Resend the original message and clean up.
         log.info("Redriving message ID: {}. Sending original message back to topic: {}", id, dltMessage.getOriginalTopic());
         try {
             MessageDeliveryEvent originalPayload = objectMapper.readValue(dltMessage.getOriginalMessagePayload(), MessageDeliveryEvent.class);
-            kafkaTemplate.send(dltMessage.getOriginalTopic(), originalPayload.getUserId(), originalPayload).get();
             
-            // testingConfigurationService.clearFailureMark(originalPayload.getBroadcastId());
+            // Use the original key (broadcastId) instead of the potentially null userId.
+            String messageKey = dltMessage.getOriginalKey();
+            kafkaTemplate.send(dltMessage.getOriginalTopic(), messageKey, originalPayload).get();
+
             log.info("Cleared DLT failure mark for broadcast ID: {}", originalPayload.getBroadcastId());
 
             String dltTopicName = resolveDltTopicName(dltMessage.getOriginalTopic());

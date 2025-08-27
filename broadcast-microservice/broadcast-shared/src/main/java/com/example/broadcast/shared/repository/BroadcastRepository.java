@@ -16,11 +16,9 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Repository
 public class BroadcastRepository {
@@ -208,24 +206,6 @@ public class BroadcastRepository {
         return jdbcTemplate.query(sql, broadcastRowMapper, targetType);
     }
 
-    public List<BroadcastMessage> findActiveBroadcastsByTargetTypeAndIds(String targetType, List<String> targetIds) {
-        if (targetIds == null || targetIds.isEmpty()) {
-            return List.of();
-        }
-
-        // **DATABASE-AGNOSTIC STRATEGY**
-        // 1. Fetch all active broadcasts for the given target type. This is a simple, compatible query.
-        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = ?";
-        List<BroadcastMessage> allActiveBroadcasts = jdbcTemplate.query(sql, broadcastRowMapper, targetType);
-
-        // 2. Filter the results in the Java application code. This is guaranteed to work across any database.
-        return allActiveBroadcasts.stream()
-                .filter(broadcast -> broadcast.getTargetIds() != null && 
-                                     !Collections.disjoint(broadcast.getTargetIds(), targetIds))
-                .collect(Collectors.toList());
-    }
-
-
     public int updateStatus(Long broadcastId, String status) {
         String sql = "UPDATE broadcast_messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
         return jdbcTemplate.update(sql, status, broadcastId);
@@ -248,30 +228,32 @@ public class BroadcastRepository {
         String sql = "SELECT * FROM broadcast_messages WHERE status IN ('CANCELLED', 'EXPIRED') AND updated_at < ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, cutoff.toOffsetDateTime());
     }
-
-    /**
-     * Finds active broadcasts of type 'SELECTED' where the target_ids list contains the given userId.
-     * WARNING: This query uses a LIKE pattern which is not performant and can cause full table scans.
-     * For a production system, the data model should be normalized with a dedicated join table
-     * and an index on the user_id column to make this lookup efficient.
-     * @param userId The ID of the user to check for.
-     * @return A list of matching broadcast messages.
-     */
-    public List<BroadcastMessage> findActiveSelectedBroadcastsForUser(String userId) {
-        String sql = "SELECT * FROM broadcast_messages WHERE status = 'ACTIVE' AND target_type = 'SELECTED' AND target_ids LIKE ?";
-        // The '%' wildcards are necessary to find the userId within the JSON array string `["user-a", "user-b"]`
-        String searchTerm = "%\"" + userId + "\"%"; 
-        return jdbcTemplate.query(sql, broadcastRowMapper, searchTerm);
-    }
-
+   
     // For BroadcastPrecomputationService
     public List<BroadcastMessage> findScheduledProductBroadcastsWithinWindow(ZonedDateTime cutoffTime) {
-        String sql = "SELECT * FROM broadcast_messages WHERE status = 'SCHEDULED' AND target_type = 'PRODUCT' AND scheduled_at <= ?";
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'SCHEDULED' AND target_type = 'PRODUCT' AND scheduled_at <= ? FOR UPDATE SKIP LOCKED";
         return jdbcTemplate.query(sql, broadcastRowMapper, cutoffTime.toOffsetDateTime());
     }
 
     // For BroadcastSchedulingService
     public List<BroadcastMessage> findAndLockScheduledFanOutOnReadBroadcasts(ZonedDateTime now, int limit) {
+        String sql = """
+            SELECT * FROM broadcast_messages
+            WHERE status = 'SCHEDULED' AND target_type IN ('ALL', 'ROLE', 'SELECTED') AND scheduled_at <= ?
+            ORDER BY scheduled_at
+            LIMIT ?
+            FOR UPDATE SKIP LOCKED
+            """;
+        return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime(), limit);
+    }
+
+    /**
+     * Finds all scheduled broadcasts (ALL, ROLE, SELECTED) that are due to be activated.
+     * @param now The current time.
+     * @param limit The maximum number of broadcasts to process.
+     * @return A list of due broadcast messages.
+     */
+    public List<BroadcastMessage> findAndLockScheduledFanOutBroadcasts(ZonedDateTime now, int limit) {
         String sql = """
             SELECT * FROM broadcast_messages
             WHERE status = 'SCHEDULED' AND target_type IN ('ALL', 'ROLE', 'SELECTED') AND scheduled_at <= ?

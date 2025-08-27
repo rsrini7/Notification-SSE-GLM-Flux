@@ -155,11 +155,3 @@ CREATE TABLE shedlock (
     locked_at TIMESTAMP(3) NOT NULL,
     locked_by VARCHAR(255) NOT NULL
 );
-
-CREATE TABLE broadcast_user_targets (
-    broadcast_id BIGINT NOT NULL,
-    user_id VARCHAR(255) NOT NULL,
-    PRIMARY KEY (broadcast_id, user_id),
-    FOREIGN KEY (broadcast_id) REFERENCES broadcast_messages(id) ON DELETE CASCADE
-);
-CREATE INDEX idx_but_broadcast_id ON broadcast_user_targets (broadcast_id);

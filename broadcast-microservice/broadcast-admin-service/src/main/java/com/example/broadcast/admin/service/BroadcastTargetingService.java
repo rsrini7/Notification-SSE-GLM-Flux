@@ -1,19 +1,15 @@
 package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.config.AppProperties;
-import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
-import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
-import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.service.UserService;
-import com.example.broadcast.shared.repository.UserBroadcastTargetRepository;
+import com.example.broadcast.shared.service.BroadcastStatisticsService;
+import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.exception.UserServiceUnavailableException;
 
 import com.example.broadcast.shared.util.Constants;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -24,12 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.scheduling.annotation.Async;
 
 import java.util.concurrent.ThreadLocalRandom;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -38,43 +31,9 @@ public class BroadcastTargetingService {
 
     private final UserService userService;
     private final BroadcastRepository broadcastRepository;
-    private final UserBroadcastTargetRepository userBroadcastTargetRepository;
     private final AppProperties appProperties;
-    private final OutboxEventPublisher outboxEventPublisher;
-    private final ObjectMapper objectMapper;
-
-
-    /**
-     * Efficiently counts the number of target users for 'ALL' or 'ROLE' broadcasts without fetching all user IDs.
-     * This is used for the "fan-out-on-read" strategy.
-     */
-    @CircuitBreaker(name = "userService", fallbackMethod = "fallbackCountTargetUsers")
-    @Bulkhead(name = "userService")
-    public int countTargetUsers(BroadcastMessage broadcast) {
-        String targetType = broadcast.getTargetType();
-        
-        if (Constants.TargetType.ALL.name().equals(targetType)) {
-            // In a real system, this would be a much more efficient COUNT query against the user service.
-            return userService.getAllUserIds().size();
-        } else if (Constants.TargetType.ROLE.name().equals(targetType)) {
-            // Similarly, this would be an efficient count.
-            return broadcast.getTargetIds().stream()
-                .mapToInt(role -> userService.getUserIdsByRole(role).size())
-                .sum();
-        }
-        
-        return 0;
-    }
-    
-    public List<UserBroadcastMessage> fallbackCreateUserBroadcastMessagesForBroadcast(BroadcastMessage broadcast, Throwable t) {
-        log.error("Circuit breaker opened for user service. Falling back for broadcast ID {}. Error: {}", broadcast.getId(), t.getMessage());
-        return Collections.emptyList();
-    }
-    
-    public int fallbackCountTargetUsers(BroadcastMessage broadcast, Throwable t) {
-        log.error("Circuit breaker opened for user service during count. Falling back for broadcast ID {}. Error: {}", broadcast.getId(), t.getMessage());
-        return 0;
-    }
+    private final UserBroadcastRepository userBroadcastRepository;
+    private final BroadcastStatisticsService broadcastStatisticsService;
 
     /**
      * Asynchronously fetches the complete user list for a broadcast, stores it,
@@ -84,57 +43,36 @@ public class BroadcastTargetingService {
     @Async
     @Transactional
     public void precomputeAndStoreTargetUsers(Long broadcastId) {
-        // 1. Claim the broadcast by setting its status to PREPARING
-        broadcastRepository.updateStatus(broadcastId, Constants.BroadcastStatus.PREPARING.name());
-
         try {
             BroadcastMessage broadcast = broadcastRepository.findById(broadcastId)
                 .orElseThrow(() -> new IllegalStateException("Broadcast not found for pre-computation: " + broadcastId));
 
-            // 2. Simulate the long-running user fetch
+            // 1. Simulate the long-running user fetch
             log.info("Starting long-running user fetch for broadcast ID: {}", broadcastId);
             List<String> targetUserIds = determineAllTargetedUsers(broadcast);
             log.info("Fetch complete. Found {} target users for broadcast ID: {}", targetUserIds.size(), broadcastId);
 
-            // 3. Store the results in the new table
-            userBroadcastTargetRepository.batchInsert(broadcastId, targetUserIds);
+            // 2. Persist these users directly as PENDING messages
+            if (!targetUserIds.isEmpty()) {
+                 List<UserBroadcastMessage> userMessages = targetUserIds.stream()
+                    .map(userId -> UserBroadcastMessage.builder()
+                            .broadcastId(broadcast.getId())
+                            .userId(userId)
+                            .deliveryStatus(Constants.DeliveryStatus.PENDING.name())
+                            .readStatus(Constants.ReadStatus.UNREAD.name())
+                            .build())
+                    .collect(Collectors.toList());
+                userBroadcastRepository.batchInsert(userMessages);
+                broadcastStatisticsService.initializeStatistics(broadcastId, targetUserIds.size());
+            }
 
-            // 4. Notify kafka orchestrator to Cache the result after saving to DB
-            publishTargetsPrecomputedEvent(broadcastId);
-
-            // 5. Mark the broadcast as READY for activation
+            // 3. Mark the broadcast as READY for activation by the scheduler
             broadcastRepository.updateStatus(broadcastId, Constants.BroadcastStatus.READY.name());
-            log.info("Successfully pre-computed and stored {} users for broadcast ID: {}", targetUserIds.size(), broadcastId);
+            log.info("Successfully pre-computed and stored {} user messages for broadcast ID: {}. Status is now READY.", targetUserIds.size(), broadcastId);
 
         } catch (Exception e) {
             log.error("Failed to pre-compute users for broadcast ID: {}. Setting status to FAILED.", broadcastId, e);
             broadcastRepository.updateStatus(broadcastId, Constants.BroadcastStatus.FAILED.name());
-        }
-    }
-
-    private void publishTargetsPrecomputedEvent(Long broadcastId) {
-        MessageDeliveryEvent eventPayload = MessageDeliveryEvent.builder()
-                .eventId(UUID.randomUUID().toString())
-                .broadcastId(broadcastId)
-                .eventType(Constants.EventType.TARGETS_PRECOMPUTED.name())
-                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-                .build();
-
-        String topicName = appProperties.getKafka().getTopic().getNameOrchestration();
-        try {
-            String payloadJson = objectMapper.writeValueAsString(eventPayload);
-            OutboxEvent outboxEvent = OutboxEvent.builder()
-                    .id(UUID.fromString(eventPayload.getEventId()))
-                    .aggregateType(eventPayload.getClass().getSimpleName())
-                    .aggregateId(broadcastId.toString())
-                    .eventType(eventPayload.getEventType())
-                    .topic(topicName)
-                    .payload(payloadJson)
-                    .createdAt(eventPayload.getTimestamp())
-                    .build();
-            outboxEventPublisher.publish(outboxEvent);
-        } catch (JsonProcessingException e) {
-            log.error("Critical: Failed to serialize TARGETS_PRECOMPUTED event for outbox for broadcastId {}.", broadcastId, e);
         }
     }
     
@@ -146,7 +84,7 @@ public class BroadcastTargetingService {
      */
     @CircuitBreaker(name = "userService", fallbackMethod = "fallbackDetermineUsers")
     @Bulkhead(name = "userService")
-    public List<String> determineAllTargetedUsers(BroadcastMessage broadcast) {
+    private List<String> determineAllTargetedUsers(BroadcastMessage broadcast) {
         
         // SIMULATION :: User List Preparation
         long maxDelay = appProperties.getSimulation().getUserFetchDelayMs();
@@ -165,23 +103,14 @@ public class BroadcastTargetingService {
         
         String targetType = broadcast.getTargetType();
 
-        if (Constants.TargetType.ALL.name().equals(targetType)) {
-            return userService.getAllUserIds();
-        } else if (Constants.TargetType.ROLE.name().equals(targetType)) {
-            return broadcast.getTargetIds().stream()
-                .flatMap(role -> userService.getUserIdsByRole(role).stream())
-                .distinct()
-                .collect(Collectors.toList());
-        } else if (Constants.TargetType.SELECTED.name().equals(targetType)) {
-            return broadcast.getTargetIds();
-        }else if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
-            // Fetch users for each specified product and combine them into a unique list.
+         if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
             return broadcast.getTargetIds().stream()
                 .flatMap(productId -> userService.getUserIdsByProduct(productId).stream())
                 .distinct()
                 .collect(Collectors.toList());
         }
 
+        log.warn("determineAllTargetedUsers was called for an unexpected type: {}. This service should only handle PRODUCT broadcasts. Returning empty list.", targetType);
         return Collections.emptyList();
     }
     

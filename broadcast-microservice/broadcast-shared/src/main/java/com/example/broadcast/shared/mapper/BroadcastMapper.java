@@ -4,6 +4,7 @@ import com.example.broadcast.shared.dto.admin.BroadcastResponse;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
+import com.example.broadcast.shared.dto.cache.UserMessageInbox;
 import org.springframework.stereotype.Component;
 
 /**
@@ -39,14 +40,13 @@ public class BroadcastMapper {
                 .build();
     }
 
-     /**
+    /**
      * Maps a UserBroadcastMessage and its parent BroadcastMessage to a UserBroadcastResponse DTO.
-     * Can now handle a null UserBroadcastMessage for creating responses for group/global broadcasts.
-     * @param message The user-specific message entity (can be null).
+     * @param message The user-specific message entity.
      * @param broadcast The parent broadcast entity.
      * @return The user-specific response DTO.
      */
-    public UserBroadcastResponse toUserBroadcastResponse(UserBroadcastMessage message, BroadcastMessage broadcast) {
+    public UserBroadcastResponse toUserBroadcastResponseFromEntity(UserBroadcastMessage message, BroadcastMessage broadcast) {
         UserBroadcastResponse.UserBroadcastResponseBuilder builder = UserBroadcastResponse.builder()
                 .broadcastId(broadcast.getId())
                 .senderName(broadcast.getSenderName())
@@ -56,7 +56,6 @@ public class BroadcastMapper {
                 .broadcastCreatedAt(broadcast.getCreatedAt())
                 .expiresAt(broadcast.getExpiresAt());
 
-        // If a specific user message exists, populate its details
         if (message != null) {
             builder.id(message.getId())
                    .userId(message.getUserId())
@@ -66,13 +65,50 @@ public class BroadcastMapper {
                    .readAt(message.getReadAt())
                    .createdAt(message.getCreatedAt());
         } else {
-            // For group messages where no UserBroadcastMessage exists, set sensible defaults
-            builder.id(broadcast.getId()) // Use broadcast ID as a fallback identifier
-                   .deliveryStatus("DELIVERED") // Assumed delivered as it's being fetched
-                   .readStatus("UNREAD") // Default to unread
+            builder.id(broadcast.getId())
+                   .deliveryStatus("DELIVERED")
+                   .readStatus("UNREAD")
                    .createdAt(broadcast.getCreatedAt());
         }
 
         return builder.build();
+    }
+
+    /**
+     * Maps a lightweight cached message and a full broadcast message to a user-facing response DTO.
+     * @param userMessage The cached, user-specific status information from UserMessageInbox.
+     * @param broadcast The full broadcast content.
+     * @return The complete response DTO for the UI.
+     */
+    public UserBroadcastResponse toUserBroadcastResponseFromCache(UserMessageInbox userMessage, BroadcastMessage broadcast) {
+        return UserBroadcastResponse.builder()
+                .id(userMessage.getMessageId())
+                .broadcastId(broadcast.getId())
+                .userId(null) // Not needed in the final UI response DTO
+                .deliveryStatus(userMessage.getDeliveryStatus())
+                .readStatus(userMessage.getReadStatus())
+                .createdAt(userMessage.getCreatedAt())
+                .senderName(broadcast.getSenderName())
+                .content(broadcast.getContent())
+                .priority(broadcast.getPriority())
+                .category(broadcast.getCategory())
+                .broadcastCreatedAt(broadcast.getCreatedAt())
+                .expiresAt(broadcast.getExpiresAt())
+                .build();
+    }
+
+    /**
+     * Maps a database entity to the lightweight cache DTO.
+     * @param message The UserBroadcastMessage entity from the database.
+     * @return The lightweight DTO for caching.
+     */
+    public UserMessageInbox toUserMessageInbox(UserBroadcastMessage message) {
+        return new UserMessageInbox(
+                message.getId(),
+                message.getBroadcastId(),
+                message.getDeliveryStatus(),
+                message.getReadStatus(),
+                message.getCreatedAt()
+        );
     }
 }

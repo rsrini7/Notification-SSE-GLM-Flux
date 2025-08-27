@@ -11,11 +11,6 @@ erDiagram
         BOOLEAN notification_enabled
     }
 
-    BROADCAST_USER_TARGETS {
-        BIGINT broadcast_id PK, FK "Foreign Key"
-        VARCHAR user_id PK
-    }
-
     USER_BROADCAST_MESSAGES {
         BIGINT id PK "Primary Key"
         BIGINT broadcast_id FK "Foreign Key"
@@ -51,7 +46,6 @@ erDiagram
         VARCHAR locked_by
     }
 
-    BROADCAST_MESSAGES ||--o{ BROADCAST_USER_TARGETS : "has pre-computed targets"
     BROADCAST_MESSAGES ||--o{ USER_BROADCAST_MESSAGES : "tracks status for"
     BROADCAST_MESSAGES ||..|| BROADCAST_STATISTICS : "has stats"
     USER_PREFERENCES |o..o{ USER_BROADCAST_MESSAGES : "influences"

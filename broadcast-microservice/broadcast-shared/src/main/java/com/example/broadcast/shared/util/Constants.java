@@ -10,13 +10,8 @@ public final class Constants {
     public static final class GeodeRegionNames {
         private GeodeRegionNames() {}
         public static final String USER_CONNECTIONS = "user-connections";
-        public static final String CONNECTION_METADATA = "connection-metadata";
-        public static final String CLUSTER_POD_CONNECTIONS = "cluster-pod-connections";
-        public static final String CLUSTER_POD_HEARTBEATS = "cluster-pod-heartbeats";
-        public static final String PENDING_EVENTS = "pending-events";
+        public static final String CONNECTION_HEARTBEAT = "connection-heartbeat";
         public static final String BROADCAST_CONTENT = "broadcast-content";
-        public static final String ACTIVE_GROUP_BROADCASTS = "active-group-broadcasts";
-        public static final String PRECOMPUTED_TARGETS = "precomputed-targets";
         public static final String SSE_MESSAGES = "sse-messages";
     }
 
@@ -54,8 +49,7 @@ public final class Constants {
         READ,
         CANCELLED,
         EXPIRED,
-        FAILED,
-        TARGETS_PRECOMPUTED
+        FAILED
     }
 
     public enum SseEventType {

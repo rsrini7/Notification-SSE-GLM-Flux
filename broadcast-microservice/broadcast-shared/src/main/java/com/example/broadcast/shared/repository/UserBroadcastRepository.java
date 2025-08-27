@@ -1,7 +1,6 @@
 package com.example.broadcast.shared.repository;
 
 import com.example.broadcast.shared.model.UserBroadcastMessage;
-import com.example.broadcast.shared.util.Constants.DeliveryStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -182,4 +181,28 @@ public class UserBroadcastRepository {
         String sql = "SELECT broadcast_id FROM user_broadcast_messages WHERE user_id = ? AND read_status = 'READ'";
         return jdbcTemplate.queryForList(sql, Long.class, userId);
     }
+
+    /**
+     * Finds all message records for a user that have not been read and delivered.
+     * This is used to fetch the primary list of messages for a user's inbox.
+     * @param userId The ID of the user.
+     * @return A list of unread UserBroadcastMessage objects, sorted by most recent first.
+     */
+    public List<UserBroadcastMessage> findUnreadPendingDeliveredByUserId(String userId) {
+        String sql = "SELECT * FROM user_broadcast_messages WHERE user_id = ? AND read_status = 'UNREAD' AND (delivery_status = 'PENDING' OR delivery_status = 'DELIVERED') ORDER BY created_at DESC";
+        return jdbcTemplate.query(sql, userBroadcastRowMapper, userId);
+    }
+
+    /**
+     * NEW METHOD: Deletes all message records for a specific broadcast
+     * that have NOT been marked as 'READ'.
+     * This is used by the cleanup service to enforce data retention policies.
+     * @param broadcastId The ID of the finalized (EXPIRED or CANCELLED) broadcast.
+     * @return The number of rows deleted.
+     */
+    public int deleteUnreadMessagesByBroadcastId(Long broadcastId) {
+        String sql = "DELETE FROM user_broadcast_messages WHERE broadcast_id = ? AND read_status <> 'READ'";
+        return jdbcTemplate.update(sql, broadcastId);
+    }
+
 }

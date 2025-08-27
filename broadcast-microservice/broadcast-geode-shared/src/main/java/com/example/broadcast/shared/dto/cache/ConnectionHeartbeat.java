@@ -9,8 +9,7 @@ import java.io.Serializable;
 @Getter
 @AllArgsConstructor
 @With // Useful for non-destructive updates
-public class ConnectionMetadata implements Serializable {
+public class ConnectionHeartbeat implements Serializable {
     private final String userId;
-    private final String clusterName;
     private final long lastHeartbeatTimestamp;
 }
