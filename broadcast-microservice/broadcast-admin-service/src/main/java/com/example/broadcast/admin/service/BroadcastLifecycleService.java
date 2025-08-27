@@ -210,8 +210,10 @@ public class BroadcastLifecycleService {
         broadcast.setStatus(Constants.BroadcastStatus.CANCELLED.name());
         broadcastRepository.update(broadcast);
 
-        int updatedCount = userBroadcastRepository.updateNonFinalStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
-        log.info("Updated {} PENDING or DELIVERED user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
+        if (!Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
+            int updatedCount = userBroadcastRepository.updateNonFinalStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
+            log.info("Updated {} PENDING or DELIVERED user messages to SUPERSEDED for cancelled broadcast ID: {}", updatedCount, id);
+        }
 
         publishSingleOrchestrationEvent(broadcast, Constants.EventType.CANCELLED, "Broadcast CANCELLED");
         
@@ -227,8 +229,10 @@ public class BroadcastLifecycleService {
             broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
             broadcastRepository.update(broadcast);
             
-            int updatedCount = userBroadcastRepository.updateNonFinalStatusesByBroadcastId(broadcastId, Constants.DeliveryStatus.SUPERSEDED.name());
-            log.info("Updated {} PENDING or DELIVERED user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
+            if (!Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
+                int updatedCount = userBroadcastRepository.updateNonFinalStatusesByBroadcastId(broadcastId, Constants.DeliveryStatus.SUPERSEDED.name());
+                log.info("Updated {} PENDING or DELIVERED user messages to SUPERSEDED for expired broadcast ID: {}", updatedCount, broadcastId);
+            }
             
             publishSingleOrchestrationEvent(broadcast, Constants.EventType.EXPIRED, "Broadcast EXPIRED");
             

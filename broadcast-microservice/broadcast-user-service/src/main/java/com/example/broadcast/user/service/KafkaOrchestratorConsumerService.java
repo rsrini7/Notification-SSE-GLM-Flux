@@ -73,8 +73,6 @@ public class KafkaOrchestratorConsumerService {
     }
 
     private void handleUserSpecificEvent(MessageDeliveryEvent event) {
-        // Cache logic is not needed here because there's no "group" to cache.
-        // We just deliver the message.
         log.debug("Processing user-specific event for user {}", event.getUserId());
         scatterToUser(event);
     }
@@ -94,7 +92,6 @@ public class KafkaOrchestratorConsumerService {
             case CANCELLED:
             case EXPIRED:
                 cacheService.evictBroadcastContent(broadcast.getId());
-                cacheService.evictUserInbox(event.getUserId());
                 break;
             case READ:
                 handleReadEvent(event);
