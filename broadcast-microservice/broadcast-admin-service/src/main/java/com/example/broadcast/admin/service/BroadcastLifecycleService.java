@@ -24,7 +24,6 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.annotation.Propagation;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -326,7 +325,46 @@ public class BroadcastLifecycleService {
         log.info("Activated scheduled fan-out-on-read broadcast ID: {}", broadcastId);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    /**
+     * Activates a broadcast and publishes a specific outbox event for each targeted user.
+     * This is used for "fan-out-on-write" broadcasts (i.e., scheduled 'SELECTED' and 'ROLE').
+     * @param broadcast The broadcast message to activate.
+     */
+    @Transactional
+    public void activateAndPublishFanOutOnWriteBroadcast(BroadcastMessage broadcast) {
+        // 1. Update the broadcast status to ACTIVE.
+        broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
+        broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
+        broadcastRepository.update(broadcast);
+
+        // 2. Fetch the list of user messages that were already persisted by the scheduler.
+        List<String> targetUserIds = userBroadcastRepository.findByBroadcastId(broadcast.getId()).stream()
+                .map(UserBroadcastMessage::getUserId)
+                .collect(Collectors.toList());
+        
+        if (targetUserIds.isEmpty()) {
+            log.warn("Activated broadcast {} but found no persisted user messages to create outbox events for.", broadcast.getId());
+            return;
+        }
+
+        // 3. Create a batch of user-specific outbox events.
+        log.info("Activating broadcast {}. Creating a batch of {} outbox events for early fan-out.", broadcast.getId(), targetUserIds.size());
+        List<OutboxEvent> outboxEvents = new ArrayList<>();
+        for (String userId : targetUserIds) {
+            MessageDeliveryEvent eventPayload = createOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent())
+                    .toBuilder()
+                    .userId(userId)
+                    .build();
+            // Use userId as the Kafka key for partitioning
+            outboxEvents.add(createOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
+        }
+        
+        // 4. Publish the entire batch to the outbox in one go.
+        outboxEventPublisher.publishBatch(outboxEvents);
+        log.info("Successfully published batch of {} events to outbox for activated broadcast {}.", outboxEvents.size(), broadcast.getId());
+    }
+
+    @Transactional
     public void failBroadcast(MessageDeliveryEvent deliveryEvent) {
         if (deliveryEvent.getBroadcastId() == null) return;
         broadcastRepository.updateStatus(deliveryEvent.getBroadcastId(), Constants.BroadcastStatus.FAILED.name());

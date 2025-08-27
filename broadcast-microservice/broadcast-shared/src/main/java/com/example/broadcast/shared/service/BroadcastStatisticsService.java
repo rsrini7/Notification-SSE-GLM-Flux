@@ -5,7 +5,6 @@ import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
@@ -18,7 +17,7 @@ public class BroadcastStatisticsService {
 
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void initializeStatistics(Long broadcastId, int totalTargeted) {
         log.info("Initializing statistics in a new transaction for broadcast ID {} with {} targeted users.", broadcastId, totalTargeted);
         BroadcastStatistics stats = BroadcastStatistics.builder()

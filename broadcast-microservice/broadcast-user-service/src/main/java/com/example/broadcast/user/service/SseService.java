@@ -1,15 +1,13 @@
 package com.example.broadcast.user.service;
 
-import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
-import com.example.broadcast.shared.repository.UserBroadcastRepository;
+import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.SseEventType;
-import com.example.broadcast.user.service.cache.CacheService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -19,12 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -32,13 +25,11 @@ import java.util.stream.Collectors;
 public class SseService {
 
     private final BroadcastRepository broadcastRepository;
-    private final UserBroadcastRepository userBroadcastRepository;
+    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
-    private final CacheService cacheService;
     private final UserMessageService userMessageService;
     private final ObjectMapper objectMapper;
-    private final AppProperties appProperties;
 
     @Transactional
     public void registerConnection(String userId, String connectionId) {
@@ -104,7 +95,7 @@ public class SseService {
         log.info("Delivering fan-out-on-read broadcast {} to online user {}", broadcast.getId(), userId);
         UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponse(null, broadcast);
         sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
-        userMessageService.processAndCountGroupMessageDelivery(userId, broadcast);
+        broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
     }
     
     private void sendRemoveMessageEvent(String userId, Long broadcastId) {

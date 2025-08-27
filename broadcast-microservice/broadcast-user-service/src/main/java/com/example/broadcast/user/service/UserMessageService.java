@@ -14,7 +14,6 @@ import com.example.broadcast.user.service.cache.CacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
@@ -129,12 +128,27 @@ public class UserMessageService {
         log.info("Successfully processed 'mark as read' for broadcast {} for user {} and published READ event.", broadcastId, userId);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void processAndCountGroupMessageDelivery(String userId, BroadcastMessage broadcast) {
+    @Transactional
+    public void persistGroupMessageDelivery(String userId, BroadcastMessage broadcast) {
         if (broadcast == null || userId == null) return;
-        
-        // This is the only action needed. No database writes to the user_broadcast_messages table.
-        broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
-        log.info("Counted delivery of 'ALL' broadcast {} to user {}", broadcast.getId(), userId);
+
+        // Check if a record already exists for this user and broadcast to avoid errors.
+        Optional<UserBroadcastMessage> existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcast.getId());
+
+        // If no record exists, it's the first time this user is seeing this message.
+        if (existingMessage.isEmpty()) {
+            log.info("First-time delivery of 'ALL' broadcast {} to user {}. Creating persistent 'DELIVERED' record.", broadcast.getId(), userId);
+            
+            // Create a record to track that this message has been delivered.
+            UserBroadcastMessage newMessage = UserBroadcastMessage.builder()
+                    .userId(userId)
+                    .broadcastId(broadcast.getId())
+                    .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
+                    .readStatus(Constants.ReadStatus.UNREAD.name())
+                    .deliveredAt(ZonedDateTime.now(ZoneOffset.UTC))
+                    .build();
+            userBroadcastRepository.save(newMessage);
+        }
     }
+
 }

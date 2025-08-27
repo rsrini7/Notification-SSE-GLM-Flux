@@ -5,7 +5,6 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
-import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.user.service.cache.CacheService;
@@ -33,7 +32,6 @@ public class KafkaOrchestratorConsumerService {
 
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
-    private final UserService userService;
     private final AppProperties appProperties;
     
     @Qualifier("sseMessagesRegion")

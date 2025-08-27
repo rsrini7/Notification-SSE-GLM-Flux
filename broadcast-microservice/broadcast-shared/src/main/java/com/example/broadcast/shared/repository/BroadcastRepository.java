@@ -16,11 +16,9 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Repository
 public class BroadcastRepository {
@@ -233,7 +231,7 @@ public class BroadcastRepository {
    
     // For BroadcastPrecomputationService
     public List<BroadcastMessage> findScheduledProductBroadcastsWithinWindow(ZonedDateTime cutoffTime) {
-        String sql = "SELECT * FROM broadcast_messages WHERE status = 'SCHEDULED' AND target_type = 'PRODUCT' AND scheduled_at <= ?";
+        String sql = "SELECT * FROM broadcast_messages WHERE status = 'SCHEDULED' AND target_type = 'PRODUCT' AND scheduled_at <= ? FOR UPDATE SKIP LOCKED";
         return jdbcTemplate.query(sql, broadcastRowMapper, cutoffTime.toOffsetDateTime());
     }
 

@@ -1,7 +1,6 @@
 package com.example.broadcast.shared.repository;
 
 import com.example.broadcast.shared.model.UserBroadcastMessage;
-import com.example.broadcast.shared.util.Constants.DeliveryStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;

@@ -5,15 +5,16 @@ import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
+import com.example.broadcast.shared.service.BroadcastStatisticsService;
+import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.util.Constants;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.example.broadcast.shared.service.UserService;
-
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -32,9 +33,9 @@ public class BroadcastActivationService {
     private final BroadcastRepository broadcastRepository;
     private final BroadcastLifecycleService broadcastLifecycleService;
     private final BroadcastTargetingService broadcastTargetingService;
+    private final BroadcastStatisticsService broadcastStatisticsService;
     private final AppProperties appProperties;
 
-    private static final long PRECOMPUTATION_BUFFER_MS = 120_000L; // 2-minute buffer
     private static final int BATCH_LIMIT = 100;
 
     /**
@@ -50,8 +51,7 @@ public class BroadcastActivationService {
 
         // 1. PRE-COMPUTATION: Find upcoming PRODUCT broadcasts that need preparation
         long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
-        long totalWindowMs = fetchDelayMs + PRECOMPUTATION_BUFFER_MS;
-        ZonedDateTime prefetchCutoff = ZonedDateTime.now(ZoneOffset.UTC).plus(totalWindowMs, ChronoUnit.MILLIS);
+        ZonedDateTime prefetchCutoff = ZonedDateTime.now(ZoneOffset.UTC).plus(fetchDelayMs, ChronoUnit.MILLIS);
 
         List<BroadcastMessage> broadcastsToPrepare = broadcastRepository.findScheduledProductBroadcastsWithinWindow(prefetchCutoff);
         for (BroadcastMessage broadcast : broadcastsToPrepare) {
@@ -60,32 +60,33 @@ public class BroadcastActivationService {
             broadcastTargetingService.precomputeAndStoreTargetUsers(broadcast.getId());
         }
 
-        // Phase 2: Activation (Fan-out-on-Write for PRODUCT broadcasts that are prepared and due)
+        // Phase 2: Activation for prepared PRODUCT broadcasts
+        // This logic remains the same: find READY broadcasts and activate them.
         List<BroadcastMessage> readyBroadcasts = broadcastRepository.findAndLockReadyBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
         for (BroadcastMessage broadcast : readyBroadcasts) {
             broadcastLifecycleService.processReadyBroadcast(broadcast.getId());
         }
 
-        // Phase 3: Activation (Now includes Fan-out-on-Write for SCHEDULED 'SELECTED' and 'ROLE' broadcasts)
+        // Phase 3: Activation for all other due scheduled broadcasts (ALL, ROLE, SELECTED)
         List<BroadcastMessage> scheduledFanOuts = broadcastRepository.findAndLockScheduledFanOutBroadcasts(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
+        log.info("scheduledFanOuts {}",scheduledFanOuts);
         for (BroadcastMessage broadcast : scheduledFanOuts) {
             if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
-                // Fan-out-on-Read: Simple activation
+                log.info("Activating scheduled 'ALL' broadcast {}.", broadcast.getId());
+                // 1. Create the initial statistics record so consumers can update it.
+                broadcastStatisticsService.initializeStatistics(broadcast.getId(), 0);
+                // 2. Activate the broadcast, which publishes the single Kafka event.
                 broadcastLifecycleService.activateAndPublishFanOutOnReadBroadcast(broadcast.getId());
             } else {
-                // Fan-out-on-Write: Perform the fan-out now, then activate
                 log.info("Activating scheduled fan-out-on-write broadcast ID: {}", broadcast.getId());
-                
-                // 1. Determine target users
+                // 1. Determine the target user list.
                 List<String> targetUserIds = determineTargetUsersForWrite(broadcast);
-                
-                // 2. Persist the user message records
+                // 2. Persist the user message records and initialize statistics.
                 if (!targetUserIds.isEmpty()) {
                     persistUserMessages(broadcast, targetUserIds);
                 }
-                
-                // 3. Activate and publish the single orchestration event
-                broadcastLifecycleService.activateAndPublishFanOutOnReadBroadcast(broadcast.getId());
+                // 3. Activate the broadcast, which now publishes one event PER USER to the outbox.
+                broadcastLifecycleService.activateAndPublishFanOutOnWriteBroadcast(broadcast);
             }
         }
     }
@@ -102,7 +103,8 @@ public class BroadcastActivationService {
                 .collect(Collectors.toList());
 
         userBroadcastRepository.batchInsert(userMessages);
-        broadcastLifecycleService.initializeStatistics(broadcast.getId(), userIds.size()); // Assuming initializeStatistics is public
+        broadcastLifecycleService.initializeStatistics(broadcast.getId(), userIds.size());
+        
     }
 
     private List<String> determineTargetUsersForWrite(BroadcastMessage broadcast) {
