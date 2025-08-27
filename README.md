@@ -11,6 +11,10 @@ The project is divided into two main components:
 
 For detailed information about each component, please refer to the `README.md` files in their respective directories.
 
+## CRaC challanges
+
+https://callistaenterprise.se/blogg/teknik/2024/07/01/SpringBoot-with-CRaC-part1-automatic-checkpoint/
+
 ## System Architecture
 
 The overall system architecture is designed for scalability and real-time performance. It includes:

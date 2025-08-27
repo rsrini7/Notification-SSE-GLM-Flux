@@ -26,3 +26,9 @@ logging:
   file:
     # Setting the name to empty disables the file appender
     name:
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,checkpoint"

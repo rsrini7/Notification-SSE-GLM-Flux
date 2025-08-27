@@ -17,7 +17,10 @@ COPY broadcast-geode-shared ./broadcast-geode-shared
 RUN mvn package -DskipTests
 
 # --- Stage 2: Run the app and create the checkpoint ---
-FROM bellsoft/liberica-runtime-container:jdk-21-crac-cds-slim-musl AS checkpoint
+# FROM bellsoft/liberica-runtime-container:jdk-21-crac-cds-musl AS checkpoint
+# FROM bellsoft/liberica-runtime-container:jdk-21-crac-cds-slim-musl AS checkpoint
+FROM azul/zulu-openjdk:21.0.3-21.34-jdk-crac AS checkpoint
+
 WORKDIR /app
 
 # above -slim image apk or apt / apt-get commands not available.
