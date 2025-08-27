@@ -1,0 +1,30 @@
+sequenceDiagram
+    autonumber
+
+    participant UserUI as User UI
+    participant UserService as User Service
+    participant GeodeInboxCache as Geode (user-messages-inbox)
+    participant GeodeContentCache as Geode (broadcast-content)
+    participant DB as PostgreSQL DB
+
+    Note over UserUI, DB: A user requests their full list of messages from the API.
+
+    UserUI->>+UserService: 1- GET /api/user/messages
+
+    UserService->>+GeodeInboxCache: 2- Get cached inbox for the user from 'user-messages-inbox'
+    
+    alt Cache Hit
+        GeodeInboxCache-->>-UserService: 3a- Returns List<UserMessageInbox>
+        Note right of UserService: 4a- Reconstruct full response DTOs...
+        UserService->>+GeodeContentCache: 5a- Batch GET for all broadcastId's from 'broadcast-content'
+        GeodeContentCache-->>-UserService: 
+        UserService-->>-UserUI: 6a- Returns fully reconstructed inbox from cache
+    else Cache Miss
+        GeodeInboxCache-->>-UserService: 3b- Returns null
+        UserService->>+DB: 4b- Queries database for all unread messages
+        DB-->>-UserService: 5b- Returns complete message list from the source of truth
+        note right of UserService: 6b- Assembles full DTOs and a lightweight list for caching...
+        UserService->>+GeodeInboxCache: 7b- PUT lightweight inbox list into 'user-messages-inbox' cache
+        GeodeInboxCache-->>-UserService: 
+        UserService-->>-UserUI: 8b- Returns newly assembled inbox
+    end
