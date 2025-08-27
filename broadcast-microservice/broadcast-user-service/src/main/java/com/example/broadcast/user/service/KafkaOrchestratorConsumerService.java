@@ -20,7 +20,6 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -76,17 +75,14 @@ public class KafkaOrchestratorConsumerService {
             return;
         }
         
-        
         // The cache logic is ONLY needed for 'ALL' type broadcasts.
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
                 cacheService.cacheBroadcastContent(broadcast);
-                updateActiveGroupCaches(broadcast, true);
                 break;
             case CANCELLED:
             case EXPIRED:
                 cacheService.evictBroadcastContent(broadcast.getId());
-                updateActiveGroupCaches(broadcast, false);
                 break;
             case READ:
                 handleReadEvent(event);
@@ -109,43 +105,6 @@ public class KafkaOrchestratorConsumerService {
         }
     }
 
-    /**
-     * Surgically updates the 'active-group-broadcasts' cache by either adding or removing a single broadcast.
-     * @param broadcast The broadcast to add or remove.
-     * @param isAddition True to add, false to remove.
-     */
-    private void updateActiveGroupCaches(BroadcastMessage broadcast, boolean isAddition) {
-        String targetType = broadcast.getTargetType();
-        if (Constants.TargetType.ALL.name().equals(targetType)) {
-            updateCacheForKey("ALL", broadcast, isAddition);
-        } else if (Constants.TargetType.ROLE.name().equals(targetType)) {
-            broadcast.getTargetIds().forEach(role -> {
-                String cacheKey = "ROLE:" + role;
-                updateCacheForKey(cacheKey, broadcast, isAddition);
-            });
-        }
-    }
-
-    private void updateCacheForKey(String cacheKey, BroadcastMessage broadcast, boolean isAddition) {
-        List<BroadcastMessage> cachedList = cacheService.getActiveGroupBroadcasts(cacheKey);
-        // Initialize the list if it doesn't exist in the cache
-        if (cachedList == null) {
-            cachedList = new ArrayList<>();
-        }
-
-        // Remove any existing instance of this broadcast to prevent duplicates
-        cachedList.removeIf(b -> b.getId().equals(broadcast.getId()));
-
-        if (isAddition) {
-            cachedList.add(broadcast);
-            log.info("Added broadcast {} to active cache for key '{}'.", broadcast.getId(), cacheKey);
-        } else {
-            log.info("Removed broadcast {} from active cache for key '{}'.", broadcast.getId(), cacheKey);
-        }
-
-        // Put the modified list back into the cache
-        cacheService.cacheActiveGroupBroadcasts(cacheKey, cachedList);
-    }
      private void handleReadEvent(MessageDeliveryEvent event) {
         log.info("Scattering single '{}' event to Geode Region for user {}", event.getEventType(), event.getUserId());
         scatterToUser(event);

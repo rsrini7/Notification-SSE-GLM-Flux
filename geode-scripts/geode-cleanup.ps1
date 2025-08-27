@@ -15,7 +15,6 @@ $LocatorAddress = "localhost[10334]"
 
 # List of all regions to be cleared
 $regions = @(
-    "active-group-broadcasts",
     "broadcast-content",
     "connection-metadata",
     "pending-events",

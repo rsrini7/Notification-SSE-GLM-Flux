@@ -29,7 +29,6 @@ public class GeodeCacheService implements CacheService {
     private final Region<String, Long> clusterPodHeartbeatsRegion;
     private final Region<String, List<MessageDeliveryEvent>> pendingEventsRegion;
     private final Region<Long, BroadcastMessage> broadcastContentRegion;
-    private final Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion;
 
     public GeodeCacheService(ObjectMapper objectMapper,
                              ClientCache clientCache,
@@ -38,8 +37,7 @@ public class GeodeCacheService implements CacheService {
                              @Qualifier("clusterPodConnectionsRegion") Region<String, Set<String>> clusterPodConnectionsRegion,
                              @Qualifier("clusterPodHeartbeatsRegion") Region<String, Long> clusterPodHeartbeatsRegion,
                              @Qualifier("pendingEventsRegion") Region<String, List<MessageDeliveryEvent>> pendingEventsRegion,
-                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastMessage> broadcastContentRegion,
-                             @Qualifier("activeGroupBroadcastsRegion") Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion
+                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastMessage> broadcastContentRegion
     ) {
         this.objectMapper = objectMapper;
         this.clientCache = clientCache;
@@ -49,7 +47,6 @@ public class GeodeCacheService implements CacheService {
         this.clusterPodHeartbeatsRegion = clusterPodHeartbeatsRegion;
         this.pendingEventsRegion = pendingEventsRegion;
         this.broadcastContentRegion = broadcastContentRegion;
-        this.activeGroupBroadcastsRegion = activeGroupBroadcastsRegion;
     }
 
 
@@ -248,16 +245,6 @@ public class GeodeCacheService implements CacheService {
         if (broadcastId != null) broadcastContentRegion.remove(broadcastId);
     }
 
-    @Override
-    public List<BroadcastMessage> getActiveGroupBroadcasts(String cacheKey) {
-        return activeGroupBroadcastsRegion.get(cacheKey);
-    }
-
-    @Override
-    public void cacheActiveGroupBroadcasts(String cacheKey, List<BroadcastMessage> broadcasts) {
-        activeGroupBroadcastsRegion.put(cacheKey, broadcasts);
-    }
-   
     private Optional<UserConnectionInfo> getConnectionInfoByUserId(String userId, String clusterName) {
         String infoJson = userConnectionsRegion.get(getClusterUserKey(userId, clusterName));
         if (infoJson == null) {

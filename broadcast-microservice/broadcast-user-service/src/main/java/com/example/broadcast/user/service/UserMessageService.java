@@ -52,7 +52,7 @@ public class UserMessageService {
             List<UserBroadcastMessage> unreadTargetedMessages = userBroadcastRepository.findUnreadByUserId(userId);
 
             // Step 2: Fetch all active 'ALL' type broadcasts (fan-out on read).
-            List<BroadcastMessage> allTypeBroadcasts = getActiveBroadcastsForAll();
+            List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType("ALL");
 
             // Step 3: Get IDs of 'ALL' broadcasts the user has already marked as read to filter them out.
             Set<Long> readBroadcastIds = new HashSet<>(userBroadcastRepository.findReadBroadcastIdsByUserId(userId));
@@ -83,18 +83,6 @@ public class UserMessageService {
         }).subscribeOn(jdbcScheduler);
     }
 
-    private List<BroadcastMessage> getActiveBroadcastsForAll() {
-        final String cacheKey = "ALL";
-        List<BroadcastMessage> cachedBroadcasts = cacheService.getActiveGroupBroadcasts(cacheKey);
-        if (cachedBroadcasts != null) {
-            log.debug("[CACHE_HIT] Active broadcasts for 'ALL' users found in cache");
-            return cachedBroadcasts;
-        }
-        log.info("[CACHE_MISS] Active broadcasts for 'ALL' users not in cache. Fetching from DB.", "ALL");
-        List<BroadcastMessage> dbBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType("ALL");
-        cacheService.cacheActiveGroupBroadcasts(cacheKey, dbBroadcasts);
-        return dbBroadcasts;
-    }
     
     @Transactional
     public void markMessageAsRead(String userId, Long broadcastId) {
@@ -126,29 +114,6 @@ public class UserMessageService {
         cacheService.removePendingEvent(userId, broadcastId);
         messageStatusService.publishReadEvent(broadcastId, userId);
         log.info("Successfully processed 'mark as read' for broadcast {} for user {} and published READ event.", broadcastId, userId);
-    }
-
-    @Transactional
-    public void persistGroupMessageDelivery(String userId, BroadcastMessage broadcast) {
-        if (broadcast == null || userId == null) return;
-
-        // Check if a record already exists for this user and broadcast to avoid errors.
-        Optional<UserBroadcastMessage> existingMessage = userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcast.getId());
-
-        // If no record exists, it's the first time this user is seeing this message.
-        if (existingMessage.isEmpty()) {
-            log.info("First-time delivery of 'ALL' broadcast {} to user {}. Creating persistent 'DELIVERED' record.", broadcast.getId(), userId);
-            
-            // Create a record to track that this message has been delivered.
-            UserBroadcastMessage newMessage = UserBroadcastMessage.builder()
-                    .userId(userId)
-                    .broadcastId(broadcast.getId())
-                    .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
-                    .readStatus(Constants.ReadStatus.UNREAD.name())
-                    .deliveredAt(ZonedDateTime.now(ZoneOffset.UTC))
-                    .build();
-            userBroadcastRepository.save(newMessage);
-        }
     }
 
 }

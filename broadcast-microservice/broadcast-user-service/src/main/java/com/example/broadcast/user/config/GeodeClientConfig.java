@@ -80,12 +80,6 @@ public class GeodeClientConfig {
                 .create(GeodeRegionNames.BROADCAST_CONTENT);
     }
 
-    @Bean("activeGroupBroadcastsRegion")
-    public Region<String, List<BroadcastMessage>> activeGroupBroadcastsRegion(ClientCache clientCache) {
-        return clientCache.<String, List<BroadcastMessage>>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create(GeodeRegionNames.ACTIVE_GROUP_BROADCASTS);
-    }
-
     @Bean("sseMessagesRegion")
     public Region<String, Object> sseMessagesRegion(ClientCache clientCache) {
         return clientCache.<String, Object>createClientRegionFactory(ClientRegionShortcut.PROXY)

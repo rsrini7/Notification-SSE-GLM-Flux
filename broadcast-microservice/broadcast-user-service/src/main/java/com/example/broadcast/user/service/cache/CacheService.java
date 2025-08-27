@@ -12,7 +12,6 @@ import java.util.Set;
 public interface CacheService {
 
     void registerUserConnection(String userId, String connectionId, String podId, String clusterName);
-
     void unregisterUserConnection(String userId, String connectionId);
     Map<String, UserConnectionInfo> getConnectionsForUser(String userId, String podName);
     boolean isUserOnline(String userId, String podName);
@@ -31,7 +30,5 @@ public interface CacheService {
     Optional<BroadcastMessage> getBroadcastContent(Long broadcastId);
     void cacheBroadcastContent(BroadcastMessage broadcast);
     void evictBroadcastContent(Long broadcastId);
-    List<BroadcastMessage> getActiveGroupBroadcasts(String cacheKey);
-    void cacheActiveGroupBroadcasts(String cacheKey, List<BroadcastMessage> broadcasts);
-    public void cleanupDeadPod(String podId);
+    void cleanupDeadPod(String podId);
 }

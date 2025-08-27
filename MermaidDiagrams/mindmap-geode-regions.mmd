@@ -32,10 +32,6 @@ mindmap
         ("<b>Data Stored:</b><br/>K: broadcastId (Long)<br/>V: BroadcastMessage object")
         ("<b>Purpose:</b><br/>A read-through cache for the full content of active broadcasts, reducing database load when assembling user inboxes")
         ("<b>Interacting Service:</b><br/>User Service (read/write), Admin Service (invalidates)")
-      ("active-group-broadcasts")
-        ("<b>Data Stored:</b><br/>K: Group Name (e.g., 'ALL', 'ROLE:ADMIN')<br/>V: List of BroadcastMessage objects")
-        ("<b>Purpose:</b><br/>Caches lists of active broadcasts for large groups (ALL/ROLE). This is a key optimization to avoid expensive DB queries when users connect")
-        ("<b>Interacting Service:</b><br/>User Service")
 
     %% Intra-Cluster Eventing
     ("🚀 Real-time Eventing")

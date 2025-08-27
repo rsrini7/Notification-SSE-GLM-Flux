@@ -15,7 +15,6 @@ public final class Constants {
         public static final String CLUSTER_POD_HEARTBEATS = "cluster-pod-heartbeats";
         public static final String PENDING_EVENTS = "pending-events";
         public static final String BROADCAST_CONTENT = "broadcast-content";
-        public static final String ACTIVE_GROUP_BROADCASTS = "active-group-broadcasts";
         public static final String SSE_MESSAGES = "sse-messages";
     }
 

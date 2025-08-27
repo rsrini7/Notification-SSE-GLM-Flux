@@ -69,7 +69,6 @@ public class BroadcastActivationService {
 
         // Phase 3: Activation for all other due scheduled broadcasts (ALL, ROLE, SELECTED)
         List<BroadcastMessage> scheduledFanOuts = broadcastRepository.findAndLockScheduledFanOutBroadcasts(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
-        log.info("scheduledFanOuts {}",scheduledFanOuts);
         for (BroadcastMessage broadcast : scheduledFanOuts) {
             if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
                 log.info("Activating scheduled 'ALL' broadcast {}.", broadcast.getId());
