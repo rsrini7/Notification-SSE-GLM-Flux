@@ -13,8 +13,11 @@ mindmap
 
     %% Event & Message Caching
     ("⚡ Event & Message Caching")
-      ("user-messages-inbox")
-
+      (user-messages-inbox)
+        (<b>Data Stored:</b><br/>K: userId (String)<br/>V: List&lt;UserMessageInbox&gt;)
+        (<b>Purpose:</b><br/>A read-through cache for a user's entire unread inbox state. Speeds up the GET /api/user/messages API call.)
+        (<b>Eviction:</b><br/>LRU policy removes the least recently used entries to manage memory.)
+        (<b>Interacting Service:</b><br/>User Service (writes on cache miss, reads on cache hit, invalidates on state change))
       ("broadcast-content")
         ("<b>Data Stored:</b><br/>K: broadcastId (Long)<br/>V: BroadcastMessage object")
         ("<b>Purpose:</b><br/>A read-through cache for the full content of active broadcasts, reducing database load when assembling user inboxes")

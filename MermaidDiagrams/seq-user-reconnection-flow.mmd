@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+
+    participant UserUI
+    participant SseService
+    participant UserMessageService
+    participant GeodeCache as Geode Cache
+    participant DB as PostgreSQL DB
+
+    Note over UserUI, DB: A user reconnects after missing a message. Their inbox cache in Geode has been invalidated.
+
+    par "Establish SSE Connection" AND "Fetch Full Inbox via API"
+        UserUI->>+SseService: 1a- GET /sse/connect
+        SseService->>+GeodeCache: 2a- Registers connection in 'user-connections' & 'connection-heartbeat'
+        GeodeCache-->>-SseService: 
+        SseService-->>-UserUI: 3a- SSE Stream is established for future real-time messages
+    and
+        UserUI->>+UserMessageService: 1b- GET /api/user/messages
+    end
+    
+    UserMessageService->>+GeodeCache: 4- Checks 'user-messages-inbox' cache for the user
+    GeodeCache-->>-UserMessageService: 5- Returns MISS (as cache was invalidated)
+
+    UserMessageService->>+DB: 6- Queries the database for ALL unread messages
+    DB-->>-UserMessageService: 7- Returns the complete list, including the missed message
+
+    UserMessageService->>+GeodeCache: 8- Populates the 'user-messages-inbox' cache with the new list
+    GeodeCache-->>-UserMessageService: 
+
+    UserMessageService-->>-UserUI: 9- Returns the full inbox via HTTP response
+    UserUI->>UserUI: 10- Renders the complete inbox, showing the new message
