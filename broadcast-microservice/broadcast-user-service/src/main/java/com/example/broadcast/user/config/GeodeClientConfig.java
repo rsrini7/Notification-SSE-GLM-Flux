@@ -1,7 +1,6 @@
 package com.example.broadcast.user.config;
 
 import com.example.broadcast.shared.config.AppProperties;
-import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
