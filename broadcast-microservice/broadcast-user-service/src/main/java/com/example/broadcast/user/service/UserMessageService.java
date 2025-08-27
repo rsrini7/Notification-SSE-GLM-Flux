@@ -14,7 +14,9 @@ import com.example.broadcast.user.service.cache.CacheService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
@@ -50,10 +52,12 @@ public class UserMessageService {
         log.info("Cache MISS for user {} inbox. Fetching from database.", userId);
 
         return Mono.fromCallable(() -> {
+            // Step 1: Fetch all necessary data from the database
             List<UserBroadcastMessage> unreadTargetedMessages = userBroadcastRepository.findUnreadByUserId(userId);
             List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType("ALL");
             Set<Long> readBroadcastIds = new HashSet<>(userBroadcastRepository.findReadBroadcastIdsByUserId(userId));
 
+            // Step 2: Prepare a list that will be cached and assemble targeted responses
             List<UserMessageInbox> inboxToCache = new ArrayList<>();
             unreadTargetedMessages.forEach(msg -> inboxToCache.add(broadcastMapper.toUserMessageInbox(msg)));
 
@@ -67,18 +71,27 @@ public class UserMessageService {
                     })
                     .filter(Objects::nonNull);
             
-            Stream<UserBroadcastResponse> allTypeResponses = allTypeBroadcasts.stream()
+            // Step 3: Collect the newly "delivered" ALL-type broadcasts into a list
+            List<UserBroadcastResponse> allTypeResponsesList = allTypeBroadcasts.stream()
                     .filter(broadcast -> !readBroadcastIds.contains(broadcast.getId()))
                     .map(broadcast -> {
                         UserMessageInbox transientInbox = new UserMessageInbox(broadcast.getId(), broadcast.getId(), "DELIVERED", "UNREAD", broadcast.getCreatedAt());
                         inboxToCache.add(transientInbox);
                         return broadcastMapper.toUserBroadcastResponseFromCache(transientInbox, broadcast);
-                    });
+                    })
+                    .collect(Collectors.toList());
 
-            List<UserBroadcastResponse> finalInbox = Stream.concat(targetedResponses, allTypeResponses)
+            // Step 4: If any ALL-type broadcasts were newly delivered, trigger the async stats update
+            if (!allTypeResponsesList.isEmpty()) {
+                updateDeliveryStatsForOfflineUsers(allTypeResponsesList);
+            }
+
+            // Step 5: Combine the targeted responses with the stream from the newly created list
+            List<UserBroadcastResponse> finalInbox = Stream.concat(targetedResponses, allTypeResponsesList.stream())
                     .sorted(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed())
                     .collect(Collectors.toList());
 
+            // Step 6: Populate the cache and return the final inbox
             cacheService.cacheUserInbox(userId, inboxToCache);
             log.info("Assembled and cached {} messages for user {}", finalInbox.size(), userId);
             return finalInbox;
@@ -147,5 +160,17 @@ public class UserMessageService {
         broadcastStatisticsRepository.incrementReadCount(broadcastId);
         messageStatusService.publishReadEvent(broadcastId, userId);
         log.info("Successfully processed 'mark as read' for broadcast {} for user {} and published READ event.", broadcastId, userId);
+    }
+
+    @Async
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void updateDeliveryStatsForOfflineUsers(List<UserBroadcastResponse> newlyDeliveredBroadcasts) {
+        if (newlyDeliveredBroadcasts.isEmpty()) {
+            return;
+        }
+        log.info("Asynchronously updating delivery stats for {} broadcasts for a reconnected user.", newlyDeliveredBroadcasts.size());
+        for (UserBroadcastResponse broadcast : newlyDeliveredBroadcasts) {
+            broadcastStatisticsRepository.incrementDeliveredAndTargetedCount(broadcast.getBroadcastId(), 1);
+        }
     }
 }
