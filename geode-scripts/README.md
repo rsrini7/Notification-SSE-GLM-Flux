@@ -20,8 +20,6 @@ query --query="SELECT entry.key, msg FROM /pending-events.entrySet entry, entry.
 query --query="SELECT e.key, e.value FROM /connection-metadata.entries e"
 query --query="SELECT e.key, e.value FROM /broadcast-content.entries e"
 query --query="SELECT e.key, e.value FROM /pending-events.entries e"
-query --query="SELECT e.key, e.value FROM /cluster-pod-connections.entries e"
-query --query="SELECT e.key, e.value FROM /cluster-pod-heartbeats.entries e"
 query --query="SELECT e.key, e.value FROM /user-connections.entries e"
 query --query="SELECT e.key, e.value FROM /sse-messages.entries e"
 

@@ -13,8 +13,6 @@ echo "--> Creating regions..."
 gfsh -e "connect --locator=localhost[10334]" \
      -e "create region --name=user-connections --type=REPLICATE" \
      -e "create region --name=connection-metadata --type=REPLICATE" \
-     -e "create region --name=cluster-pod-connections --type=REPLICATE" \
-     -e "create region --name=cluster-pod-heartbeats --type=REPLICATE" \
      -e "create region --name=pending-events --type=REPLICATE" \
      -e "create region --name=broadcast-content --type=REPLICATE" \
      -e "create region --name=sse-messages --type=REPLICATE"

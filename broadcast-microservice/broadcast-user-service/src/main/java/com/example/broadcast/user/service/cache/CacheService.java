@@ -20,7 +20,6 @@ public interface CacheService {
     Optional<UserConnectionInfo> getConnectionDetails(String connectionId);
     void removeConnections(Set<String> connectionIds);
     long getTotalActiveUsers();
-    long getPodActiveUsers(String podId);
     List<String> getOnlineUsers();
     void cachePendingEvent(MessageDeliveryEvent event, String podName);
     List<MessageDeliveryEvent> getPendingEvents(String userId, String clusterName);
@@ -30,5 +29,4 @@ public interface CacheService {
     Optional<BroadcastMessage> getBroadcastContent(Long broadcastId);
     void cacheBroadcastContent(BroadcastMessage broadcast);
     void evictBroadcastContent(Long broadcastId);
-    void cleanupDeadPod(String podId);
-}
+ }

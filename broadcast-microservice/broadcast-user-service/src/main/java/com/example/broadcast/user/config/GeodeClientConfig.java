@@ -3,6 +3,7 @@ package com.example.broadcast.user.config;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.ConnectionMetadata;
+import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.util.Constants.GeodeRegionNames;
 
@@ -17,7 +18,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
-import java.util.Set;
 
 @Configuration
 @RequiredArgsConstructor
@@ -45,23 +45,11 @@ public class GeodeClientConfig {
     }
 
     @Bean("userConnectionsRegion")
-    public Region<String, String> userConnectionsRegion(ClientCache clientCache) {
-        return clientCache.<String, String>createClientRegionFactory(ClientRegionShortcut.PROXY)
+    public Region<String, UserConnectionInfo> userConnectionsRegion(ClientCache clientCache) {
+        return clientCache.<String, UserConnectionInfo>createClientRegionFactory(ClientRegionShortcut.PROXY)
                 .create(GeodeRegionNames.USER_CONNECTIONS);
     }
    
-    @Bean("clusterPodConnectionsRegion")
-    public Region<String, Set<String>> clusterPodConnectionsRegion(ClientCache clientCache) {
-        return clientCache.<String, Set<String>>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create(GeodeRegionNames.CLUSTER_POD_CONNECTIONS);
-    }
-
-    @Bean("clusterPodHeartbeatsRegion")
-    public Region<String, Long> clusterPodHeartbeatsRegion(ClientCache clientCache) {
-        return clientCache.<String, Long>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create(GeodeRegionNames.CLUSTER_POD_HEARTBEATS);
-    }
-
     @Bean("connectionMetadataRegion")
     public Region<String, ConnectionMetadata> connectionMetadataRegion(ClientCache clientCache) {
         return clientCache.<String, ConnectionMetadata>createClientRegionFactory(ClientRegionShortcut.PROXY)
