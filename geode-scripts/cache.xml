@@ -6,7 +6,6 @@
 
     <region name="user-connections" refid="REPLICATE"/>
     <region name="connection-heartbeat" refid="REPLICATE"/>
-    <region name="pending-events" refid="REPLICATE"/>
     <region name="broadcast-content" refid="REPLICATE"/>
     <region name="sse-messages" refid="REPLICATE"/>
 

@@ -1,6 +1,5 @@
 package com.example.broadcast.user.service.cache;
 
-import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.*;
 import com.example.broadcast.shared.model.BroadcastMessage;
 
@@ -13,8 +12,8 @@ public interface CacheService {
 
     void registerUserConnection(String userId, String connectionId, String podId, String clusterName);
     void unregisterUserConnection(String userId, String connectionId);
-    Map<String, UserConnectionInfo> getConnectionsForUser(String userId, String podName);
-    boolean isUserOnline(String userId, String podName);
+    Map<String, UserConnectionInfo> getConnectionsForUser(String userId);
+    boolean isUserOnline(String userId);
     void updateHeartbeats(Set<String> connectionIds);
 
     Set<String> getStaleConnectionIds(long thresholdTimestamp);
@@ -23,11 +22,6 @@ public interface CacheService {
 
     long getTotalActiveUsers();
     List<String> getOnlineUsers();
-
-    void cachePendingEvent(MessageDeliveryEvent event, String podName);
-    List<MessageDeliveryEvent> getPendingEvents(String userId, String clusterName);
-    void removePendingEvent(String userId, Long broadcastId);
-    void clearPendingEvents(String userId, String podName);
 
     Map<String, Object> getCacheStats();
 

@@ -11,7 +11,6 @@ public final class Constants {
         private GeodeRegionNames() {}
         public static final String USER_CONNECTIONS = "user-connections";
         public static final String CONNECTION_HEARTBEAT = "connection-heartbeat";
-        public static final String PENDING_EVENTS = "pending-events";
         public static final String BROADCAST_CONTENT = "broadcast-content";
         public static final String SSE_MESSAGES = "sse-messages";
     }

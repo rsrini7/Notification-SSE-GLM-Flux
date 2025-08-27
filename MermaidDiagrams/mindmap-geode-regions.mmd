@@ -13,10 +13,8 @@ mindmap
 
     %% Event & Message Caching
     ("⚡ Event & Message Caching")
-      ("pending-events")
-        ("<b>Data Stored:</b><br/>K: 'cluster:userId'<br/>V: List of MessageDeliveryEvent objects")
-        ("<b>Purpose:</b><br/>Caches messages for offline users. When a user reconnects, the SseService retrieves and delivers these events, then clears the entry")
-        ("<b>Interacting Service:</b><br/>User Service (Kafka Orchestrator writes, SseService reads)")
+      ("user-messages-inbox")
+
       ("broadcast-content")
         ("<b>Data Stored:</b><br/>K: broadcastId (Long)<br/>V: BroadcastMessage object")
         ("<b>Purpose:</b><br/>A read-through cache for the full content of active broadcasts, reducing database load when assembling user inboxes")

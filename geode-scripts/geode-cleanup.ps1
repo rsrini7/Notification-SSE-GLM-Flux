@@ -17,7 +17,6 @@ $LocatorAddress = "localhost[10334]"
 $regions = @(
     "broadcast-content",
     "connection-heartbeat",
-    "pending-events",
     "sse-messages",
     "user-connections",
     "user-messages-inbox"

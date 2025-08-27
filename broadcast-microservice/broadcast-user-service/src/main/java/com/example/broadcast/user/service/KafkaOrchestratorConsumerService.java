@@ -1,6 +1,5 @@
 package com.example.broadcast.user.service;
 
-import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.BroadcastMessage;
@@ -31,7 +30,6 @@ public class KafkaOrchestratorConsumerService {
 
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
-    private final AppProperties appProperties;
     
     @Qualifier("sseMessagesRegion")
     private final Region<String, Object> sseMessagesRegion;
@@ -115,9 +113,7 @@ public class KafkaOrchestratorConsumerService {
 
         cacheService.evictUserInbox(userId);
 
-        String clusterName = appProperties.getClusterName();
-        
-        Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId, clusterName);
+        Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
 
         if (!userConnections.isEmpty()) {
             UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
@@ -128,21 +124,7 @@ public class KafkaOrchestratorConsumerService {
 
             sseMessagesRegion.put(messageKey, payload);
         } else {
-            String podName = appProperties.getPodName();
-            
-            switch (Constants.EventType.valueOf(userSpecificEvent.getEventType())) {
-                case CREATED:
-                    log.debug("User {} is offline. Caching pending CREATED event for broadcast {}.", userId, userSpecificEvent.getBroadcastId());
-                    cacheService.cachePendingEvent(userSpecificEvent, podName);
-                    break;
-                case CANCELLED:
-                case EXPIRED:
-                    log.info("User {} is offline. Removing pending event for cancelled/expired broadcast {}.", userId, userSpecificEvent.getBroadcastId());
-                    cacheService.removePendingEvent(userId, userSpecificEvent.getBroadcastId());
-                    break;
-                default:
-                    break;
-            }
+            log.trace("UserID {} is Offline.", userId);
         }
     }
 }

@@ -1,6 +1,5 @@
 package com.example.broadcast.user.service.cache;
 
-import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
@@ -23,21 +22,18 @@ public class GeodeCacheService implements CacheService {
     private final ClientCache clientCache;
     private final Region<String, UserConnectionInfo> userConnectionsRegion;
     private final Region<String, ConnectionHeartbeat> connectionHeartbeatRegion;
-    private final Region<String, List<MessageDeliveryEvent>> pendingEventsRegion;
     private final Region<String, List<UserMessageInbox>> userMessagesInboxRegion;
     private final Region<Long, BroadcastMessage> broadcastContentRegion;
 
     public GeodeCacheService(ClientCache clientCache,
                              @Qualifier("userConnectionsRegion") Region<String, UserConnectionInfo> userConnectionsRegion,
                              @Qualifier("connectionHeartbeatRegion") Region<String, ConnectionHeartbeat> connectionHeartbeatRegion,
-                             @Qualifier("pendingEventsRegion") Region<String, List<MessageDeliveryEvent>> pendingEventsRegion,
                              @Qualifier("userMessagesInboxRegion") Region<String, List<UserMessageInbox>> userMessagesInboxRegion,
                              @Qualifier("broadcastContentRegion") Region<Long, BroadcastMessage> broadcastContentRegion
     ) {
         this.clientCache = clientCache;
         this.userConnectionsRegion = userConnectionsRegion;
         this.connectionHeartbeatRegion = connectionHeartbeatRegion;
-        this.pendingEventsRegion = pendingEventsRegion;
         this.userMessagesInboxRegion = userMessagesInboxRegion;
         this.broadcastContentRegion = broadcastContentRegion;
     }
@@ -68,7 +64,7 @@ public class GeodeCacheService implements CacheService {
     }
     
     @Override
-    public boolean isUserOnline(String userId, String clusterName) {
+    public boolean isUserOnline(String userId) {
         return userConnectionsRegion.containsKey(userId);
     }
 
@@ -122,30 +118,6 @@ public class GeodeCacheService implements CacheService {
         return Optional.of(userConnectionsRegion.get(metadata.getUserId()));
     }
 
-
-    @Override
-    public void cachePendingEvent(MessageDeliveryEvent event, String clusterName) {
-        List<MessageDeliveryEvent> pendingEvents = pendingEventsRegion.get(event.getUserId());
-        if (pendingEvents == null) {
-            pendingEvents = new ArrayList<>();
-        }
-        pendingEvents.add(event);
-        pendingEventsRegion.put(event.getUserId(), pendingEvents);
-    }
-
-    @Override
-    public void removePendingEvent(String userId, Long broadcastId) {
-        List<MessageDeliveryEvent> pendingEvents = pendingEventsRegion.get(userId);
-        if (pendingEvents != null) {
-            pendingEvents.removeIf(evt -> evt.getBroadcastId().equals(broadcastId));
-            if (pendingEvents.isEmpty()) {
-                pendingEventsRegion.remove(userId);
-            } else {
-                pendingEventsRegion.put(userId, pendingEvents);
-            }
-        }
-    }
-
     @Override
     public Optional<List<UserMessageInbox>> getUserInbox(String userId) {
         return Optional.ofNullable(userMessagesInboxRegion.get(userId));
@@ -164,7 +136,7 @@ public class GeodeCacheService implements CacheService {
     }
 
     @Override
-    public Map<String, UserConnectionInfo> getConnectionsForUser(String userId, String clusterName) {
+    public Map<String, UserConnectionInfo> getConnectionsForUser(String userId) {
         return Optional.of(userConnectionsRegion.get(userId))
                 .map(info -> Map.of(info.getConnectionId(), info))
                 .orElse(Collections.emptyMap());
@@ -180,16 +152,6 @@ public class GeodeCacheService implements CacheService {
         return userConnectionsRegion.keySetOnServer().stream()
             .map(key -> key.substring(key.indexOf(':') + 1))
             .collect(Collectors.toList());
-    }
-
-   @Override
-    public List<MessageDeliveryEvent> getPendingEvents(String userId, String clusterName) {
-        return pendingEventsRegion.getOrDefault(userId, Collections.emptyList());
-    }
-
-    @Override
-    public void clearPendingEvents(String userId, String clusterName) {
-        pendingEventsRegion.remove(userId);
     }
 
     @Override

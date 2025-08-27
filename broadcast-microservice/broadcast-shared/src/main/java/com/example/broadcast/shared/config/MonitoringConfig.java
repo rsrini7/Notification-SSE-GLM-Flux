@@ -68,12 +68,10 @@ public class MonitoringConfig {
                 
                 // Cache metrics
                 AtomicLong userConnectionsCache = new AtomicLong(0);
-                AtomicLong userMessagesCache = new AtomicLong(0);
-                AtomicLong pendingEventsCache = new AtomicLong(0);
+                AtomicLong userMessageInboxCache = new AtomicLong(0);
                 
                 registry.gauge("broadcast.cache.size.user.connections", userConnectionsCache);
-                registry.gauge("broadcast.cache.size.user.messages", userMessagesCache);
-                registry.gauge("broadcast.cache.size.pending.events", pendingEventsCache);
+                registry.gauge("broadcast.cache.size.pending.events", userMessageInboxCache);
                 
                 // Kafka metrics
                 registry.counter("broadcast.kafka.producer.sent", "status", "success");

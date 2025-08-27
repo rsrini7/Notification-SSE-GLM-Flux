@@ -114,12 +114,13 @@ classDiagram
             String clusterName
             long lastHeartbeatTimestamp
         }
-        class PendingEventInfo {
+        class UserMessageInbox {
             <<DTO>>
-            String eventId
+            Long messageId
             Long broadcastId
-            String eventType
-            String message
+            String deliveryStatus
+            String readStatus
+            ZonedDateTime createdAt
         }
     }
     

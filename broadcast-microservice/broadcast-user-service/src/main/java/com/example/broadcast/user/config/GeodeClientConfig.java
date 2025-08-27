@@ -57,12 +57,6 @@ public class GeodeClientConfig {
                 .create(GeodeRegionNames.CONNECTION_HEARTBEAT);
     }
 
-    @Bean("pendingEventsRegion")
-    public Region<String, List<MessageDeliveryEvent>> pendingEventsRegion(ClientCache clientCache) {
-        return clientCache.<String, List<MessageDeliveryEvent>>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create(GeodeRegionNames.PENDING_EVENTS);
-    }
-
     @Bean("userMessagesInboxRegion")
     public Region<String, List<UserMessageInbox>> userMessagesInboxRegion(ClientCache clientCache) {
         return clientCache.<String, List<UserMessageInbox>>createClientRegionFactory(ClientRegionShortcut.PROXY)

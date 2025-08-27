@@ -9,17 +9,13 @@ sequenceDiagram
     SseSvc->>+Geode: 3- Register Connection<br/>(in 'user-connections' & 'connection-heartbeat' regions)
     Geode-->>-SseSvc: Success
     
-    Note over SseSvc, Geode: 4- Check for messages missed while offline
-    SseSvc->>+Geode: Get pending events? (from 'pending-events' region)
-    Geode-->>-SseSvc: Returns list of pending events
-    
     loop For each pending event
-        SseSvc->>UserUI: 5- Push pending message via SSE
+        SseSvc->>UserUI: 4- Push pending message via SSE
     end
     
-    SseSvc->>+Geode: 6- DELETE processed pending events from region
+    SseSvc->>+Geode: 5- DELETE processed pending events from region
     Geode-->>-SseSvc: Success
     SseSvc-->>-UserSvc: Returns Event Stream to controller
-    UserSvc-->>-UserUI: 7- Connection established (200 OK)
+    UserSvc-->>-UserUI: 6- Connection established (200 OK)
     
-    Note over UserUI, SseSvc: 8- SSE connection remains open for<br/>new real-time messages and heartbeats.
+    Note over UserUI, SseSvc: 7- SSE connection remains open for<br/>new real-time messages and heartbeats.

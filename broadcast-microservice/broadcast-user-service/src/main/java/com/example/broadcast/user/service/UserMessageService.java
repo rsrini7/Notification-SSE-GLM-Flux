@@ -145,7 +145,6 @@ public class UserMessageService {
             userBroadcastRepository.save(newMessage);
         }
         broadcastStatisticsRepository.incrementReadCount(broadcastId);
-        cacheService.removePendingEvent(userId, broadcastId);
         messageStatusService.publishReadEvent(broadcastId, userId);
         log.info("Successfully processed 'mark as read' for broadcast {} for user {} and published READ event.", broadcastId, userId);
     }
