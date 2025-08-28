@@ -2,7 +2,10 @@
 spring:
   # Defer initialization to speed up the checkpointing process
   main:
+    banner-mode: off
     lazy-initialization: true
+  jmx:
+    enabled: false
   
   # Disable Kafka auto-configuration entirely to prevent connection attempts
   autoconfigure:
@@ -10,10 +13,27 @@ spring:
 
   # Switch to an in-memory H2 database for the build
   datasource:
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-test-query: SELECT 1
+      initialization-fail-timeout: -1
     url: jdbc:h2:mem:checkpointdb;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
     username: sa
     password: 
+  
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          max-age: 3600
+  
+  # devtools:
+  #   restart:
+  #     enabled: false
+  #   livereload:
+  #     enabled: false
 
   # Ensure the database schema is created in the in-memory DB
   sql:
@@ -22,13 +42,27 @@ spring:
       schema-locations: classpath:sql/schema.sql
       data-locations: classpath:sql/data.sql
 
+server:
+  # Disable SSL for checkpoint to avoid certificate issues
+  # ssl:
+  #   enabled: false
+  port: 8081
+
 logging:
+  level:
+    '[jdk.crac]': DEBUG
+    '[org.criu]': DEBUG
   file:
     # Setting the name to empty disables the file appender
     name:
 
 management:
   endpoints:
+    access: 
+      default: read-only
     web:
       exposure:
-        include: "health,checkpoint"
+        include: health
+  endpoint:
+    health:
+      access: unrestricted

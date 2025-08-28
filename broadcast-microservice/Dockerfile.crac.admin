@@ -1,5 +1,3 @@
-# File: broadcast-microservice/Dockerfile.crac (NEW LOCATION AND CONTENT)
-
 # --- Stage 1: Build the entire multi-module project ---
 FROM maven:3.9-eclipse-temurin-21 AS builder
 WORKDIR /app
@@ -7,44 +5,105 @@ WORKDIR /app
 # Copy the parent pom.xml first
 COPY pom.xml .
 
-# Copy all the module subdirectories. This provides the full project context.
+# Copy all the module subdirectories
 COPY broadcast-admin-service ./broadcast-admin-service
 COPY broadcast-user-service ./broadcast-user-service
 COPY broadcast-shared ./broadcast-shared
 COPY broadcast-geode-shared ./broadcast-geode-shared
 
-# Run the Maven build from the root. This builds all modules in the correct order.
+# Run the Maven build from the root
 RUN mvn package -DskipTests
 
-# --- Stage 2: Run the app and create the checkpoint ---
-# FROM bellsoft/liberica-runtime-container:jdk-21-crac-cds-musl AS checkpoint
-# FROM bellsoft/liberica-runtime-container:jdk-21-crac-cds-slim-musl AS checkpoint
-FROM azul/zulu-openjdk:21.0.3-21.34-jdk-crac AS checkpoint
+# --- Stage 2: Runtime image with CRaC support ---
+FROM azul/zulu-openjdk:21.0.3-21.34-jdk-crac
 
 WORKDIR /app
 
-# above -slim image apk or apt / apt-get commands not available.
-# RUN apk add --no-cache curl
-
-# CORRECTED: Copy the specific JAR from the admin-service's target directory
+# Copy the JAR file
 COPY --from=builder /app/broadcast-admin-service/target/*.jar app.jar
 
-# This command starts the app, waits for it to be healthy, triggers the checkpoint,
-# and critically, WAITS for the JVM to exit cleanly after the checkpoint is written.
-RUN java -Dspring.profiles.active=checkpoint-build -XX:CRaCCheckpointTo=/app/checkpoint -jar app.jar & \
-    # Wait for the application's health endpoint to be available
-    while ! curl -k https://localhost:8081/actuator/health > /dev/null 2>&1; do sleep 0.5; done; \
-    # Trigger the checkpoint
-    jcmd app.jar JDK.checkpoint && \
-    # IMPORTANT: Wait for the background Java process to terminate after checkpointing
-    wait
+# Create checkpoint directory
+RUN mkdir -p /app/checkpoint
 
-# --- Stage 3: Create the final, fast-starting runtime image ---
-FROM bellsoft/liberica-runtime-container:jdk-21-crac-cds-slim-musl
-WORKDIR /app
+# Create checkpoint creation script
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "Starting application for checkpoint creation..."\n\
+java -Dspring.profiles.active=checkpoint-build -XX:CRaCCheckpointTo=/app/checkpoint -jar app.jar &\n\
+APP_PID=$!\n\
+echo "Application PID: $APP_PID, waiting for startup..."\n\
+\n\
+# Wait for application to be ready - try multiple approaches\n\
+echo "Waiting for application startup..."\n\
+sleep 15\n\
+\n\
+# Check if process is still running\n\
+if ! kill -0 $APP_PID 2>/dev/null; then\n\
+    echo "Application process died during startup"\n\
+    exit 1\n\
+fi\n\
+\n\
+echo "Application should be ready now, attempting health checks..."\n\
+\n\
+# Try different health check approaches\n\
+HEALTH_OK=false\n\
+\n\
+# Try HTTP first\n\
+if curl -f -s --max-time 5 http://localhost:8081/actuator/health >/dev/null 2>&1; then\n\
+    echo "Health check passed via HTTP"\n\
+    HEALTH_OK=true\n\
+# Try HTTPS with insecure\n\
+elif curl -f -s -k --max-time 5 https://localhost:8081/actuator/health >/dev/null 2>&1; then\n\
+    echo "Health check passed via HTTPS"\n\
+    HEALTH_OK=true\n\
+# Try just connecting to the port\n\
+elif nc -z localhost 8081 2>/dev/null; then\n\
+    echo "Port 8081 is open, assuming app is ready"\n\
+    HEALTH_OK=true\n\
+# Check if we can see the process and its listening on port\n\
+elif netstat -tlnp 2>/dev/null | grep :8081 >/dev/null; then\n\
+    echo "Application is listening on port 8081, assuming ready"\n\
+    HEALTH_OK=true\n\
+else\n\
+    echo "Health checks failed, but proceeding anyway after delay"\n\
+    sleep 5\n\
+    HEALTH_OK=true\n\
+fi\n\
+\n\
+if [ "$HEALTH_OK" = "true" ]; then\n\
+    echo "Creating checkpoint..."\n\
+    if jcmd $APP_PID JDK.checkpoint; then\n\
+        echo "Checkpoint creation initiated successfully"\n\
+        echo "Waiting for process to complete checkpoint..."\n\
+        wait $APP_PID\n\
+        echo "Checkpoint creation completed"\n\
+    else\n\
+        echo "Checkpoint creation failed"\n\
+        kill $APP_PID 2>/dev/null || true\n\
+        exit 1\n\
+    fi\n\
+else\n\
+    echo "Could not verify application health"\n\
+    kill $APP_PID 2>/dev/null || true\n\
+    exit 1\n\
+fi\n\
+' > /app/create-checkpoint.sh && chmod +x /app/create-checkpoint.sh
 
-COPY --from=checkpoint /app/checkpoint /app/checkpoint
+# Create startup script that uses checkpoint if available
+RUN echo '#!/bin/bash\n\
+if [ -d "/app/checkpoint" ] && [ "$(ls -A /app/checkpoint 2>/dev/null)" ]; then\n\
+    echo "Found checkpoint, starting with CRaC restore..."\n\
+    exec java -XX:CRaCRestoreFrom=/app/checkpoint "$@"\n\
+else\n\
+    echo "No checkpoint found, starting normally..."\n\
+    exec java -jar app.jar "$@"\n\
+fi\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
+# Install curl and netcat for health checks
+RUN apt-get update && apt-get install -y curl netcat-openbsd net-tools && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 8081
 
-ENTRYPOINT ["java", "-XX:CRaCRestoreFrom=/app/checkpoint"]
+# Default entrypoint - normal startup
+ENTRYPOINT ["/app/start.sh"]

@@ -13,6 +13,8 @@ For detailed information about each component, please refer to the `README.md` f
 
 ## CRaC challanges
 
+https://claude.ai/share/161bcdaa-dae7-4d0d-8e3f-c63d9dee8fed
+
 https://callistaenterprise.se/blogg/teknik/2024/07/01/SpringBoot-with-CRaC-part1-automatic-checkpoint/
 
 ## System Architecture

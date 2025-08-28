@@ -1,0 +1,43 @@
+# Build artifacts
+**/target/
+**/build/
+**/*.class
+**/*.jar
+!**/target/*.jar
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+.dockerignore
+
+# Logs
+**/*.log
+logs/
+
+# Temporary files
+**/*.tmp
+**/*.temp
+**/tmp/
+
+# Node modules (if any frontend)
+**/node_modules/
+
+# Maven wrapper (optional - include if you want to keep it)
+.mvn/wrapper/maven-wrapper.jar

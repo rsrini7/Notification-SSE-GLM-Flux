@@ -1,0 +1,21 @@
+docker run -d --name checkpoint-creator --cap-add=SYS_PTRACE --cap-add=SYS_ADMIN --cap-add=CHECKPOINT_RESTORE --security-opt seccomp=unconfined -p 8081:8081 broadcast-admin-service:1.0.0-crac-final /app/create-checkpoint.sh
+
+docker run --rm -it --name checkpoint-creator --cap-add=SYS_PTRACE --cap-add=SYS_ADMIN --cap-add=CHECKPOINT_RESTORE --security-opt seccomp=unconfined --network notification-sse-glm-flux_broadcastnet -v "$(pwd)/logs/admin:/var/log/app" -p 8081:8081 -e SPRING_PROFILES_ACTIVE="dev-pg" -e SPRING_DATASOURCE_URL="jdbc:postgresql://postgres:5432/broadcastdb" -e BROADCAST_GEODE_LOCATOR_HOST="geode-locator" -e SPRING_KAFKA_BOOTSTRAP_SERVERS="kafka-dev:29092" -e LOGGING_FILE_NAME="/var/log/app/broadcast-admin-service.log" -e CLUSTER_NAME="cluster-a" -e POD_NAME="broadcast-admin-service-manual" broadcast-admin-service:1.0.0-crac-final /app/create-checkpoint.sh
+
+docker run --rm -it --name checkpoint-creator --cap-add=SYS_PTRACE --cap-add=SYS_ADMIN --cap-add=CHECKPOINT_RESTORE --security-opt seccomp=unconfined --network notification-sse-glm-flux_broadcastnet -v "$(pwd)/logs/admin:/var/log/app" -p 8081:8081 -e SPRING_PROFILES_ACTIVE="dev-pg" -e SPRING_DATASOURCE_URL="jdbc:postgresql://postgres:5432/broadcastdb" -e BROADCAST_GEODE_LOCATOR_HOST="geode-locator" -e SPRING_KAFKA_BOOTSTRAP_SERVERS="kafka-dev:29092" -e LOGGING_FILE_NAME="/var/log/app/broadcast-admin-service.log" -e CLUSTER_NAME="cluster-a" -e POD_NAME="broadcast-admin-service-manual" --entrypoint bash broadcast-admin-service:1.0.0-crac-final
+
+docker run --rm -it --name checkpoint-creator --cap-add=SYS_PTRACE --cap-add=SYS_ADMIN --cap-add=CHECKPOINT_RESTORE --security-opt seccomp=unconfined -p 8081:8081 --entrypoint bash broadcast-admin-service:1.0.0-crac-final
+
+java -Dspring.profiles.active=checkpoint-build -XX:CRaCCheckpointTo=/app/checkpoint -jar app.jar &
+APP_PID=$!
+echo "PID: $APP_PID"
+
+# Test the checkpoint-enabled image (should start very fast)
+docker run -d --name fast-broadcast --cap-add=SYS_PTRACE --cap-add=SYS_ADMIN --cap-add=CHECKPOINT_RESTORE --security-opt seccomp=unconfined --tmpfs /tmp:rw,noexec,nosuid,size=100m -p 8081:8081 broadcast-admin-service:crac-with-checkpoint
+
+time docker run --rm -p 8082:8081 broadcast-microservice:crac echo "Normal startup completed"
+
+
+docker run -it --name fast-broadcast-priv --privileged --pid=host -p 8081:8081 --entrypoint bash broadcast-admin-service:crac-with-checkpoint
+
+docker run -it --name fast-broadcast-host --privileged --network=host --entrypoint bash broadcast-admin-service:crac-with-checkpoint
