@@ -1,5 +1,7 @@
 https://claude.ai/share/161bcdaa-dae7-4d0d-8e3f-c63d9dee8fed
 
+https://g.co/gemini/share/fef5ee2861b0
+
 https://callistaenterprise.se/blogg/teknik/2024/07/01/SpringBoot-with-CRaC-part1-automatic-checkpoint/
 
 https://aws.amazon.com/blogs/containers/using-crac-to-reduce-java-startup-times-on-amazon-eks/
