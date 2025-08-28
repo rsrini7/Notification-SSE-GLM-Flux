@@ -1,3 +1,11 @@
+https://claude.ai/share/161bcdaa-dae7-4d0d-8e3f-c63d9dee8fed
+
+https://callistaenterprise.se/blogg/teknik/2024/07/01/SpringBoot-with-CRaC-part1-automatic-checkpoint/
+
+https://aws.amazon.com/blogs/containers/using-crac-to-reduce-java-startup-times-on-amazon-eks/
+            https://github.com/aws-samples/aws-eks-crac
+
+
 docker run -d --name checkpoint-creator --cap-add=SYS_PTRACE --cap-add=SYS_ADMIN --cap-add=CHECKPOINT_RESTORE --security-opt seccomp=unconfined -p 8081:8081 broadcast-admin-service:1.0.0-crac-final /app/create-checkpoint.sh
 
 docker run --rm -it --name checkpoint-creator --cap-add=SYS_PTRACE --cap-add=SYS_ADMIN --cap-add=CHECKPOINT_RESTORE --security-opt seccomp=unconfined --network notification-sse-glm-flux_broadcastnet -v "$(pwd)/logs/admin:/var/log/app" -p 8081:8081 -e SPRING_PROFILES_ACTIVE="dev-pg" -e SPRING_DATASOURCE_URL="jdbc:postgresql://postgres:5432/broadcastdb" -e BROADCAST_GEODE_LOCATOR_HOST="geode-locator" -e SPRING_KAFKA_BOOTSTRAP_SERVERS="kafka-dev:29092" -e LOGGING_FILE_NAME="/var/log/app/broadcast-admin-service.log" -e CLUSTER_NAME="cluster-a" -e POD_NAME="broadcast-admin-service-manual" broadcast-admin-service:1.0.0-crac-final /app/create-checkpoint.sh
