@@ -45,7 +45,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const BASE_RECONNECT_DELAY = 3000;
   const MAX_RECONNECT_DELAY = 300000;
 
-  // --- START OF FIX ---
   // Use refs to hold the current state and callbacks to avoid stale closures
   // and make dependency arrays stable.
   const stateRef = useRef(state);
@@ -62,7 +61,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     onErrorRef.current = onError;
     onMessageRef.current = onMessage;
   }, [onConnect, onDisconnect, onError, onMessage]);
-  // --- END OF FIX ---
 
   const reconnectAttemptsRef = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -86,7 +84,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
   }, [userId]);
 
-  // --- START OF FIX ---
   // The 'disconnect' function is now stable and does not depend on 'state'.
   const disconnect = useCallback((isForceDisconnect = false) => {
     console.log(`[SSE - ${userId}] Disconnect called. Is force disconnect: ${isForceDisconnect}`);
@@ -159,7 +156,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       }
     };
   }, [userId, baseUrl, generateConnectionId, handleSseMessage]); // 'disconnect' is removed as it's stable.
-  // --- END OF FIX ---
 
   const markAsRead = useCallback(async (broadcastId: number) => {
     if (!connectionIdRef.current) {
@@ -186,7 +182,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
   }, [userId, baseUrl]);
 
-  // --- START OF FIX ---
   // Main effect to manage the connection lifecycle.
   useEffect(() => {
     if (autoConnect && userId) {
@@ -198,7 +193,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       disconnect();
     };
   }, [autoConnect, userId, connect, disconnect]); // Dependencies 'connect' and 'disconnect' are now stable.
-  // --- END OF FIX ---
 
   return { ...state, connect, disconnect, markAsRead };
 };
