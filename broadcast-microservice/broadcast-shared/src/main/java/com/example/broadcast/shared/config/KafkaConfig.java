@@ -1,5 +1,6 @@
 package com.example.broadcast.shared.config;
 
+import com.example.broadcast.shared.service.TopicNamer;
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,8 @@ import java.util.function.BiFunction;
 @RequiredArgsConstructor
 @Slf4j
 public class KafkaConfig {
+
+    private final TopicNamer topicNamer;
 
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
@@ -136,7 +139,7 @@ public class KafkaConfig {
    
     @Bean
     public NewTopic orchestrationTopic() {
-        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameOrchestration())
+        return TopicBuilder.name(topicNamer.getOrchestrationTopic())
                 .partitions(1) // Low-volume topic, one partition is sufficient
                 .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
                 .config("retention.ms", "604800000") // 7 days
@@ -145,7 +148,7 @@ public class KafkaConfig {
 
     @Bean
     public NewTopic orchestrationDeadLetterTopic() {
-        return TopicBuilder.name(appProperties.getKafka().getTopic().getNameOrchestration() + Constants.DLT_SUFFIX)
+        return TopicBuilder.name(topicNamer.getOrchestrationDltTopic())
             .partitions(1)
             .replicas(appProperties.getKafka().getTopic().getReplicationFactor())
             .config("retention.ms", "1209600000") // 14 days

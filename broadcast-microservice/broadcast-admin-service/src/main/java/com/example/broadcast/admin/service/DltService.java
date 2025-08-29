@@ -6,6 +6,7 @@ import com.example.broadcast.shared.dto.admin.DltMessage;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.service.MessageStatusService;
+import com.example.broadcast.shared.service.TopicNamer;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
@@ -18,7 +19,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.broadcast.admin.repository.DltRepository;
-import com.example.broadcast.shared.config.AppProperties;
 
 import java.util.Collection;
 import java.util.ArrayList;
@@ -36,7 +36,7 @@ public class DltService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
     private final MessageStatusService messageStatusService;
-    private final AppProperties appProperties;
+    private final TopicNamer topicNamer;
     
     public Collection<DltMessage> getDltMessages() {
         return dltRepository.findAll();
@@ -170,7 +170,6 @@ public class DltService {
     private String resolveDltTopicName(String originalTopic) {
         // This logic should not be recursive. It should always derive the DLT name
         // from the primary orchestration topic, not from another DLT.
-        String orchestrationTopic = appProperties.getKafka().getTopic().getNameOrchestration();
-        return orchestrationTopic + Constants.DLT_SUFFIX;
+        return topicNamer.getOrchestrationDltTopic();
     }
 }
