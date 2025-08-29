@@ -66,7 +66,6 @@ broadcast-frontend/
 │   ├── hooks/            # Custom React hooks
 │   ├── lib/              # Utility functions and helpers
 │   ├── services/         # API service layer
-│   ├── utils/            # General utility functions
 │   ├── App.tsx           # Main application component
 │   ├── main.tsx          # Application entry point
 │   └── index.css         # Global styles
