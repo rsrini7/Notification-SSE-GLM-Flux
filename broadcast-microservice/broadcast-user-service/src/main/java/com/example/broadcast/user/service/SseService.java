@@ -11,8 +11,6 @@ import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.SseEventType;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
@@ -30,13 +28,13 @@ import java.time.ZoneOffset;
 public class SseService {
 
     private final BroadcastRepository broadcastRepository;
-     private final UserBroadcastRepository userBroadcastRepository; 
+    private final UserBroadcastRepository userBroadcastRepository; 
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
+    private final SseEventFactory sseEventFactory; 
     private final UserMessageService userMessageService;
     private final MessageStatusService messageStatusService;
-    private final ObjectMapper objectMapper;
 
     @Transactional
     public void registerConnection(String userId, String connectionId) {
@@ -147,16 +145,9 @@ public class SseService {
     }
 
     public void sendSseEvent(String userId, SseEventType eventType, String eventId, Object data) {
-        try {
-            String payload = objectMapper.writeValueAsString(data);
-            ServerSentEvent<String> sse = ServerSentEvent.<String>builder()
-                .event(eventType.name())
-                .data(payload)
-                .id(eventId)
-                .build();
+        ServerSentEvent<String> sse = sseEventFactory.createEvent(eventType, eventId, data);
+        if (sse != null) {
             sseConnectionManager.sendEvent(userId, sse);
-        } catch (JsonProcessingException e) {
-            log.error("Error serializing payload for SSE event type {}: {}", eventType, e.getMessage());
         }
     }
     
