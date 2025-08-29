@@ -5,57 +5,47 @@ import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
-import org.springframework.stereotype.Component;
+import com.example.broadcast.shared.util.Constants;
+import org.mapstruct.AfterMapping;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 /**
  * A dedicated mapper component to handle conversions between Broadcast entities and DTOs.
- * This centralizes mapping logic, making it consistent and easier to maintain.
+ * Implementation is generated at compile time by MapStruct.
  */
-@Component
-public class BroadcastMapper {
+@Mapper(componentModel = "spring")
+public interface BroadcastMapper {
 
-    /**
-     * Maps a BroadcastMessage entity to a BroadcastResponse DTO.
-     * @param broadcast The entity to map.
-     * @param totalTargeted The calculated number of targeted users.
-     * @return The response DTO.
-     */
-    public BroadcastResponse toBroadcastResponse(BroadcastMessage broadcast, int totalTargeted) {
-        return BroadcastResponse.builder()
-                .id(broadcast.getId())
-                .senderId(broadcast.getSenderId())
-                .senderName(broadcast.getSenderName())
-                .content(broadcast.getContent())
-                .targetType(broadcast.getTargetType())
-                .targetIds(broadcast.getTargetIds())
-                .priority(broadcast.getPriority())
-                .category(broadcast.getCategory())
-                .expiresAt(broadcast.getExpiresAt())
-                .createdAt(broadcast.getCreatedAt())
-                .scheduledAt(broadcast.getScheduledAt())
-                .status(broadcast.getStatus())
-                .totalTargeted(totalTargeted)
-                .totalDelivered(0) // Initial response has 0 delivered
-                .totalRead(0)      // Initial response has 0 read
-                .build();
-    }
+    @Mapping(target = "totalDelivered", constant = "0")
+    @Mapping(target = "totalRead", constant = "0")
+    BroadcastResponse toBroadcastResponse(BroadcastMessage broadcast, int totalTargeted);
 
-    /**
-     * Maps a UserBroadcastMessage and its parent BroadcastMessage to a UserBroadcastResponse DTO.
-     * @param message The user-specific message entity.
-     * @param broadcast The parent broadcast entity.
-     * @return The user-specific response DTO.
-     */
-    public UserBroadcastResponse toUserBroadcastResponseFromEntity(UserBroadcastMessage message, BroadcastMessage broadcast) {
-        UserBroadcastResponse.UserBroadcastResponseBuilder builder = UserBroadcastResponse.builder()
-                .broadcastId(broadcast.getId())
-                .senderName(broadcast.getSenderName())
-                .content(broadcast.getContent())
-                .priority(broadcast.getPriority())
-                .category(broadcast.getCategory())
-                .broadcastCreatedAt(broadcast.getCreatedAt())
-                .expiresAt(broadcast.getExpiresAt());
+    // This is the primary mapping. It handles fields that are ALWAYS populated from the 'broadcast' object.
+    @Mapping(source = "broadcast.id", target = "broadcastId")
+    @Mapping(source = "broadcast.senderName", target = "senderName")
+    @Mapping(source = "broadcast.content", target = "content")
+    @Mapping(source = "broadcast.priority", target = "priority")
+    @Mapping(source = "broadcast.category", target = "category")
+    @Mapping(source = "broadcast.createdAt", target = "broadcastCreatedAt")
+    @Mapping(source = "broadcast.expiresAt", target = "expiresAt")
+    @Mapping(source = "broadcast.scheduledAt", target = "scheduledAt")
+    // Fields from 'message' will be handled in the @AfterMapping method below
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "userId", ignore = true)
+    @Mapping(target = "deliveryStatus", ignore = true)
+    @Mapping(target = "readStatus", ignore = true)
+    @Mapping(target = "deliveredAt", ignore = true)
+    @Mapping(target = "readAt", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    UserBroadcastResponse toUserBroadcastResponseFromEntity(UserBroadcastMessage message, BroadcastMessage broadcast);
 
+    // This method is automatically called by MapStruct after the initial mapping above.
+    // It contains your original null-check logic.
+    @AfterMapping
+    default void handleNullableMessageSource(@MappingTarget UserBroadcastResponse.UserBroadcastResponseBuilder builder,
+                                             UserBroadcastMessage message, BroadcastMessage broadcast) {
         if (message != null) {
             builder.id(message.getId())
                    .userId(message.getUserId())
@@ -65,50 +55,28 @@ public class BroadcastMapper {
                    .readAt(message.getReadAt())
                    .createdAt(message.getCreatedAt());
         } else {
-            builder.id(broadcast.getId())
-                   .deliveryStatus("DELIVERED")
-                   .readStatus("UNREAD")
+            // This handles the fan-out-on-read case where a transient message is created
+            builder.id(broadcast.getId()) // Use broadcast ID as a transient ID for the event
+                   .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
+                   .readStatus(Constants.ReadStatus.UNREAD.name())
                    .createdAt(broadcast.getCreatedAt());
         }
-
-        return builder.build();
     }
 
-    /**
-     * Maps a lightweight cached message and a full broadcast message to a user-facing response DTO.
-     * @param userMessage The cached, user-specific status information from UserMessageInbox.
-     * @param broadcast The full broadcast content.
-     * @return The complete response DTO for the UI.
-     */
-    public UserBroadcastResponse toUserBroadcastResponseFromCache(UserMessageInbox userMessage, BroadcastMessage broadcast) {
-        return UserBroadcastResponse.builder()
-                .id(userMessage.getMessageId())
-                .broadcastId(broadcast.getId())
-                .userId(null) // Not needed in the final UI response DTO
-                .deliveryStatus(userMessage.getDeliveryStatus())
-                .readStatus(userMessage.getReadStatus())
-                .createdAt(userMessage.getCreatedAt())
-                .senderName(broadcast.getSenderName())
-                .content(broadcast.getContent())
-                .priority(broadcast.getPriority())
-                .category(broadcast.getCategory())
-                .broadcastCreatedAt(broadcast.getCreatedAt())
-                .expiresAt(broadcast.getExpiresAt())
-                .build();
-    }
+    @Mapping(source = "broadcast.id", target = "broadcastId")
+    @Mapping(source = "broadcast.senderName", target = "senderName")
+    @Mapping(source = "broadcast.content", target = "content")
+    @Mapping(source = "broadcast.priority", target = "priority")
+    @Mapping(source = "broadcast.category", target = "category")
+    @Mapping(source = "broadcast.createdAt", target = "broadcastCreatedAt")
+    @Mapping(source = "broadcast.expiresAt", target = "expiresAt")
+    @Mapping(source = "userMessage.messageId", target = "id")
+    @Mapping(source = "userMessage.deliveryStatus", target = "deliveryStatus")
+    @Mapping(source = "userMessage.readStatus", target = "readStatus")
+    @Mapping(source = "userMessage.createdAt", target = "createdAt")
+    @Mapping(target = "userId", ignore = true)
+    UserBroadcastResponse toUserBroadcastResponseFromCache(UserMessageInbox userMessage, BroadcastMessage broadcast);
 
-    /**
-     * Maps a database entity to the lightweight cache DTO.
-     * @param message The UserBroadcastMessage entity from the database.
-     * @return The lightweight DTO for caching.
-     */
-    public UserMessageInbox toUserMessageInbox(UserBroadcastMessage message) {
-        return new UserMessageInbox(
-                message.getId(),
-                message.getBroadcastId(),
-                message.getDeliveryStatus(),
-                message.getReadStatus(),
-                message.getCreatedAt()
-        );
-    }
+    @Mapping(source = "id", target = "messageId")
+    UserMessageInbox toUserMessageInbox(UserBroadcastMessage message);
 }
