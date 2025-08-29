@@ -2,10 +2,12 @@ package com.example.broadcast.admin.controller;
 
 import com.example.broadcast.shared.dto.admin.BroadcastRequest;
 import com.example.broadcast.shared.dto.admin.BroadcastResponse;
+import com.example.broadcast.shared.dto.admin.BroadcastStatsResponse;
 import com.example.broadcast.admin.service.BroadcastLifecycleService;
 import com.example.broadcast.admin.service.BroadcastQueryService;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.service.UserService;
+import com.example.broadcast.shared.mapper.BroadcastMapper;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +16,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/broadcasts")
@@ -25,6 +26,7 @@ public class BroadcastAdminController {
     private final BroadcastLifecycleService broadcastLifecycleService;
     private final BroadcastQueryService broadcastQueryService;
     private final UserService userService;
+    private final BroadcastMapper broadcastMapper;
 
     @PostMapping
     @RateLimiter(name = "createBroadcastLimiter")
@@ -71,18 +73,11 @@ public class BroadcastAdminController {
     }
 
     @GetMapping("/{id}/stats")
-    public ResponseEntity<Map<String, Object>> getBroadcastStats(@PathVariable Long id) {
+    public ResponseEntity<BroadcastStatsResponse> getBroadcastStats(@PathVariable Long id) {
         log.info("Admin retrieving statistics for broadcast ID: {}", id);
         BroadcastResponse response = broadcastQueryService.getBroadcast(id);
-        Map<String, Object> stats = new java.util.HashMap<>();
-        stats.put("broadcastId", id);
-        stats.put("totalTargeted", response.getTotalTargeted());
-        stats.put("totalDelivered", response.getTotalDelivered());
-        stats.put("totalRead", response.getTotalRead());
-        stats.put("deliveryRate", response.getTotalTargeted() > 0 ?
-                (double) response.getTotalDelivered() / response.getTotalTargeted() : 0.0);
-        stats.put("readRate", response.getTotalDelivered() > 0 ?
-                (double) response.getTotalRead() / response.getTotalDelivered() : 0.0);
+        BroadcastStatsResponse stats = broadcastMapper.toBroadcastStatsResponse(response);
+
         return ResponseEntity.ok(stats);
     }
 

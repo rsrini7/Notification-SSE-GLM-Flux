@@ -51,7 +51,7 @@ public class BroadcastLifecycleService {
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
-        BroadcastMessage broadcast = buildBroadcastFromRequest(request);
+        BroadcastMessage broadcast = broadcastMapper.toBroadcastMessage(request);
 
         if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
             log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());
@@ -296,23 +296,6 @@ public class BroadcastLifecycleService {
             log.error("Critical: Failed to serialize event payload for outbox for aggregateId {}.", aggregateId, e);
             return null; 
         }
-    }
-    
-    private BroadcastMessage buildBroadcastFromRequest(BroadcastRequest request) {
-        return BroadcastMessage.builder()
-                .senderId(request.getSenderId())
-                .senderName(request.getSenderName())
-                .content(request.getContent())
-                .targetType(request.getTargetType())
-                .targetIds(request.getTargetIds())
-                .priority(request.getPriority())
-                .category(request.getCategory())
-                .scheduledAt(request.getScheduledAt())
-                .expiresAt(request.getExpiresAt())
-                .createdAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .updatedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .isFireAndForget(request.isFireAndForget())
-                .build();
     }
 
     @Transactional
