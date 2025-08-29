@@ -35,6 +35,7 @@ public class SseConnectionManager {
     private final Map<String, Sinks.Many<ServerSentEvent<String>>> connectionSinks = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> userToConnectionIdsMap = new ConcurrentHashMap<>();
     private final Map<String, String> connectionIdToUserIdMap = new ConcurrentHashMap<>();
+    private final Map<String, Integer> failedEmitCounts = new ConcurrentHashMap<>();
 
     private final CacheService cacheService;
     private final AppProperties appProperties;
@@ -51,6 +52,25 @@ public class SseConnectionManager {
     @PreDestroy
     public void cleanup() {
         log.info("Commencing SseConnectionManager graceful shutdown...");
+
+        if (!connectionSinks.isEmpty()) {
+            try {
+                log.info("Sending graceful shutdown notice to {} connected clients...", connectionSinks.size());
+                ServerSentEvent<String> shutdownEvent = ServerSentEvent.<String>builder()
+                    .event(Constants.SseEventType.SERVER_SHUTDOWN.name())
+                    .data("Server is shutting down. Please reconnect momentarily.")
+                    .build();
+
+                connectionSinks.forEach((connectionId, sink) -> sink.tryEmitNext(shutdownEvent));
+
+                // Brief delay to allow message delivery
+                Thread.sleep(500);
+                log.info("Shutdown notice sent to clients.");
+            } catch (Exception e) {
+                log.warn("Error sending shutdown notice to clients", e);
+            }
+        }
+
         if (serverHeartbeatSubscription != null && !serverHeartbeatSubscription.isDisposed()) {
             serverHeartbeatSubscription.dispose();
             log.info("Server heartbeat task stopped.");
@@ -118,9 +138,8 @@ public class SseConnectionManager {
             }
             connectionIdToUserIdMap.remove(connectionId);
             
-            // **THIS IS THE FIX**: Check if the cache is closed before trying to use it.
             if (clientCache.isClosed()) {
-                log.warn("Cache is closed. Skipping Geode unregister for connection {} on shutdown.", connectionId);
+            log.warn("Cache is closed. Skipping Geode unregister for connection {} on shutdown.", connectionId);
             } else {
                 cacheService.unregisterUserConnection(userId, connectionId);
             }
@@ -143,6 +162,26 @@ public class SseConnectionManager {
                     if (connectionIdsOnThisPod.isEmpty()) return;
   
                     cacheService.updateHeartbeats(connectionIdsOnThisPod);
+
+                    long now = ZonedDateTime.now().toEpochSecond();
+                    long staleThreshold = now - (appProperties.getSse().getClientTimeoutThreshold() / 1000);
+                    Set<String> staleConnections = cacheService.getStaleConnectionIds(staleThreshold);
+
+                    // Only check connections on this pod
+                    staleConnections.retainAll(connectionIdsOnThisPod);
+
+                    if (!staleConnections.isEmpty()) {
+                        log.warn("Detected {} stale connections. Cleaning up.", staleConnections.size());
+                        for (String staleConnectionId : staleConnections) {
+                            String userId = connectionIdToUserIdMap.get(staleConnectionId);
+                            if (userId != null) {
+                                log.warn("Connection {} for user {} appears stale - no activity for more than {}ms",
+                                    staleConnectionId, userId, appProperties.getSse().getClientTimeoutThreshold());
+                                cleanupFailedConnectionAsync(userId, staleConnectionId);
+                            }
+                        }
+                    }
+
                     String payload = objectMapper.writeValueAsString(Map.of("timestamp", ZonedDateTime.now()));
                     ServerSentEvent<String> heartbeatEvent = ServerSentEvent.<String>builder()
                         .event("HEARTBEAT").data(payload).build();
@@ -170,8 +209,21 @@ public class SseConnectionManager {
                 if (sink != null) {
                     Sinks.EmitResult result = sink.tryEmitNext(event);
                     if (result.isFailure()) {
-                        log.warn("Failed to emit SSE event for user {}, connection {}. Result: {}. Proactively cleaning up stale connection.", userId, connectionId, result);
-                        cleanupFailedConnectionAsync(userId, connectionId);
+                        // Increment failure counter
+                        int failCount = failedEmitCounts.compute(connectionId, (k, v) -> v == null ? 1 : v + 1);
+
+                        log.warn("Failed to emit SSE event for user {}, connection {}. Result: {}. Fail count: {}",
+                            userId, connectionId, result, failCount);
+
+                        // If multiple failures in a row, clean up connection
+                        if (failCount >= 3) {
+                            log.warn("Connection {} has failed {} consecutive emits. Proactively cleaning up stale connection.",
+                                connectionId, failCount);
+                            cleanupFailedConnectionAsync(userId, connectionId);
+                        }
+                    } else {
+                        // Reset counter on success
+                        failedEmitCounts.remove(connectionId);
                     }
                 }
             }

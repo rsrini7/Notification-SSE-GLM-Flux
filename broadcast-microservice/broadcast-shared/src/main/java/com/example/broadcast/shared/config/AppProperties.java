@@ -50,7 +50,7 @@ public class AppProperties {
     @Data
     public static class Sse {
         @Positive
-        private long timeout = 300000L;
+        private long clientTimeoutThreshold = 60000L;
         @Positive
         private long heartbeatInterval = 30000L;
     }

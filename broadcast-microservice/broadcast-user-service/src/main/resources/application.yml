@@ -110,7 +110,7 @@ broadcast:
     web-port: "8085" # Admin H2 Console on port 8085
     tcp-port: "9095"
   sse:
-    timeout: 300000
+    clientTimeoutThreshold: 60000
     heartbeat-interval: 30000
 
   # Database Configuration

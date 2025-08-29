@@ -57,6 +57,7 @@ public final class Constants {
         MESSAGE,
         READ_RECEIPT,
         MESSAGE_REMOVED,
-        HEARTBEAT
+        HEARTBEAT,
+        SERVER_SHUTDOWN
     }
 }

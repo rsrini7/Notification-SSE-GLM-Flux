@@ -88,6 +88,13 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
       case 'HEARTBEAT':
         break;
+      case 'SERVER_SHUTDOWN':
+        toast({
+            title: 'Server Shutdown',
+            description: 'The server is restarting. You will be reconnected shortly',
+        });
+        sseConnection.disconnect(false);
+        break;
       default:
         console.log('Unhandled SSE event type:', event.type);
     }
