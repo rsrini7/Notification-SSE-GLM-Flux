@@ -3,16 +3,24 @@ package com.example.broadcast.shared.mapper;
 import com.example.broadcast.shared.dto.admin.BroadcastResponse;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.dto.admin.BroadcastStatsResponse;
+import com.example.broadcast.shared.dto.admin.DltMessage;
 import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
 import com.example.broadcast.shared.dto.admin.BroadcastRequest;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.util.Constants;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.mapstruct.AfterMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -23,11 +31,18 @@ import java.util.UUID;
  * Implementation is generated at compile time by MapStruct.
  */
 @Mapper(componentModel = "spring", imports = { ZonedDateTime.class, ZoneOffset.class, UUID.class })
-public interface BroadcastMapper {
+public abstract class BroadcastMapper {
+
+    @Autowired
+    public ObjectMapper objectMapper;
+
+    // A logger for our custom logic
+    public static final Logger log = LoggerFactory.getLogger(BroadcastMapper.class);
+
 
     @Mapping(target = "totalDelivered", constant = "0")
     @Mapping(target = "totalRead", constant = "0")
-    BroadcastResponse toBroadcastResponse(BroadcastMessage broadcast, int totalTargeted);
+    public abstract BroadcastResponse toBroadcastResponse(BroadcastMessage broadcast, int totalTargeted);
 
     // This is the primary mapping. It handles fields that are ALWAYS populated from the 'broadcast' object.
     @Mapping(source = "broadcast.id", target = "broadcastId")
@@ -46,12 +61,12 @@ public interface BroadcastMapper {
     @Mapping(target = "deliveredAt", ignore = true)
     @Mapping(target = "readAt", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
-    UserBroadcastResponse toUserBroadcastResponseFromEntity(UserBroadcastMessage message, BroadcastMessage broadcast);
+    public abstract UserBroadcastResponse toUserBroadcastResponseFromEntity(UserBroadcastMessage message, BroadcastMessage broadcast);
 
     // This method is automatically called by MapStruct after the initial mapping above.
     // It contains your original null-check logic.
     @AfterMapping
-    default void handleNullableMessageSource(@MappingTarget UserBroadcastResponse.UserBroadcastResponseBuilder builder,
+    protected void handleNullableMessageSource(@MappingTarget UserBroadcastResponse.UserBroadcastResponseBuilder builder,
                                              UserBroadcastMessage message, BroadcastMessage broadcast) {
         if (message != null) {
             builder.id(message.getId())
@@ -84,10 +99,10 @@ public interface BroadcastMapper {
     @Mapping(target = "userId", ignore = true)
     @Mapping(target = "deliveredAt", ignore = true)
     @Mapping(target = "readAt", ignore = true)
-    UserBroadcastResponse toUserBroadcastResponseFromCache(UserMessageInbox userMessage, BroadcastMessage broadcast);
+    public abstract UserBroadcastResponse toUserBroadcastResponseFromCache(UserMessageInbox userMessage, BroadcastMessage broadcast);
 
     @Mapping(source = "id", target = "messageId")
-    UserMessageInbox toUserMessageInbox(UserBroadcastMessage message);
+    public abstract UserMessageInbox toUserMessageInbox(UserBroadcastMessage message);
 
     /**
      * Maps a BroadcastRequest DTO to a BroadcastMessage model.
@@ -98,16 +113,16 @@ public interface BroadcastMapper {
     @Mapping(target = "createdAt", expression = "java(ZonedDateTime.now(ZoneOffset.UTC))")
     @Mapping(target = "updatedAt", expression = "java(ZonedDateTime.now(ZoneOffset.UTC))")
     @Mapping(source = "fireAndForget", target = "isFireAndForget") 
-    BroadcastMessage toBroadcastMessage(BroadcastRequest request);
+    public abstract BroadcastMessage toBroadcastMessage(BroadcastRequest request);
 
 
     @Mapping(source = "id", target = "broadcastId")
     @Mapping(target = "deliveryRate", ignore = true)
     @Mapping(target = "readRate", ignore = true)
-    BroadcastStatsResponse toBroadcastStatsResponse(BroadcastResponse response);
+    public abstract BroadcastStatsResponse toBroadcastStatsResponse(BroadcastResponse response);
 
     @AfterMapping
-    default void calculateRates(@MappingTarget BroadcastStatsResponse stats, BroadcastResponse source) {
+    protected void calculateRates(@MappingTarget BroadcastStatsResponse stats, BroadcastResponse source) {
         double deliveryRate = (source.getTotalTargeted() != null && source.getTotalTargeted() > 0)
             ? (double) source.getTotalDelivered() / source.getTotalTargeted() : 0.0;
 
@@ -126,5 +141,37 @@ public interface BroadcastMapper {
     @Mapping(source = "broadcast.fireAndForget", target = "isFireAndForget")
     @Mapping(target = "userId", ignore = true)
     @Mapping(target = "errorDetails", ignore = true)
-    MessageDeliveryEvent toMessageDeliveryEvent(BroadcastMessage broadcast, String eventType, String message);
+    public abstract MessageDeliveryEvent toMessageDeliveryEvent(BroadcastMessage broadcast, String eventType, String message);
+
+    @Mapping(source = "eventPayload.eventId", target = "id")
+    @Mapping(target = "aggregateType", expression = "java(eventPayload.getClass().getSimpleName())")
+    @Mapping(source = "aggregateId", target = "aggregateId")
+    @Mapping(source = "eventPayload.eventType", target = "eventType")
+    @Mapping(source = "topicName", target = "topic")
+    @Mapping(source = "eventPayload.timestamp", target = "createdAt")
+    @Mapping(target = "payload", ignore = true) // Ignore payload for now, we'll set it below
+    public abstract OutboxEvent toOutboxEvent(MessageDeliveryEvent eventPayload, String topicName, String aggregateId);
+
+    @AfterMapping
+    protected void afterToOutboxEvent(MessageDeliveryEvent eventPayload, String aggregateId, @MappingTarget OutboxEvent.OutboxEventBuilder builder) {
+        try {
+            String payloadJson = objectMapper.writeValueAsString(eventPayload);
+            builder.payload(payloadJson);
+        } catch (JsonProcessingException e) {
+            log.error("Critical: Failed to serialize event payload for outbox for aggregateId {}.", aggregateId, e);
+            // In case of an error, we throw a runtime exception to halt the process
+            throw new RuntimeException("Failed to serialize event payload for outbox.", e);
+        }
+    }
+
+    @Mapping(source = "key", target = "originalKey")
+    @Mapping(source = "failedEvent.broadcastId", target = "broadcastId")
+    @Mapping(source = "payloadJson", target = "originalMessagePayload")
+    @Mapping(source = "displayTitle", target = "exceptionMessage")
+    @Mapping(target = "id", expression = "java(UUID.randomUUID().toString())")
+    @Mapping(target = "failedAt", expression = "java(ZonedDateTime.now(ZoneOffset.UTC))")
+    public abstract DltMessage toDltMessage(MessageDeliveryEvent failedEvent, String key, String originalTopic,
+                                        Integer originalPartition, Long originalOffset,
+                                        String displayTitle, String exceptionStackTrace, String payloadJson);
+
 }

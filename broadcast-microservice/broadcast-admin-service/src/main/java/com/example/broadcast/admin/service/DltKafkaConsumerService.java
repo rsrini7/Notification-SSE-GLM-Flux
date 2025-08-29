@@ -3,6 +3,7 @@ package com.example.broadcast.admin.service;
 import com.example.broadcast.admin.repository.DltRepository;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.admin.DltMessage;
+import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
@@ -19,10 +20,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.Optional;
-import java.util.UUID;
 
 @Service
 @Slf4j
@@ -33,6 +31,7 @@ public class DltKafkaConsumerService {
     private final DltRepository dltRepository;
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastLifecycleService broadcastLifecycleService;
+    private final BroadcastMapper broadcastMapper;
 
     @KafkaListener(
             topics = {
@@ -106,18 +105,10 @@ public class DltKafkaConsumerService {
         }
 
         log.error("DLT Received Message. Key: {}, Topic: {}, DisplayTitle: {}.", key, originalTopic, displayTitle);
-        DltMessage dltMessage = DltMessage.builder()
-                .id(UUID.randomUUID().toString())
-                .broadcastId(failedEvent.getBroadcastId())
-                .originalKey(key)
-                .originalTopic(originalTopic)
-                .originalPartition(originalPartition)
-                .originalOffset(originalOffset)
-                .exceptionMessage(displayTitle)
-                .exceptionStackTrace(exceptionStacktrace)
-                .failedAt(ZonedDateTime.now(ZoneOffset.UTC))
-                .originalMessagePayload(payloadJson)
-                .build();
+        DltMessage dltMessage = broadcastMapper.toDltMessage(
+                failedEvent, key, originalTopic, originalPartition, originalOffset,
+                displayTitle, exceptionStacktrace, payloadJson
+            );
         
          try {
             dltRepository.save(dltMessage);

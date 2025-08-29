@@ -113,7 +113,7 @@ public class BroadcastLifecycleService {
                             .userId(userId) // Set the specific user ID here
                             .build();
                     // The aggregateId for Kafka partitioning is now the userId
-                    outboxEvents.add(createOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
+                    outboxEvents.add(broadcastMapper.toOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
                 }
                 outboxEventPublisher.publishBatch(outboxEvents);
                 log.info("Successfully published batch of {} events to outbox.", outboxEvents.size());
@@ -195,7 +195,7 @@ public class BroadcastLifecycleService {
                         .userId(userId) // Set the specific user ID
                         .build();
                 // Partition Kafka messages by userId for better distribution
-                outboxEvents.add(createOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
+                outboxEvents.add(broadcastMapper.toOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
             }
             outboxEventPublisher.publishBatch(outboxEvents);
             log.info("Successfully published batch of {} events to outbox for broadcast {}.", outboxEvents.size(), broadcastId);
@@ -244,7 +244,7 @@ public class BroadcastLifecycleService {
     private void publishSingleOrchestrationEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
         String topicName = appProperties.getKafka().getTopic().getNameOrchestration();
         MessageDeliveryEvent eventPayload = broadcastMapper.toMessageDeliveryEvent(broadcast, eventType.name(), message);
-        outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, broadcast.getId().toString()));
+        outboxEventPublisher.publish(broadcastMapper.toOutboxEvent(eventPayload, topicName, broadcast.getId().toString()));
     }
 
     public void initializeStatistics(Long broadcastId, int totalTargeted) {
@@ -267,24 +267,6 @@ public class BroadcastLifecycleService {
                 .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
                 .message(message)
                 .build();
-    }
-    
-    private OutboxEvent createOutboxEvent(MessageDeliveryEvent eventPayload, String topicName, String aggregateId) {
-        try {
-            String payloadJson = objectMapper.writeValueAsString(eventPayload);
-            return OutboxEvent.builder()
-                .id(UUID.fromString(eventPayload.getEventId()))
-                .aggregateType(eventPayload.getClass().getSimpleName())
-                .aggregateId(aggregateId)
-                .eventType(eventPayload.getEventType())
-                .topic(topicName)
-                .payload(payloadJson)
-                .createdAt(eventPayload.getTimestamp())
-                .build();
-        } catch (JsonProcessingException e) {
-            log.error("Critical: Failed to serialize event payload for outbox for aggregateId {}.", aggregateId, e);
-            return null; 
-        }
     }
 
     @Transactional
@@ -332,7 +314,7 @@ public class BroadcastLifecycleService {
                     .userId(userId)
                     .build();
             // Use userId as the Kafka key for partitioning
-            outboxEvents.add(createOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
+            outboxEvents.add(broadcastMapper.toOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
         }
         
         // 4. Publish the entire batch to the outbox in one go.
@@ -346,7 +328,7 @@ public class BroadcastLifecycleService {
         broadcastRepository.updateStatus(deliveryEvent.getBroadcastId(), Constants.BroadcastStatus.FAILED.name());
         String topicName = appProperties.getKafka().getTopic().getNameOrchestration();
         MessageDeliveryEvent eventPayload = createOrchestrationEvent(deliveryEvent, Constants.EventType.FAILED, "Broadcast FAILED");
-        outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, deliveryEvent.getBroadcastId().toString()));
+        outboxEventPublisher.publish(broadcastMapper.toOutboxEvent(eventPayload, topicName, deliveryEvent.getBroadcastId().toString()));
         log.warn("Marked entire BroadcastMessage {} as FAILED in a new transaction and evicted cache.", deliveryEvent.getBroadcastId());
     }
 
