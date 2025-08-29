@@ -104,12 +104,11 @@ public class BroadcastLifecycleService {
                 // Persist the user message records for inbox history
                 persistUserMessages(broadcast, targetUserIds);
 
-                // --- CORE CHANGE ---
                 // Create and publish one outbox event for EACH user.
                 log.info("Creating a batch of {} outbox events for broadcast ID: {}", targetUserIds.size(), broadcast.getId());
                 List<OutboxEvent> outboxEvents = new ArrayList<>();
                 for (String userId : targetUserIds) {
-                    MessageDeliveryEvent eventPayload = createOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent())
+                    MessageDeliveryEvent eventPayload = broadcastMapper.toMessageDeliveryEvent(broadcast, Constants.EventType.CREATED.name(), broadcast.getContent())
                             .toBuilder()
                             .userId(userId) // Set the specific user ID here
                             .build();
@@ -191,7 +190,7 @@ public class BroadcastLifecycleService {
             log.info("Activating PRODUCT broadcast {}. Creating a batch of {} outbox events.", broadcastId, targetUserIds.size());
             List<OutboxEvent> outboxEvents = new ArrayList<>();
             for (String userId : targetUserIds) {
-                MessageDeliveryEvent eventPayload = createOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent())
+                MessageDeliveryEvent eventPayload = broadcastMapper.toMessageDeliveryEvent(broadcast, Constants.EventType.CREATED.name(), broadcast.getContent())
                         .toBuilder()
                         .userId(userId) // Set the specific user ID
                         .build();
@@ -244,7 +243,7 @@ public class BroadcastLifecycleService {
     
     private void publishSingleOrchestrationEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
         String topicName = appProperties.getKafka().getTopic().getNameOrchestration();
-        MessageDeliveryEvent eventPayload = createOrchestrationEvent(broadcast, eventType, message);
+        MessageDeliveryEvent eventPayload = broadcastMapper.toMessageDeliveryEvent(broadcast, eventType.name(), message);
         outboxEventPublisher.publish(createOutboxEvent(eventPayload, topicName, broadcast.getId().toString()));
     }
 
@@ -258,16 +257,6 @@ public class BroadcastLifecycleService {
                 .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
                 .build();
         broadcastStatisticsRepository.save(stats);
-    }
-
-    private MessageDeliveryEvent createOrchestrationEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
-        return MessageDeliveryEvent.builder()
-                .eventId(UUID.randomUUID().toString())
-                .broadcastId(broadcast.getId())
-                .eventType(eventType.name())
-                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
-                .message(message)
-                .build();
     }
 
     private MessageDeliveryEvent createOrchestrationEvent(MessageDeliveryEvent deliveryEvent, Constants.EventType eventType, String message) {
@@ -338,7 +327,7 @@ public class BroadcastLifecycleService {
         log.info("Activating broadcast {}. Creating a batch of {} outbox events for early fan-out.", broadcast.getId(), targetUserIds.size());
         List<OutboxEvent> outboxEvents = new ArrayList<>();
         for (String userId : targetUserIds) {
-            MessageDeliveryEvent eventPayload = createOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent())
+            MessageDeliveryEvent eventPayload = broadcastMapper.toMessageDeliveryEvent(broadcast, Constants.EventType.CREATED.name(), broadcast.getContent())
                     .toBuilder()
                     .userId(userId)
                     .build();

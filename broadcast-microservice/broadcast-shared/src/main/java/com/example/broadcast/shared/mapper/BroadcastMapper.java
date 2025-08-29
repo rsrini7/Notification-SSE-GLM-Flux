@@ -7,6 +7,7 @@ import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
 import com.example.broadcast.shared.dto.admin.BroadcastRequest;
+import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.util.Constants;
 import org.mapstruct.AfterMapping;
 import org.mapstruct.Mapper;
@@ -116,4 +117,14 @@ public interface BroadcastMapper {
         stats.setDeliveryRate(deliveryRate);
         stats.setReadRate(readRate);
     }
+
+    @Mapping(source = "broadcast.id", target = "broadcastId")
+    @Mapping(source = "message", target = "message")
+    @Mapping(source = "eventType", target = "eventType")
+    @Mapping(target = "eventId", expression = "java(UUID.randomUUID().toString())")
+    @Mapping(target = "timestamp", expression = "java(ZonedDateTime.now(ZoneOffset.UTC))")
+    @Mapping(source = "broadcast.fireAndForget", target = "isFireAndForget")
+    @Mapping(target = "userId", ignore = true)
+    @Mapping(target = "errorDetails", ignore = true)
+    MessageDeliveryEvent toMessageDeliveryEvent(BroadcastMessage broadcast, String eventType, String message);
 }
