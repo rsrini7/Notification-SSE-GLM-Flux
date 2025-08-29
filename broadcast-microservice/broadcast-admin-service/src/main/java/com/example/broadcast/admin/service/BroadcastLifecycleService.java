@@ -16,8 +16,6 @@ import com.example.broadcast.shared.repository.*;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.admin.event.BroadcastCreatedEvent;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -45,7 +43,6 @@ public class BroadcastLifecycleService {
     private final OutboxEventPublisher outboxEventPublisher;
     private final BroadcastMapper broadcastMapper;
     private final AppProperties appProperties;
-    private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
