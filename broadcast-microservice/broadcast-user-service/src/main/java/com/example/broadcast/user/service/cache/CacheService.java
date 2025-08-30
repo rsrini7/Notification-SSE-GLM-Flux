@@ -1,7 +1,7 @@
 package com.example.broadcast.user.service.cache;
 
+import com.example.broadcast.shared.dto.BroadcastContent;
 import com.example.broadcast.shared.dto.cache.*;
-import com.example.broadcast.shared.model.BroadcastMessage;
 
 import java.util.List;
 import java.util.Map;
@@ -25,8 +25,8 @@ public interface CacheService {
 
     Map<String, Object> getCacheStats();
 
-    Optional<BroadcastMessage> getBroadcastContent(Long broadcastId);
-    void cacheBroadcastContent(BroadcastMessage broadcast);
+    Optional<BroadcastContent> getBroadcastContent(Long broadcastId);
+    void cacheBroadcastContent(BroadcastContent broadcast);
     void evictBroadcastContent(Long broadcastId);
 
     Optional<List<UserMessageInbox>> getUserInbox(String userId);

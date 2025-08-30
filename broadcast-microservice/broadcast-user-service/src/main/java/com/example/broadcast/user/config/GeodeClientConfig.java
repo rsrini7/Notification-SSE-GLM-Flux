@@ -1,10 +1,10 @@
 package com.example.broadcast.user.config;
 
 import com.example.broadcast.shared.config.AppProperties;
+import com.example.broadcast.shared.dto.BroadcastContent;
 import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
-import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.util.Constants.GeodeRegionNames;
 
 import lombok.RequiredArgsConstructor;
@@ -63,8 +63,8 @@ public class GeodeClientConfig {
     }
 
     @Bean("broadcastContentRegion")
-    public Region<Long, BroadcastMessage> broadcastContentRegion(ClientCache clientCache) {
-        return clientCache.<Long, BroadcastMessage>createClientRegionFactory(ClientRegionShortcut.PROXY)
+    public Region<Long, BroadcastContent> broadcastContentRegion(ClientCache clientCache) {
+        return clientCache.<Long, BroadcastContent>createClientRegionFactory(ClientRegionShortcut.PROXY)
                 .create(GeodeRegionNames.BROADCAST_CONTENT);
     }
 

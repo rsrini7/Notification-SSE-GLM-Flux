@@ -9,6 +9,7 @@ import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
 import com.example.broadcast.shared.dto.admin.BroadcastRequest;
+import com.example.broadcast.shared.dto.BroadcastContent;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.util.Constants;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -173,5 +174,12 @@ public abstract class BroadcastMapper {
     public abstract DltMessage toDltMessage(MessageDeliveryEvent failedEvent, String key, String originalTopic,
                                         Integer originalPartition, Long originalOffset,
                                         String displayTitle, String exceptionStackTrace, String payloadJson);
+
+ 
+    @Mapping(source = "fireAndForget", target = "isFireAndForget")
+    public abstract BroadcastContent toBroadcastContentDTO(BroadcastMessage entity);
+    
+    @Mapping(source = "fireAndForget", target = "isFireAndForget")
+    public abstract BroadcastMessage toBroadcastMessage(BroadcastContent dto);
 
 }

@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.dto.BroadcastContent;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
@@ -24,6 +25,7 @@ import reactor.core.scheduler.Scheduler;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -120,18 +122,53 @@ public class UserMessageService {
         }).subscribeOn(jdbcScheduler);
     }
     
+    /**
+     * Performs a bulk fetch for broadcast content, implementing a read-through cache pattern.
+     * It first attempts to retrieve items from the Geode cache. For any items not found
+     * in the cache, it fetches them from the database in a single batch query and then
+     * primes the cache for subsequent requests.
+     *
+     * @param broadcastIds A Set of broadcast IDs to retrieve.
+     * @return A Map of broadcast IDs to their corresponding BroadcastMessage entities.
+     */
     private Map<Long, BroadcastMessage> getBroadcastContent(Set<Long> broadcastIds) {
-        return broadcastIds.stream()
-            .map(id -> {
-                BroadcastMessage message = cacheService.getBroadcastContent(id)
-                        .orElseGet(() -> broadcastRepository.findById(id).orElse(null));
-                return new AbstractMap.SimpleEntry<>(id, message);
-            })
-            .filter(entry -> entry.getValue() != null)
-            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        if (broadcastIds == null || broadcastIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        final Map<Long, BroadcastMessage> resultMap = new ConcurrentHashMap<>();
+        final List<Long> cacheMissIds = new ArrayList<>();
+
+        // 1. First Pass: Check the cache for each ID.
+        // Collect hits and identify all cache misses.
+        for (Long id : broadcastIds) {
+            Optional<BroadcastContent> cachedDtoOpt = cacheService.getBroadcastContent(id);
+            if (cachedDtoOpt.isPresent()) {
+                // CACHE HIT: Convert DTO to entity and add to results.
+                resultMap.put(id, broadcastMapper.toBroadcastMessage(cachedDtoOpt.get()));
+            } else {
+                // CACHE MISS: Add the ID to a list to be fetched from the database.
+                cacheMissIds.add(id);
+            }
+        }
+
+        // 2. Database Fetch: If there were any cache misses, fetch them all in one go.
+        if (!cacheMissIds.isEmpty()) {
+            log.info("Cache miss for {} broadcast content items. Fetching from DB.", cacheMissIds.size());
+            
+            // MODIFIED: Call the new JdbcTemplate-based batch method.
+            List<BroadcastMessage> messagesFromDb = broadcastRepository.findAllByIds(cacheMissIds);
+
+            // 3. Populate Results & Prime Cache: Add DB results to the map and update the cache.
+            for (BroadcastMessage messageFromDb : messagesFromDb) {
+                resultMap.put(messageFromDb.getId(), messageFromDb);
+                // Prime the cache so the next request for this ID is a hit.
+                cacheService.cacheBroadcastContent(broadcastMapper.toBroadcastContentDTO(messageFromDb));
+            }
+        }
+        return resultMap;
     }
 
-    // THIS METHOD WAS MISSING IN THE PREVIOUS RESPONSE
     @Async
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void updateDeliveryStatsForOfflineUsers(List<UserBroadcastResponse> newlyDeliveredBroadcasts) {

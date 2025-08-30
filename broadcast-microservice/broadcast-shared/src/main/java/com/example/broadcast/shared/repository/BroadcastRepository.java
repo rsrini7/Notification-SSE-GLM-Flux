@@ -2,14 +2,8 @@ package com.example.broadcast.shared.repository;
 
 import com.example.broadcast.shared.dto.admin.BroadcastResponse;
 import com.example.broadcast.shared.model.BroadcastMessage;
-import com.example.broadcast.shared.service.SqlQueryProvider;
 import com.example.broadcast.shared.util.Constants.BroadcastStatus;
-
-import lombok.AllArgsConstructor;
-
 import com.example.broadcast.shared.util.JsonUtils;
-import com.example.broadcast.shared.util.SqlKeys;
-
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -22,16 +16,19 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-@AllArgsConstructor
 @Repository
 public class BroadcastRepository {
 
     private final JdbcTemplate jdbcTemplate;
-    private final SqlQueryProvider sqlProvider;
+
+    public BroadcastRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
     private final RowMapper<BroadcastMessage> broadcastRowMapper = (rs, rowNum) -> BroadcastMessage.builder()
             .id(rs.getLong("id"))
@@ -149,7 +146,7 @@ public class BroadcastRepository {
     }
 
     public Optional<BroadcastMessage> findById(Long id) {
-        String sql = sqlProvider.getQuery(SqlKeys.BROADCAST_FIND_BY_ID);
+        String sql = "SELECT * FROM broadcast_messages WHERE id = ?";
         return jdbcTemplate.query(sql, broadcastRowMapper, id).stream().findFirst();
     }
 
@@ -266,6 +263,18 @@ public class BroadcastRepository {
             FOR UPDATE SKIP LOCKED
             """;
         return jdbcTemplate.query(sql, broadcastRowMapper, now.toOffsetDateTime(), limit);
+    }
+
+    public List<BroadcastMessage> findAllByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
+        String inSql = String.join(",", Collections.nCopies(ids.size(), "?"));
+        
+        String sql = String.format("SELECT * FROM broadcast_messages WHERE id IN (%s)", inSql);
+        
+        return jdbcTemplate.query(sql, broadcastRowMapper, ids.toArray());
     }
     
 }

@@ -3,7 +3,7 @@ package com.example.broadcast.user.service.cache;
 import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
-import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.dto.BroadcastContent;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.ClientCache;
@@ -23,13 +23,13 @@ public class GeodeCacheService implements CacheService {
     private final Region<String, UserConnectionInfo> userConnectionsRegion;
     private final Region<String, ConnectionHeartbeat> connectionHeartbeatRegion;
     private final Region<String, List<UserMessageInbox>> userMessagesInboxRegion;
-    private final Region<Long, BroadcastMessage> broadcastContentRegion;
+    private final Region<Long, BroadcastContent> broadcastContentRegion;
 
     public GeodeCacheService(ClientCache clientCache,
                              @Qualifier("userConnectionsRegion") Region<String, UserConnectionInfo> userConnectionsRegion,
                              @Qualifier("connectionHeartbeatRegion") Region<String, ConnectionHeartbeat> connectionHeartbeatRegion,
                              @Qualifier("userMessagesInboxRegion") Region<String, List<UserMessageInbox>> userMessagesInboxRegion,
-                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastMessage> broadcastContentRegion
+                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastContent> broadcastContentRegion
     ) {
         this.clientCache = clientCache;
         this.userConnectionsRegion = userConnectionsRegion;
@@ -165,12 +165,12 @@ public class GeodeCacheService implements CacheService {
     }
 
     @Override
-    public Optional<BroadcastMessage> getBroadcastContent(Long broadcastId) {
+    public Optional<BroadcastContent> getBroadcastContent(Long broadcastId) {
         return Optional.ofNullable(broadcastContentRegion.get(broadcastId));
     }
 
     @Override
-    public void cacheBroadcastContent(BroadcastMessage broadcast) {
+    public void cacheBroadcastContent(BroadcastContent broadcast) {
         if (broadcast != null) broadcastContentRegion.put(broadcast.getId(), broadcast);
     }
 

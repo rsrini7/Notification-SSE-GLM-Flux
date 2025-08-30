@@ -2,6 +2,7 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
+import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
@@ -34,6 +35,7 @@ public class KafkaOrchestratorConsumerService {
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastRepository userBroadcastRepository;
+    private final BroadcastMapper broadcastMapper;
     
     @Qualifier("sseMessagesRegion")
     private final Region<String, Object> sseMessagesRegion;
@@ -87,7 +89,7 @@ public class KafkaOrchestratorConsumerService {
         // The cache logic is ONLY needed for 'ALL' type broadcasts.
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
-                cacheService.cacheBroadcastContent(broadcast);
+                cacheService.cacheBroadcastContent(broadcastMapper.toBroadcastContentDTO(broadcast));
                 break;
             case CANCELLED:
             case EXPIRED:
