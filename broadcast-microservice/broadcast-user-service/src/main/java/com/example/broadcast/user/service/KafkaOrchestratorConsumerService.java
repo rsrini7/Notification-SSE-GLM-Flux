@@ -101,11 +101,10 @@ public class KafkaOrchestratorConsumerService {
         }
         
         // Instead of looping through all users, publish one generic event.
-        log.info("Scattering generic 'ALL' type broadcast {} to all pods via Geode.", broadcast.getId());
+        log.info("Putting generic 'ALL' broadcast event {} into 'sse-all-messages' region.", event.getBroadcastId());
         String messageKey = UUID.randomUUID().toString();
-        // The event in the payload intentionally has a null userId.
-        GeodeSsePayload payload = new GeodeSsePayload(Constants.GeodeRegionNames.SSE_ALL_MESSAGES, event);
-        sseAllMessagesRegion.put(messageKey, payload);
+        // Put the raw event, as the region itself is the broadcast target.
+        sseAllMessagesRegion.put(messageKey, event);
     }
 
      private void handleReadEvent(MessageDeliveryEvent event) {
@@ -126,6 +125,7 @@ public class KafkaOrchestratorConsumerService {
             GeodeSsePayload payload = new GeodeSsePayload(uniqueClusterPodName, userSpecificEvent);
 
             sseUserMessagesRegion.put(messageKey, payload);
+            log.debug("Put user-specific event for user {} into 'sse-user-messages' region, targeting pod {}", userId, uniqueClusterPodName);
         } else {
             log.trace("UserID {} is Offline.", userId);
         }
