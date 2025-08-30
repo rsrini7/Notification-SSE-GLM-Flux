@@ -2,8 +2,14 @@ package com.example.broadcast.shared.repository;
 
 import com.example.broadcast.shared.dto.admin.BroadcastResponse;
 import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.service.SqlQueryProvider;
 import com.example.broadcast.shared.util.Constants.BroadcastStatus;
+
+import lombok.AllArgsConstructor;
+
 import com.example.broadcast.shared.util.JsonUtils;
+import com.example.broadcast.shared.util.SqlKeys;
+
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -20,14 +26,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+@AllArgsConstructor
 @Repository
 public class BroadcastRepository {
 
     private final JdbcTemplate jdbcTemplate;
-
-    public BroadcastRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
+    private final SqlQueryProvider sqlProvider;
 
     private final RowMapper<BroadcastMessage> broadcastRowMapper = (rs, rowNum) -> BroadcastMessage.builder()
             .id(rs.getLong("id"))
@@ -145,7 +149,7 @@ public class BroadcastRepository {
     }
 
     public Optional<BroadcastMessage> findById(Long id) {
-        String sql = "SELECT * FROM broadcast_messages WHERE id = ?";
+        String sql = sqlProvider.getQuery(SqlKeys.BROADCAST_FIND_BY_ID);
         return jdbcTemplate.query(sql, broadcastRowMapper, id).stream().findFirst();
     }
 
