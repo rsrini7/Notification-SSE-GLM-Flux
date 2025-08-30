@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;
 import lombok.With;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Table;

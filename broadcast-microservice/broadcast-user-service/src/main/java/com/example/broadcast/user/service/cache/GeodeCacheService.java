@@ -3,7 +3,6 @@ package com.example.broadcast.user.service.cache;
 import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
-import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.BroadcastContent;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.Region;
@@ -25,21 +24,18 @@ public class GeodeCacheService implements CacheService {
     private final Region<String, ConnectionHeartbeat> connectionHeartbeatRegion;
     private final Region<String, List<UserMessageInbox>> userMessagesInboxRegion;
     private final Region<Long, BroadcastContent> broadcastContentRegion;
-    private final AppProperties appProperties;
 
     public GeodeCacheService(ClientCache clientCache,
                              @Qualifier("userConnectionsRegion") Region<String, UserConnectionInfo> userConnectionsRegion,
                              @Qualifier("connectionHeartbeatRegion") Region<String, ConnectionHeartbeat> connectionHeartbeatRegion,
                              @Qualifier("userMessagesInboxRegion") Region<String, List<UserMessageInbox>> userMessagesInboxRegion,
-                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastContent> broadcastContentRegion,
-                             AppProperties appProperties
+                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastContent> broadcastContentRegion
     ) {
         this.clientCache = clientCache;
         this.userConnectionsRegion = userConnectionsRegion;
         this.connectionHeartbeatRegion = connectionHeartbeatRegion;
         this.userMessagesInboxRegion = userMessagesInboxRegion;
         this.broadcastContentRegion = broadcastContentRegion;
-        this.appProperties = appProperties;
     }
 
     @Override
