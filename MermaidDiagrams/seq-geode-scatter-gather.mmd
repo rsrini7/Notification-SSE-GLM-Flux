@@ -4,7 +4,7 @@ sequenceDiagram
     participant OutboxPoller as AdminSvc (Outbox Poller)
     participant KafkaOrchestration as Kafka (broadcast-orchestration)
     participant Orchestrator as UserSvc (Orchestrator)
-    participant Geode as Apache Geode (sse-messages Region)
+    participant Geode as Apache Geode (sse-user-messages Region)
     participant Worker as UserSvc (Worker Pod)
     participant SseSvc as UserSvc (SSE Service)
 
@@ -25,7 +25,7 @@ sequenceDiagram
     Geode-->>-Orchestrator: Returns pod name
     
     loop For each target user
-        Orchestrator->>+Geode: 7- "Scatters" user-specific event by PUT-ting it into the 'sse-messages' region
+        Orchestrator->>+Geode: 7- "Scatters" user-specific event by PUT-ting it into the 'sse-user-messages' region
     end
     Geode-->>-Orchestrator: 
     Orchestrator-->>-KafkaOrchestration: 8- Acknowledges orchestration event

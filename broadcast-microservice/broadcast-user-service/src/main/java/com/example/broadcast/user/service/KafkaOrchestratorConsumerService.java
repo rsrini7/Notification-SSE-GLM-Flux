@@ -21,7 +21,6 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.time.OffsetDateTime;
@@ -37,11 +36,14 @@ public class KafkaOrchestratorConsumerService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastMapper broadcastMapper;
     
-    @Qualifier("sseMessagesRegion")
-    private final Region<String, Object> sseMessagesRegion;
+    @Qualifier("sseUserMessagesRegion")
+    private final Region<String, Object> sseUserMessagesRegion;
+
+    @Qualifier("sseAllMessagesRegion")
+    private final Region<String, Object> sseAllMessagesRegion;
 
     @KafkaListener(
-            topics = "${broadcast.kafka.topic.name-orchestration}",
+            topics = "#{@topicNamer.getOrchestrationTopic()}",
             groupId = "${broadcast.kafka.consumer.group-orchestration}",
             containerFactory = "kafkaListenerContainerFactory"
     )
@@ -52,8 +54,6 @@ public class KafkaOrchestratorConsumerService {
                                            @Header(KafkaHeaders.OFFSET) long offset,
                                            Acknowledgment acknowledgment) {
 
-        // 1. Handle user-specific events immediately.
-        // This now covers SELECTED, ROLE, and PRODUCT broadcasts.
         if (event.getUserId() != null) {
             handleUserSpecificEvent(event);
 
@@ -66,8 +66,6 @@ public class KafkaOrchestratorConsumerService {
                 cacheService.evictUserInbox(event.getUserId());
             }
         } else {
-            // If no userId, it's a group event for an 'ALL' type broadcast.
-            // 2. If no userId, it can only be a group event for an 'ALL' type broadcast.
             handleAllUsersBroadcast(event);
         }
 
@@ -86,7 +84,6 @@ public class KafkaOrchestratorConsumerService {
             return;
         }
         
-        // The cache logic is ONLY needed for 'ALL' type broadcasts.
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
                 cacheService.cacheBroadcastContent(broadcastMapper.toBroadcastContentDTO(broadcast));
@@ -103,17 +100,12 @@ public class KafkaOrchestratorConsumerService {
                 break;
         }
         
-        // Fan out to all users
-        List<String> onlineUsers = cacheService.getOnlineUsers();
-        if (onlineUsers.isEmpty()) {
-            log.info("No users are currently online to receive the 'ALL' broadcast {}.", broadcast.getId());
-            return;
-        }
-
-        log.info("Scattering 'ALL' type broadcast {} to {} online users.", broadcast.getId(), onlineUsers.size());
-        for (String userId : onlineUsers) {
-            scatterToUser(event.toBuilder().userId(userId).build());
-        }
+        // Instead of looping through all users, publish one generic event.
+        log.info("Scattering generic 'ALL' type broadcast {} to all pods via Geode.", broadcast.getId());
+        String messageKey = UUID.randomUUID().toString();
+        // The event in the payload intentionally has a null userId.
+        GeodeSsePayload payload = new GeodeSsePayload(Constants.GeodeRegionNames.SSE_ALL_MESSAGES, event);
+        sseAllMessagesRegion.put(messageKey, payload);
     }
 
      private void handleReadEvent(MessageDeliveryEvent event) {
@@ -123,9 +115,7 @@ public class KafkaOrchestratorConsumerService {
     
     private void scatterToUser(MessageDeliveryEvent userSpecificEvent) {
         String userId = userSpecificEvent.getUserId();
-
         cacheService.evictUserInbox(userId);
-
         Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
 
         if (userConnections != null && !userConnections.isEmpty()) {
@@ -135,7 +125,7 @@ public class KafkaOrchestratorConsumerService {
             String messageKey = UUID.randomUUID().toString();
             GeodeSsePayload payload = new GeodeSsePayload(uniqueClusterPodName, userSpecificEvent);
 
-            sseMessagesRegion.put(messageKey, payload);
+            sseUserMessagesRegion.put(messageKey, payload);
         } else {
             log.trace("UserID {} is Offline.", userId);
         }

@@ -158,4 +158,30 @@ public class SseService {
     public boolean isUserConnected(String userId) {
         return sseConnectionManager.isUserConnected(userId);
     }
+
+    public void handleBroadcastToAllEvent(MessageDeliveryEvent event) {
+        log.debug("Handling generic broadcast event: {}", event.getEventType());
+
+        // For CREATED, CANCELLED, and EXPIRED events, the logic is the same:
+        // create the appropriate SSE event and broadcast it to all local clients.
+        switch (Constants.EventType.valueOf(event.getEventType())) {
+            case CREATED:
+                broadcastRepository.findById(event.getBroadcastId()).ifPresent(broadcast -> {
+                    log.info("Delivering generic 'ALL' broadcast {} to all local clients.", broadcast.getId());
+                    UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(null, broadcast);
+                    ServerSentEvent<String> sseEvent = sseEventFactory.createEvent(SseEventType.MESSAGE, response.getBroadcastId().toString(), response);
+                    sseConnectionManager.broadcastEventToLocalConnections(sseEvent);
+                });
+                break;
+            case CANCELLED:
+            case EXPIRED:
+                Map<String, Long> payload = Map.of("broadcastId", event.getBroadcastId());
+                ServerSentEvent<String> sseEvent = sseEventFactory.createEvent(SseEventType.MESSAGE_REMOVED, event.getBroadcastId().toString(), payload);
+                sseConnectionManager.broadcastEventToLocalConnections(sseEvent);
+                break;
+            default:
+                log.warn("Unhandled generic event type: {}", event.getEventType());
+                break;
+        }
+    }
 }

@@ -12,7 +12,6 @@ import org.apache.geode.cache.query.*;
 import org.apache.geode.cache.util.CqListenerAdapter;
 import org.springframework.stereotype.Component;
 
-
 @Component
 @Slf4j
 @RequiredArgsConstructor
@@ -34,11 +33,16 @@ public class SseMessageCqListener extends CqListenerAdapter {
             cqf.addCqListener(this);
             CqAttributes cqa = cqf.create();
 
-            String query = String.format("SELECT * FROM /%s s WHERE s.getTargetClusterPodName = '%s'", GeodeRegionNames.SSE_MESSAGES, uniqueClusterPodName);
+            // REFACTORED QUERY: Listen for pod-specific events OR generic 'ALL_PODS' events.
+            String query = String.format("SELECT * FROM /%s s WHERE s.targetClusterPodName = '%s' OR s.targetClusterPodName = '%s'",
+                GeodeRegionNames.SSE_USER_MESSAGES,
+                uniqueClusterPodName,
+                GeodeRegionNames.SSE_ALL_MESSAGES
+            );
             CqQuery cq = queryService.newCq("SseMessageCQ_" + uniqueClusterPodName.replace(":", "_"), query, cqa, true);
 
             cq.execute();
-            log.info("Continuous Query registered for  ClusterPod '{}' with query: {}", uniqueClusterPodName, query);
+            log.info("Continuous Query registered for ClusterPod '{}' with query: {}", uniqueClusterPodName, query);
         } catch (CqException | RegionNotFoundException | CqExistsException e) {
             log.error("Failed to create Continuous Query", e);
             throw new RuntimeException(e);
@@ -49,18 +53,25 @@ public class SseMessageCqListener extends CqListenerAdapter {
     public void onEvent(CqEvent aCqEvent) {
         log.info("CQ Event received. Operation: {}", aCqEvent.getQueryOperation());
         
-        // Get the key of the message from the event
         String messageKey = (String) aCqEvent.getKey();
 
         if (aCqEvent.getQueryOperation().isCreate() || aCqEvent.getQueryOperation().isUpdate()) {
             Object newValue = aCqEvent.getNewValue();
             if (newValue instanceof GeodeSsePayload payload) {
-                log.info("Processing CQ payload for cluster {} pod {}: {}", appProperties.getClusterName(), appProperties.getPodName(), payload.getEvent());
-                sseService.handleMessageEvent(payload.getEvent());
+                
+                // REFACTORED LOGIC: Check if this is a generic broadcast or user-specific.
+                if (GeodeRegionNames.SSE_ALL_MESSAGES.equals(payload.getTargetClusterPodName())) {
+                    // This is a broadcast for ALL users.
+                    log.info("Processing generic 'ALL' broadcast event on pod {}: {}", appProperties.getPodName(), payload.getEvent());
+                    sseService.handleBroadcastToAllEvent(payload.getEvent());
+                } else {
+                    // This is an event for a specific user connected to this pod.
+                    log.info("Processing user-specific event for on pod {}: {}", appProperties.getPodName(), payload.getEvent());
+                    sseService.handleMessageEvent(payload.getEvent());
+                }
 
-                // After processing, remove the entry from the SSE_MESSAGES region to clean it up.
                 try {
-                    clientCache.getRegion(GeodeRegionNames.SSE_MESSAGES).remove(messageKey);
+                    clientCache.getRegion(GeodeRegionNames.SSE_USER_MESSAGES).remove(messageKey);
                     log.debug("Cleaned up processed message with key: {}", messageKey);
                 } catch (Exception e) {
                     log.error("Failed to clean up processed sse-message with key: {}", messageKey, e);

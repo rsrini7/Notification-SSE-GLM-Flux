@@ -25,7 +25,7 @@ mindmap
 
     %% Intra-Cluster Eventing
     ("🚀 Real-time Eventing")
-      ("sse-messages")
+      ("sse-user-messages")
         ("<b>Data Stored:</b><br/>K: UUID (String)<br/>V: GeodeSsePayload object")
         ("<b>Purpose:</b><br/>A transient, high-speed message bus. The orchestrator `puts` events here, and worker pods are notified instantly via Continuous Query (CQ), triggering SSE pushes to clients")
         ("<b>Interacting Service:</b><br/>User Service (Orchestrator writes, CqListener on workers reads)")

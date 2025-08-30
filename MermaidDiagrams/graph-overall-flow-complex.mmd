@@ -63,7 +63,7 @@ graph TD
     %% --- DELIVERY (Real-time Push Path) ---
     Kafka --> OrchestratorConsumer
     %% MODIFIED: Description of Geode interaction is now more specific
-    OrchestratorConsumer -- "Looks up user pod, Puts event<br/>into 'sse-messages' region" --> Geode
+    OrchestratorConsumer -- "Looks up user pod, Puts event<br/>into 'sse-user-messages' region" --> Geode
     Geode -- "CQ invokes Listener on correct pod" --> WorkerCqListener
     WorkerCqListener --> SseService
     SseService -- "Pushes via SSE" --> User

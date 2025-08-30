@@ -8,7 +8,7 @@ graph TD
         C --> D[Kafka: broadcast-orchestration topic];
         D --> E["User Service (Orchestrator Pod) <br/> consumes the single event"];
         E --> F["Dynamically determines target user list <br/> & looks up their pod locations in Geode"];
-        F --> G["'Scatters' N user-specific events by <br/> PUT-ting them into the 'sse-messages' Geode region"];
+        F --> G["'Scatters' N user-specific events by <br/> PUT-ting them into the 'sse-user-messages' Geode region"];
     end
     
     subgraph "Delivery (Worker Pods)"

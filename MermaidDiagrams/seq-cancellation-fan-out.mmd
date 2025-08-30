@@ -3,7 +3,7 @@ sequenceDiagram
     participant DB as DB (Outbox)
     participant KafkaOrchestration as Kafka (broadcast-orchestration)
     participant Orchestrator as User Service (Orchestrator Pod)
-    participant Geode as Apache Geode (sse-messages Region)
+    participant Geode as Apache Geode (sse-user-messages Region)
     participant Worker as User Service (Worker Pod)
 
     AdminSvc->>+DB: 1- Writes ONE orchestration event (type=CANCELLED) to Outbox
@@ -16,7 +16,7 @@ sequenceDiagram
     DB-->>-Orchestrator: Returns user list
 
     loop For each targeted user
-        Orchestrator->>+Geode: 4- "Scatters" by PUT-ting a user-specific event into the 'sse-messages' region
+        Orchestrator->>+Geode: 4- "Scatters" by PUT-ting a user-specific event into the 'sse-user-messages' region
     end
     Geode-->>-Orchestrator: 
 

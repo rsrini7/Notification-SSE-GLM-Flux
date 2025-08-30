@@ -15,7 +15,8 @@ $LocatorAddress = "localhost[10334]"
 $replicatedRegions = @(
     "broadcast-content",
     "connection-heartbeat",
-    "sse-messages",
+    "sse-user-messages",
+    "sse-all-messages"
     "user-connections"
 )
 

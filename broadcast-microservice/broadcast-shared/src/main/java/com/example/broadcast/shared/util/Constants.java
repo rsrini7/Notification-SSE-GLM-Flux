@@ -12,7 +12,8 @@ public final class Constants {
         public static final String USER_CONNECTIONS = "user-connections";
         public static final String CONNECTION_HEARTBEAT = "connection-heartbeat";
         public static final String BROADCAST_CONTENT = "broadcast-content";
-        public static final String SSE_MESSAGES = "sse-messages";
+        public static final String SSE_USER_MESSAGES = "sse-user-messages";
+        public static final String SSE_ALL_MESSAGES = "sse-all-messages";
     }
 
     public enum BroadcastStatus {
