@@ -124,6 +124,7 @@ CREATE TABLE dlt_messages (
     original_partition INT NOT NULL,
     original_offset BIGINT NOT NULL,
     exception_message TEXT,
+    exception_stack_trace TEXT,
     failed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     original_message_payload TEXT,
     UNIQUE (broadcast_id, original_key)

@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
 @Service
@@ -61,7 +61,7 @@ public class KafkaOrchestratorConsumerService {
                 userBroadcastRepository.findByUserIdAndBroadcastId(event.getUserId(), event.getBroadcastId())
                     .ifPresent(message -> {
                         log.info("Marking Fire-and-Forget message as read in DB for user {} and broadcast {}", event.getUserId(), event.getBroadcastId());
-                        userBroadcastRepository.markAsRead(message.getId(), ZonedDateTime.now(ZoneOffset.UTC));
+                        userBroadcastRepository.markAsRead(message.getId(), OffsetDateTime.now(ZoneOffset.UTC));
                     });
                 cacheService.evictUserInbox(event.getUserId());
             }

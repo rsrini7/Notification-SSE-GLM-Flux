@@ -23,7 +23,8 @@ public final class JsonUtils {
      * @return A List of Strings, or an empty list if parsing fails or the input is null/empty.
      */
     public static List<String> parseJsonArray(String json) {
-        if (json == null || json.trim().isEmpty()) {
+        // Gracefully handle null, empty strings, and the erroneous "{}" value from the DB
+        if (json == null || json.trim().isEmpty() || "{}".equals(json.trim())) {
             return List.of();
         }
         try {

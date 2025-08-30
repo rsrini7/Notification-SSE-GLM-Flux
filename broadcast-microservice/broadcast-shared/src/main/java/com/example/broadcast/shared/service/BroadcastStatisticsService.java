@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 
 @Service
 @Slf4j
@@ -26,7 +26,7 @@ public class BroadcastStatisticsService {
                 .totalDelivered(0)
                 .totalRead(0)
                 .totalFailed(0)
-                .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .calculatedAt(OffsetDateTime.now(ZoneOffset.UTC))
                 .build();
         broadcastStatisticsRepository.save(stats);
     }

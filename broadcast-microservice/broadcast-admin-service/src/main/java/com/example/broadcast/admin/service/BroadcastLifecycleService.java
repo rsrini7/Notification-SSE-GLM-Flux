@@ -15,6 +15,7 @@ import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.repository.*;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.shared.util.JsonUtils;
 import com.example.broadcast.admin.event.BroadcastCreatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.UUID;
@@ -50,14 +51,14 @@ public class BroadcastLifecycleService {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
         BroadcastMessage broadcast = broadcastMapper.toBroadcastMessage(request);
 
-        if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(ZonedDateTime.now(ZoneOffset.UTC))) {
+        if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(OffsetDateTime.now(ZoneOffset.UTC))) {
             log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());
             broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
             broadcast = broadcastRepository.save(broadcast);
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
 
-        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(ZonedDateTime.now(ZoneOffset.UTC))) {
+        if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(OffsetDateTime.now(ZoneOffset.UTC))) {
             broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
             broadcast = broadcastRepository.save(broadcast);
             log.info("Broadcast ID {} has been scheduled for {}. No fan-out will occur yet.", broadcast.getId(), broadcast.getScheduledAt());
@@ -126,23 +127,26 @@ public class BroadcastLifecycleService {
 
     // NEW private helper method to determine users for write strategies
     private List<String> determineTargetUsersForWrite(BroadcastMessage broadcast) {
-        return switch (Constants.TargetType.valueOf(broadcast.getTargetType())) {
-            case SELECTED -> broadcast.getTargetIds();
-            case ROLE -> broadcast.getTargetIds().stream()
-                    .flatMap(role -> userService.getUserIdsByRole(role).stream())
-                    .distinct()
-                    .collect(Collectors.toList());
-            case PRODUCT -> {
-                // For PRODUCT, we must read from the database where the async task saved them.
-                // This will be replaced in the next step. For now, we simulate.
-                 yield broadcast.getTargetIds().stream()
+    return switch (Constants.TargetType.valueOf(broadcast.getTargetType())) {
+        // MODIFIED: Parse the JSON string back to a List
+        case SELECTED -> JsonUtils.parseJsonArray(broadcast.getTargetIds());
+        
+        case ROLE -> JsonUtils.parseJsonArray(broadcast.getTargetIds()).stream() // MODIFIED
+                .flatMap(role -> userService.getUserIdsByRole(role).stream())
+                .distinct()
+                .collect(Collectors.toList());
+        
+        case PRODUCT -> {
+            // This case also needs to parse the JSON string
+            yield JsonUtils.parseJsonArray(broadcast.getTargetIds()).stream() // MODIFIED
                     .flatMap(productId -> userService.getUserIdsByProduct(productId).stream())
                     .distinct()
                     .collect(Collectors.toList());
-            }
-            default -> Collections.emptyList();
-        };
-    }
+        }
+        
+        default -> Collections.emptyList();
+    };
+}
 
     // NEW private helper to perform the batch insert and stats initialization
     private void persistUserMessages(BroadcastMessage broadcast, List<String> userIds) {
@@ -156,7 +160,7 @@ public class BroadcastLifecycleService {
                         .build())
                 .collect(Collectors.toList());
 
-        userBroadcastRepository.batchInsert(userMessages);
+        userBroadcastRepository.saveAll(userMessages);
         initializeStatistics(broadcast.getId(), userIds.size());
     }
 
@@ -174,8 +178,8 @@ public class BroadcastLifecycleService {
         
         // 1. Update status from READY to ACTIVE
         broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
-        broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
-        broadcastRepository.update(broadcast);
+        broadcast.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        broadcastRepository.save(broadcast);
         
         // 2. --- NEW EARLY FAN-OUT LOGIC ---
         // Fetch the list of users that the async task already persisted.
@@ -204,7 +208,7 @@ public class BroadcastLifecycleService {
         BroadcastMessage broadcast = broadcastRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
         broadcast.setStatus(Constants.BroadcastStatus.CANCELLED.name());
-        broadcastRepository.update(broadcast);
+        broadcastRepository.save(broadcast);
 
         if (!Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
             int updatedCount = userBroadcastRepository.updateNonFinalStatusesByBroadcastId(id, Constants.DeliveryStatus.SUPERSEDED.name());
@@ -223,7 +227,7 @@ public class BroadcastLifecycleService {
 
         if (Constants.BroadcastStatus.ACTIVE.name().equals(broadcast.getStatus())) {
             broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
-            broadcastRepository.update(broadcast);
+            broadcastRepository.save(broadcast);
             
             if (!Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
                 int updatedCount = userBroadcastRepository.updateNonFinalStatusesByBroadcastId(broadcastId, Constants.DeliveryStatus.SUPERSEDED.name());
@@ -251,7 +255,7 @@ public class BroadcastLifecycleService {
                 .totalDelivered(0)
                 .totalRead(0)
                 .totalFailed(0)
-                .calculatedAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .calculatedAt(OffsetDateTime.now(ZoneOffset.UTC))
                 .build();
         broadcastStatisticsRepository.save(stats);
     }
@@ -261,7 +265,7 @@ public class BroadcastLifecycleService {
                 .eventId(UUID.randomUUID().toString())
                 .broadcastId(deliveryEvent.getBroadcastId())
                 .eventType(eventType.name())
-                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                .timestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .message(message)
                 .build();
     }
@@ -273,7 +277,7 @@ public class BroadcastLifecycleService {
 
         // Directly update status to ACTIVE
         broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
-        broadcastRepository.update(broadcast);
+        broadcastRepository.save(broadcast);
 
         // Publish the single orchestration event to the outbox to start the fan-out-on-read process
         publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
@@ -289,8 +293,8 @@ public class BroadcastLifecycleService {
     public void activateAndPublishFanOutOnWriteBroadcast(BroadcastMessage broadcast) {
         // 1. Update the broadcast status to ACTIVE.
         broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
-        broadcast.setUpdatedAt(ZonedDateTime.now(ZoneOffset.UTC));
-        broadcastRepository.update(broadcast);
+        broadcast.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        broadcastRepository.save(broadcast);
 
         // 2. Fetch the list of user messages that were already persisted by the scheduler.
         List<String> targetUserIds = userBroadcastRepository.findByBroadcastId(broadcast.getId()).stream()

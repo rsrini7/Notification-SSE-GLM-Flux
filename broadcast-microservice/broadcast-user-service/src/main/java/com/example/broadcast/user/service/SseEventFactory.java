@@ -8,7 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Component;
 
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.util.Map;
 
 @Component
@@ -40,7 +40,7 @@ public class SseEventFactory {
     }
     
     public ServerSentEvent<String> createHeartbeatEvent() {
-        Map<String, String> data = Map.of("timestamp", ZonedDateTime.now().toString());
+        Map<String, String> data = Map.of("timestamp", OffsetDateTime.now().toString());
         return createEvent(SseEventType.HEARTBEAT, null, data);
     }
 
@@ -48,7 +48,7 @@ public class SseEventFactory {
          Map<String, String> data = Map.of(
             "message", "SSE connection established",
             "connectionId", connectionId,
-            "timestamp", ZonedDateTime.now().toString()
+            "timestamp", OffsetDateTime.now().toString()
         );
         return createEvent(SseEventType.CONNECTED, connectionId, data);
     }

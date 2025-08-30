@@ -5,9 +5,12 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.time.LocalTime;
 import java.util.List;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Table;
 
 /**
  * Entity representing user notification preferences
@@ -17,7 +20,9 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Table("user_preferences")
 public class UserPreferences {
+    @Id
     private Long id;
     private String userId;
     private Boolean notificationEnabled;
@@ -27,6 +32,6 @@ public class UserPreferences {
     private LocalTime quietHoursStart;
     private LocalTime quietHoursEnd;
     private String timezone;
-    private ZonedDateTime createdAt;
-    private ZonedDateTime updatedAt;
+    private OffsetDateTime createdAt;
+    private OffsetDateTime updatedAt;
 }

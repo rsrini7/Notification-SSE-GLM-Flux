@@ -58,7 +58,7 @@ public class OutboxEventPublisher {
     @Transactional(propagation = Propagation.MANDATORY)
     public void publish(OutboxEvent event) {
         if (event != null) {
-            outboxRepository.batchSave(List.of(event));
+            outboxRepository.saveAll(List.of(event));
         }
     }
 
@@ -66,7 +66,7 @@ public class OutboxEventPublisher {
     @Transactional(propagation = Propagation.MANDATORY)
     public void publishBatch(List<OutboxEvent> events) {
         if (events != null && !events.isEmpty()) {
-            outboxRepository.batchSave(events);
+            outboxRepository.saveAll(events);
         }
     }
 }

@@ -37,9 +37,9 @@ public class BroadcastRequest {
     
     private String category;
     
-    private java.time.ZonedDateTime scheduledAt;
+    private java.time.OffsetDateTime scheduledAt;
 
-    private java.time.ZonedDateTime expiresAt;
+    private java.time.OffsetDateTime expiresAt;
     
     @Builder.Default
     private boolean isImmediate = true;

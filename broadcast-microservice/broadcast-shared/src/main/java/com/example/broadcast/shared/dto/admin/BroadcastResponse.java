@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 @Data
@@ -21,10 +21,10 @@ public class BroadcastResponse {
     private List<String> targetIds;
     private String priority;
     private String category;
-    private ZonedDateTime expiresAt;
-    private ZonedDateTime createdAt;
+    private OffsetDateTime expiresAt;
+    private OffsetDateTime createdAt;
     // **FIX:** Added the scheduledAt field to be sent to the frontend.
-    private ZonedDateTime scheduledAt;
+    private OffsetDateTime scheduledAt;
     private String status;
     private Integer totalTargeted;
     private Integer totalDelivered;

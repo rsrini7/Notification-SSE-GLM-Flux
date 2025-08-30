@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 
 /**
  * DTO for user-specific broadcast message responses
@@ -20,16 +20,16 @@ public class UserBroadcastResponse {
     private String userId;
     private String deliveryStatus;
     private String readStatus;
-    private ZonedDateTime deliveredAt;
-    private ZonedDateTime readAt;
-    private ZonedDateTime createdAt;
+    private OffsetDateTime deliveredAt;
+    private OffsetDateTime readAt;
+    private OffsetDateTime createdAt;
     
     // Embedded broadcast information
     private String senderName;
     private String content;
     private String priority;
     private String category;
-    private ZonedDateTime broadcastCreatedAt;
-    private ZonedDateTime scheduledAt;    
-    private ZonedDateTime expiresAt;
+    private OffsetDateTime broadcastCreatedAt;
+    private OffsetDateTime scheduledAt;    
+    private OffsetDateTime expiresAt;
 }

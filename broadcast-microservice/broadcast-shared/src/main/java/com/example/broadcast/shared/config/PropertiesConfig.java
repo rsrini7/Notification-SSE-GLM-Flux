@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jdbc.repository.config.EnableJdbcRepositories;
 
 @Configuration
-@EnableJdbcRepositories(basePackages = "com.example.broadcast.shared.repository")
+@EnableJdbcRepositories(basePackages = "com.example.broadcast")
 public class PropertiesConfig {
 
     @Value("${pod.name:${POD_NAME:broadcast-user-service-0}}")

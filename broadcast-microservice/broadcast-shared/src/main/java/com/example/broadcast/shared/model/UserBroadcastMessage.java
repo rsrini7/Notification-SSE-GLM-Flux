@@ -5,7 +5,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Table;
 
 /**
  * Entity representing user-specific broadcast message tracking
@@ -15,14 +18,16 @@ import java.time.ZonedDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Table("user_broadcast_messages")
 public class UserBroadcastMessage{
+    @Id
     private Long id;
     private Long broadcastId;
     private String userId;
     private String deliveryStatus; // PENDING, DELIVERED, FAILED
     private String readStatus; // UNREAD, READ
-    private ZonedDateTime deliveredAt;
-    private ZonedDateTime readAt;
-    private ZonedDateTime createdAt;
-    private ZonedDateTime updatedAt;
+    private OffsetDateTime deliveredAt;
+    private OffsetDateTime readAt;
+    private OffsetDateTime createdAt;
+    private OffsetDateTime updatedAt;
 }

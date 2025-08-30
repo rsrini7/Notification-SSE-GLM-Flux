@@ -18,7 +18,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @RestController
@@ -78,7 +78,7 @@ public class SseController {
         stats.put("podActiveUsers", new String("0")); //TODO change from cache
         stats.put("sseConnectedUsers", sseService.getConnectedUserCount());
         stats.put("podId", appProperties.getPodName());
-        stats.put("timestamp", ZonedDateTime.now());
+        stats.put("timestamp", OffsetDateTime.now());
         return ResponseEntity.ok(stats);
     }
 
