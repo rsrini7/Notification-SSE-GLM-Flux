@@ -8,14 +8,14 @@ classDiagram
             Long broadcastId
             String userId
             String eventType
-            ZonedDateTime timestamp
+            OffsetDateTime timestamp
             String message
             String errorDetails
             boolean isFireAndForget
         }
         class ErrorResponse {
             <<DTO>>
-            ZonedDateTime timestamp
+            OffsetDateTime timestamp
             int status
             String error
             String message
@@ -38,8 +38,8 @@ classDiagram
             List~String~ targetIds
             String priority
             String category
-            ZonedDateTime scheduledAt
-            ZonedDateTime expiresAt
+            OffsetDateTime scheduledAt
+            OffsetDateTime expiresAt
             boolean isImmediate
             boolean isFireAndForget
         }
@@ -48,8 +48,8 @@ classDiagram
             Long id
             String content
             String status
-            ZonedDateTime createdAt
-            ZonedDateTime scheduledAt
+            OffsetDateTime createdAt
+            OffsetDateTime scheduledAt
             Integer totalTargeted
             Integer totalDelivered
             Integer totalRead
@@ -63,7 +63,7 @@ classDiagram
             int originalPartition
             long originalOffset
             String exceptionMessage
-            ZonedDateTime failedAt
+            OffsetDateTime failedAt
             String originalMessagePayload
         }
         class RedriveAllResult {
@@ -90,7 +90,7 @@ classDiagram
             String deliveryStatus
             String priority
             String category
-            ZonedDateTime broadcastCreatedAt
+            OffsetDateTime broadcastCreatedAt
         }
         class MessageReadRequest {
             <<DTO>>
@@ -106,7 +106,7 @@ classDiagram
             String connectionId
             String podName
             String clusterName
-            ZonedDateTime connectedAt
+            OffsetDateTime connectedAt
         }
         class ConnectionHeartbeat {
             <<DTO>>
@@ -119,7 +119,7 @@ classDiagram
             Long broadcastId
             String deliveryStatus
             String readStatus
-            ZonedDateTime createdAt
+            OffsetDateTime createdAt
         }
     }
     

@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.io.Serializable;
 
 @Data
@@ -16,7 +16,7 @@ public class MessageDeliveryEvent implements Serializable {
     private Long broadcastId;
     private String userId;
     private String eventType; // CREATED, DELIVERED, READ, FAILED
-    private ZonedDateTime timestamp;
+    private OffsetDateTime timestamp;
     private String message;
     private String errorDetails;
     @Builder.Default

@@ -5,7 +5,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Table;
 
 /**
  * Entity representing broadcast statistics
@@ -15,7 +18,9 @@ import java.time.ZonedDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Table("broadcast_statistics")
 public class BroadcastStatistics{
+    @Id
     private Long id;
     private Long broadcastId;
     private Integer totalTargeted;
@@ -23,5 +28,5 @@ public class BroadcastStatistics{
     private Integer totalRead;
     private Integer totalFailed;
     private Long avgDeliveryTimeMs;
-    private ZonedDateTime calculatedAt;
+    private OffsetDateTime calculatedAt;
 }

@@ -8,6 +8,7 @@ import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.service.BroadcastStatisticsService;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.shared.util.JsonUtils;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -51,7 +52,7 @@ public class BroadcastActivationService {
 
         // 1. PRE-COMPUTATION: Find upcoming PRODUCT broadcasts that need preparation
         long fetchDelayMs = appProperties.getSimulation().getUserFetchDelayMs();
-        ZonedDateTime prefetchCutoff = ZonedDateTime.now(ZoneOffset.UTC).plus(fetchDelayMs, ChronoUnit.MILLIS);
+        OffsetDateTime prefetchCutoff = OffsetDateTime.now(ZoneOffset.UTC).plus(fetchDelayMs, ChronoUnit.MILLIS);
 
         List<BroadcastMessage> broadcastsToPrepare = broadcastRepository.findScheduledProductBroadcastsWithinWindow(prefetchCutoff);
         for (BroadcastMessage broadcast : broadcastsToPrepare) {
@@ -62,13 +63,13 @@ public class BroadcastActivationService {
 
         // Phase 2: Activation for prepared PRODUCT broadcasts
         // This logic remains the same: find READY broadcasts and activate them.
-        List<BroadcastMessage> readyBroadcasts = broadcastRepository.findAndLockReadyBroadcastsToProcess(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
+        List<BroadcastMessage> readyBroadcasts = broadcastRepository.findAndLockReadyBroadcastsToProcess(OffsetDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
         for (BroadcastMessage broadcast : readyBroadcasts) {
             broadcastLifecycleService.processReadyBroadcast(broadcast.getId());
         }
 
         // Phase 3: Activation for all other due scheduled broadcasts (ALL, ROLE, SELECTED)
-        List<BroadcastMessage> scheduledFanOuts = broadcastRepository.findAndLockScheduledFanOutBroadcasts(ZonedDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
+        List<BroadcastMessage> scheduledFanOuts = broadcastRepository.findAndLockScheduledFanOutBroadcasts(OffsetDateTime.now(ZoneOffset.UTC), BATCH_LIMIT);
         for (BroadcastMessage broadcast : scheduledFanOuts) {
             if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
                 log.info("Activating scheduled 'ALL' broadcast {}.", broadcast.getId());
@@ -101,15 +102,16 @@ public class BroadcastActivationService {
                         .build())
                 .collect(Collectors.toList());
 
-        userBroadcastRepository.batchInsert(userMessages);
+        userBroadcastRepository.saveAll(userMessages);
         broadcastLifecycleService.initializeStatistics(broadcast.getId(), userIds.size());
         
     }
 
     private List<String> determineTargetUsersForWrite(BroadcastMessage broadcast) {
+         List<String> targetIds = JsonUtils.parseJsonArray(broadcast.getTargetIds());
         return switch (Constants.TargetType.valueOf(broadcast.getTargetType())) {
-            case SELECTED -> broadcast.getTargetIds();
-            case ROLE -> broadcast.getTargetIds().stream()
+            case SELECTED -> targetIds;
+            case ROLE -> targetIds.stream()
                     .flatMap(role -> userService.getUserIdsByRole(role).stream())
                     .distinct()
                     .collect(Collectors.toList());

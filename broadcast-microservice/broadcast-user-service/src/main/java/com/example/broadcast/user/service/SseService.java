@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
 import java.util.Map;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
 @Service
@@ -125,7 +125,7 @@ public class SseService {
                 .userId(userId)
                 .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
                 .readStatus(Constants.ReadStatus.UNREAD.name())
-                .deliveredAt(ZonedDateTime.now(ZoneOffset.UTC))
+                .deliveredAt(OffsetDateTime.now(ZoneOffset.UTC))
                 .createdAt(broadcast.getCreatedAt())
                 .build();
         

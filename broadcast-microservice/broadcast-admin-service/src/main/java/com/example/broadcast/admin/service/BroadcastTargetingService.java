@@ -10,6 +10,7 @@ import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.exception.UserServiceUnavailableException;
 
 import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.shared.util.JsonUtils;
 
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -62,7 +63,7 @@ public class BroadcastTargetingService {
                             .readStatus(Constants.ReadStatus.UNREAD.name())
                             .build())
                     .collect(Collectors.toList());
-                userBroadcastRepository.batchInsert(userMessages);
+                userBroadcastRepository.saveAll(userMessages);
                 broadcastStatisticsService.initializeStatistics(broadcastId, targetUserIds.size());
             }
 
@@ -104,7 +105,7 @@ public class BroadcastTargetingService {
         String targetType = broadcast.getTargetType();
 
          if (Constants.TargetType.PRODUCT.name().equals(targetType)) {
-            return broadcast.getTargetIds().stream()
+            return JsonUtils.parseJsonArray(broadcast.getTargetIds()).stream()
                 .flatMap(productId -> userService.getUserIdsByProduct(productId).stream())
                 .distinct()
                 .collect(Collectors.toList());

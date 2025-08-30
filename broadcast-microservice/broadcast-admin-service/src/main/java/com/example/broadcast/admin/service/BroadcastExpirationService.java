@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 @Service
@@ -32,7 +32,7 @@ public class BroadcastExpirationService {
     @SchedulerLock(name = "processExpiredBroadcasts", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     public void processExpiredBroadcasts() {
         log.debug("Checking for expired broadcasts to process...");
-        List<BroadcastMessage> broadcastsToExpire = broadcastRepository.findExpiredBroadcasts(ZonedDateTime.now(ZoneOffset.UTC));
+        List<BroadcastMessage> broadcastsToExpire = broadcastRepository.findExpiredBroadcasts(OffsetDateTime.now(ZoneOffset.UTC));
 
         if (broadcastsToExpire.isEmpty()) {
             log.trace("No expired broadcasts to process at this time.");

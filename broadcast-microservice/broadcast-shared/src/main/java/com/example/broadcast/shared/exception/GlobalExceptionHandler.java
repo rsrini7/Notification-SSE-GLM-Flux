@@ -10,7 +10,7 @@ import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
@@ -20,7 +20,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleResourceNotFoundException(ResourceNotFoundException ex, ServerWebExchange exchange) {
         ErrorResponse errorResponse = new ErrorResponse(
-                ZonedDateTime.now(),
+                OffsetDateTime.now(),
                 HttpStatus.NOT_FOUND.value(),
                 "Not Found",
                 ex.getMessage(),
@@ -33,7 +33,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UserServiceUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleUserServiceUnavailableException(UserServiceUnavailableException ex, ServerWebExchange exchange) {
         ErrorResponse errorResponse = new ErrorResponse(
-                ZonedDateTime.now(),
+                OffsetDateTime.now(),
                 HttpStatus.SERVICE_UNAVAILABLE.value(),
                 "Service Unavailable",
                 ex.getMessage(),
@@ -50,7 +50,7 @@ public class GlobalExceptionHandler {
                 .map(error -> error.getDefaultMessage())
                 .collect(Collectors.joining(", "));
         ErrorResponse errorResponse = new ErrorResponse(
-                ZonedDateTime.now(),
+                OffsetDateTime.now(),
                 HttpStatus.BAD_REQUEST.value(),
                 "Validation Failed",
                 errors,
@@ -63,7 +63,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException ex, ServerWebExchange exchange) {
         ErrorResponse errorResponse = new ErrorResponse(
-                ZonedDateTime.now(),
+                OffsetDateTime.now(),
                 ex.getStatusCode().value(),
                 ex.getStatusCode().toString(),
                 ex.getReason(),
@@ -84,7 +84,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, ServerWebExchange exchange) {
         ErrorResponse errorResponse = new ErrorResponse(
-                ZonedDateTime.now(),
+                OffsetDateTime.now(),
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 "Internal Server Error",
                 "An unexpected error occurred. Please try again later.",

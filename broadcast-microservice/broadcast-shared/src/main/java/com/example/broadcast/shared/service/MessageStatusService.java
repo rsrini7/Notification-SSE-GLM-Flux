@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -64,7 +64,7 @@ public class MessageStatusService {
                 .broadcastId(broadcastId)
                 .userId(userId)
                 .eventType(Constants.EventType.READ.name())
-                .timestamp(ZonedDateTime.now(ZoneOffset.UTC))
+                .timestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build();
 
         // All user actions are now sent to the central orchestration topic for routing.

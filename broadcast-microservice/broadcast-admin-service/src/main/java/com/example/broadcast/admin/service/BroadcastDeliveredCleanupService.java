@@ -10,7 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -35,7 +35,7 @@ public class BroadcastDeliveredCleanupService {
         log.info("Starting cleanup job for unread messages from finalized broadcasts...");
         
         // Find broadcasts that were finalized more than an hour ago to avoid race conditions.
-        ZonedDateTime cutoff = ZonedDateTime.now().minus(1, ChronoUnit.HOURS);
+        OffsetDateTime cutoff = OffsetDateTime.now().minus(1, ChronoUnit.HOURS);
         List<BroadcastMessage> broadcastsToClean = broadcastRepository.findFinalizedBroadcastsForCleanup(cutoff);
 
         if (broadcastsToClean.isEmpty()) {

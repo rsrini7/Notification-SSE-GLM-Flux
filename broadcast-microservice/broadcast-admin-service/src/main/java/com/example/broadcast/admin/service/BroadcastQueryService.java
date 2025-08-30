@@ -35,7 +35,7 @@ public class BroadcastQueryService {
      */
     public BroadcastResponse getBroadcast(Long id) {
         log.info("Querying for broadcast with stats by ID: {}", id);
-        return broadcastRepository.findBroadcastWithStatsById(id)
+        return broadcastRepository.findWithStatsById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Broadcast not found with ID: " + id));
     }
 
@@ -63,7 +63,7 @@ public class BroadcastQueryService {
      */
     public List<BroadcastResponse> getAllBroadcasts() {
         log.info("Querying for all broadcasts with stats.");
-        return broadcastRepository.findAllBroadcastsWithStats();
+        return broadcastRepository.findAllWithStats();
     }
 
     /**

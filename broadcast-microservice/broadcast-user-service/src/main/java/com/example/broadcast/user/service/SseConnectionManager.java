@@ -17,7 +17,7 @@ import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
@@ -147,7 +147,7 @@ public class SseConnectionManager {
 
                     // Detect and cleanup stale connections
                     // NOTE: Assumes `getClientTimeoutThreshold()` exists in AppProperties.Sse
-                    long now = ZonedDateTime.now().toEpochSecond();
+                    long now = OffsetDateTime.now().toEpochSecond();
                     long staleThreshold = now - (appProperties.getSse().getClientTimeoutThreshold() / 1000);
                     Set<String> staleConnections = cacheService.getStaleConnectionIds(staleThreshold);
 

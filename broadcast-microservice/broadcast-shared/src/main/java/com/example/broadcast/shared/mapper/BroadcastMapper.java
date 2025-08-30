@@ -12,6 +12,7 @@ import com.example.broadcast.shared.dto.admin.BroadcastRequest;
 import com.example.broadcast.shared.dto.BroadcastContent;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.shared.util.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -24,14 +25,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
  * A dedicated mapper component to handle conversions between Broadcast entities and DTOs.
  * Implementation is generated at compile time by MapStruct.
  */
-@Mapper(componentModel = "spring", imports = { ZonedDateTime.class, ZoneOffset.class, UUID.class })
+@Mapper(componentModel = "spring", imports = { OffsetDateTime.class, ZoneOffset.class, UUID.class, JsonUtils.class })
 public abstract class BroadcastMapper {
 
     @Autowired
@@ -43,6 +44,7 @@ public abstract class BroadcastMapper {
 
     @Mapping(target = "totalDelivered", constant = "0")
     @Mapping(target = "totalRead", constant = "0")
+    @Mapping(target = "targetIds", expression = "java(JsonUtils.parseJsonArray(broadcast.getTargetIds()))")
     public abstract BroadcastResponse toBroadcastResponse(BroadcastMessage broadcast, int totalTargeted);
 
     // This is the primary mapping. It handles fields that are ALWAYS populated from the 'broadcast' object.
@@ -111,9 +113,10 @@ public abstract class BroadcastMapper {
      */
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "status", ignore = true)
-    @Mapping(target = "createdAt", expression = "java(ZonedDateTime.now(ZoneOffset.UTC))")
-    @Mapping(target = "updatedAt", expression = "java(ZonedDateTime.now(ZoneOffset.UTC))")
+    @Mapping(target = "createdAt", expression = "java(OffsetDateTime.now(ZoneOffset.UTC))")
+    @Mapping(target = "updatedAt", expression = "java(OffsetDateTime.now(ZoneOffset.UTC))")
     @Mapping(source = "fireAndForget", target = "isFireAndForget") 
+    @Mapping(target = "targetIds", expression = "java(JsonUtils.toJsonArray(request.getTargetIds()))")
     public abstract BroadcastMessage toBroadcastMessage(BroadcastRequest request);
 
 
@@ -138,7 +141,7 @@ public abstract class BroadcastMapper {
     @Mapping(source = "message", target = "message")
     @Mapping(source = "eventType", target = "eventType")
     @Mapping(target = "eventId", expression = "java(UUID.randomUUID().toString())")
-    @Mapping(target = "timestamp", expression = "java(ZonedDateTime.now(ZoneOffset.UTC))")
+    @Mapping(target = "timestamp", expression = "java(OffsetDateTime.now(ZoneOffset.UTC))")
     @Mapping(source = "broadcast.fireAndForget", target = "isFireAndForget")
     @Mapping(target = "userId", ignore = true)
     @Mapping(target = "errorDetails", ignore = true)
@@ -170,16 +173,17 @@ public abstract class BroadcastMapper {
     @Mapping(source = "payloadJson", target = "originalMessagePayload")
     @Mapping(source = "displayTitle", target = "exceptionMessage")
     @Mapping(target = "id", expression = "java(UUID.randomUUID().toString())")
-    @Mapping(target = "failedAt", expression = "java(ZonedDateTime.now(ZoneOffset.UTC))")
+    @Mapping(target = "failedAt", expression = "java(OffsetDateTime.now(ZoneOffset.UTC))")
     public abstract DltMessage toDltMessage(MessageDeliveryEvent failedEvent, String key, String originalTopic,
                                         Integer originalPartition, Long originalOffset,
                                         String displayTitle, String exceptionStackTrace, String payloadJson);
 
  
     @Mapping(source = "fireAndForget", target = "isFireAndForget")
+    @Mapping(target = "targetIds", expression = "java(JsonUtils.parseJsonArray(entity.getTargetIds()))")
     public abstract BroadcastContent toBroadcastContentDTO(BroadcastMessage entity);
     
     @Mapping(source = "fireAndForget", target = "isFireAndForget")
+    @Mapping(target = "targetIds", expression = "java(JsonUtils.toJsonArray(dto.getTargetIds()))")
     public abstract BroadcastMessage toBroadcastMessage(BroadcastContent dto);
-
 }

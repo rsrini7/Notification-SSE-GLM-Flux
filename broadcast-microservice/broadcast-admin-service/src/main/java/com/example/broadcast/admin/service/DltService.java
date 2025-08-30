@@ -39,7 +39,7 @@ public class DltService {
     private final TopicNamer topicNamer;
     
     public Collection<DltMessage> getDltMessages() {
-        return dltRepository.findAll();
+        return dltRepository.findAllByOrderByFailedAtDesc();
     }
 
     @Transactional
@@ -102,7 +102,7 @@ public class DltService {
     }
     
     public RedriveAllResult redriveAllMessages() {
-        List<DltMessage> messagesToRedrive = dltRepository.findAll();
+        List<DltMessage> messagesToRedrive = dltRepository.findAllByOrderByFailedAtDesc();
         if (messagesToRedrive.isEmpty()) {
             log.info("No DLT messages to redrive.");
             return RedriveAllResult.builder().totalMessages(0).successCount(0).failureCount(0).failures(new ArrayList<>()).build();
@@ -147,7 +147,7 @@ public class DltService {
 
     @Transactional
     public void purgeAllMessages() {
-        Collection<DltMessage> messagesToPurge = dltRepository.findAll();
+        Collection<DltMessage> messagesToPurge = dltRepository.findAllByOrderByFailedAtDesc();
         if (messagesToPurge.isEmpty()) {
             log.info("No DLT messages to purge.");
             return;

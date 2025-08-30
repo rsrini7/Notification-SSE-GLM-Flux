@@ -5,7 +5,6 @@ import lombok.Getter;
 import lombok.ToString;
 
 import java.io.Serializable;
-import java.time.ZonedDateTime;
 
 @Getter
 @ToString
@@ -15,6 +14,6 @@ public class UserConnectionInfo implements Serializable{
     private final String connectionId;
     private final String podName;
     private final String clusterName;
-    private final ZonedDateTime connectedAt;
-    private final ZonedDateTime lastActivityAt;
+    private final long connectedAtEpochMilli;
+    private final long lastActivityAtEpochMilli;
 }

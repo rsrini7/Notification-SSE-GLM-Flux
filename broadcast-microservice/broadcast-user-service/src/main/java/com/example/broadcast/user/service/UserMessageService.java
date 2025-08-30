@@ -23,7 +23,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -56,7 +56,7 @@ public class UserMessageService {
         return Mono.fromCallable(() -> {
             // Step 1: Fetch all necessary data from the database
             List<UserBroadcastMessage> unreadTargetedMessages = userBroadcastRepository.findUnreadPendingDeliveredByUserId(userId);
-            List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findActiveBroadcastsByTargetType(TargetType.ALL.name());
+            List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findByStatusAndTargetType(Constants.BroadcastStatus.ACTIVE.name(), TargetType.ALL.name());
             Set<Long> readBroadcastIds = new HashSet<>(userBroadcastRepository.findReadBroadcastIdsByUserId(userId));
 
             // Step 2: Prepare a list that will be cached and assemble targeted responses
@@ -144,10 +144,8 @@ public class UserMessageService {
         for (Long id : broadcastIds) {
             Optional<BroadcastContent> cachedDtoOpt = cacheService.getBroadcastContent(id);
             if (cachedDtoOpt.isPresent()) {
-                // CACHE HIT: Convert DTO to entity and add to results.
                 resultMap.put(id, broadcastMapper.toBroadcastMessage(cachedDtoOpt.get()));
             } else {
-                // CACHE MISS: Add the ID to a list to be fetched from the database.
                 cacheMissIds.add(id);
             }
         }
@@ -156,8 +154,7 @@ public class UserMessageService {
         if (!cacheMissIds.isEmpty()) {
             log.info("Cache miss for {} broadcast content items. Fetching from DB.", cacheMissIds.size());
             
-            // MODIFIED: Call the new JdbcTemplate-based batch method.
-            List<BroadcastMessage> messagesFromDb = broadcastRepository.findAllByIds(cacheMissIds);
+            Iterable<BroadcastMessage> messagesFromDb = broadcastRepository.findAllById(cacheMissIds);
 
             // 3. Populate Results & Prime Cache: Add DB results to the map and update the cache.
             for (BroadcastMessage messageFromDb : messagesFromDb) {
@@ -194,7 +191,7 @@ public class UserMessageService {
                 log.warn("Message for broadcast {} was already read for user {}. No action taken.", broadcastId, userId);
                 return;
             }
-            int updatedRows = userBroadcastRepository.markAsRead(existingMessage.getId(), ZonedDateTime.now(ZoneOffset.UTC));
+            int updatedRows = userBroadcastRepository.markAsRead(existingMessage.getId(), OffsetDateTime.now(ZoneOffset.UTC));
             if (updatedRows == 0) {
                  log.warn("Message for broadcast {} was already read for user {} (concurrent update). No action taken.", broadcastId, userId);
                 return;
@@ -206,7 +203,7 @@ public class UserMessageService {
                     .broadcastId(broadcastId)
                     .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
                     .readStatus(Constants.ReadStatus.READ.name())
-                     .readAt(ZonedDateTime.now(ZoneOffset.UTC))
+                     .readAt(OffsetDateTime.now(ZoneOffset.UTC))
                     .build();
             userBroadcastRepository.save(newMessage);
         }

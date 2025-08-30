@@ -3,6 +3,7 @@ package com.example.broadcast.user.service.cache;
 import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.BroadcastContent;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.Region;
@@ -11,7 +12,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -24,29 +25,31 @@ public class GeodeCacheService implements CacheService {
     private final Region<String, ConnectionHeartbeat> connectionHeartbeatRegion;
     private final Region<String, List<UserMessageInbox>> userMessagesInboxRegion;
     private final Region<Long, BroadcastContent> broadcastContentRegion;
+    private final AppProperties appProperties;
 
     public GeodeCacheService(ClientCache clientCache,
                              @Qualifier("userConnectionsRegion") Region<String, UserConnectionInfo> userConnectionsRegion,
                              @Qualifier("connectionHeartbeatRegion") Region<String, ConnectionHeartbeat> connectionHeartbeatRegion,
                              @Qualifier("userMessagesInboxRegion") Region<String, List<UserMessageInbox>> userMessagesInboxRegion,
-                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastContent> broadcastContentRegion
+                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastContent> broadcastContentRegion,
+                             AppProperties appProperties
     ) {
         this.clientCache = clientCache;
         this.userConnectionsRegion = userConnectionsRegion;
         this.connectionHeartbeatRegion = connectionHeartbeatRegion;
         this.userMessagesInboxRegion = userMessagesInboxRegion;
         this.broadcastContentRegion = broadcastContentRegion;
+        this.appProperties = appProperties;
     }
-
 
     @Override
     public void registerUserConnection(String userId, String connectionId, String podName, String clusterName) {
-        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
-        UserConnectionInfo userConnectionInfo = new UserConnectionInfo(userId, connectionId, podName, clusterName, now, now);
+        long nowEpochMilli = OffsetDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli();
+        UserConnectionInfo userConnectionInfo = new UserConnectionInfo(userId, connectionId, podName, clusterName, nowEpochMilli, nowEpochMilli);
 
         userConnectionsRegion.put(userId, userConnectionInfo);
 
-        ConnectionHeartbeat metadata = new ConnectionHeartbeat(userId, now.toEpochSecond());
+        ConnectionHeartbeat metadata = new ConnectionHeartbeat(userId, OffsetDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli());
         connectionHeartbeatRegion.put(connectionId, metadata);
     }
 
@@ -70,7 +73,7 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public void updateHeartbeats(Set<String> connectionIds) {
-        long now = ZonedDateTime.now(ZoneOffset.UTC).toEpochSecond();
+        long now = OffsetDateTime.now(ZoneOffset.UTC).toEpochSecond();
         Map<String, ConnectionHeartbeat> updates = new HashMap<>();
         for (String connId : connectionIds) {
             ConnectionHeartbeat currentMeta = connectionHeartbeatRegion.get(connId);
@@ -115,7 +118,7 @@ public class GeodeCacheService implements CacheService {
             return Optional.empty();
         }
         
-        return Optional.of(userConnectionsRegion.get(metadata.getUserId()));
+        return Optional.ofNullable(userConnectionsRegion.get(metadata.getUserId()));
     }
 
     @Override
@@ -137,7 +140,7 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public Map<String, UserConnectionInfo> getConnectionsForUser(String userId) {
-        return Optional.of(userConnectionsRegion.get(userId))
+        return Optional.ofNullable(userConnectionsRegion.get(userId))
                 .map(info -> Map.of(info.getConnectionId(), info))
                 .orElse(Collections.emptyMap());
     }
@@ -149,9 +152,7 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public List<String> getOnlineUsers() {
-        return userConnectionsRegion.keySetOnServer().stream()
-            .map(key -> key.substring(key.indexOf(':') + 1))
-            .collect(Collectors.toList());
+        return userConnectionsRegion.keySetOnServer().stream().toList();
     }
 
     @Override

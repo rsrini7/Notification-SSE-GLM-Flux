@@ -73,7 +73,7 @@ public class OutboxPollingService {
         
         // This code will only be reached if ALL Kafka sends in the batch were successful.
         List<UUID> processedIds = events.stream().map(OutboxEvent::getId).collect(Collectors.toList());
-        outboxRepository.deleteByIds(processedIds);
+        outboxRepository.deleteAllById(processedIds);
         log.trace("Successfully published and deleted {} events from outbox.", processedIds.size());
         pollRunsCounter.increment(); // Increment the counter on every successful run
     }
