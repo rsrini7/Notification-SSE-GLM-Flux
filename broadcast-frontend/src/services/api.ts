@@ -51,7 +51,7 @@ export interface BroadcastStats {
   readRate: number;
 }
 export interface UserBroadcastMessage {
-  id: number;
+  userMessageId: number | null;
   broadcastId: number;
   userId: string;
   deliveryStatus: string;

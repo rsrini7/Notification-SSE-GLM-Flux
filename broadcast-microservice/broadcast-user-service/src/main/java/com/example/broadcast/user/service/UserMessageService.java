@@ -92,7 +92,7 @@ public class UserMessageService {
             // Step 7: Create a new, correct cache entry from the final, complete list.
             List<UserMessageInbox> inboxToCache = finalInbox.stream()
                 .map(response -> new UserMessageInbox(
-                    response.getId(),
+                    response.getUserMessageId(),
                     response.getBroadcastId(),
                     response.getDeliveryStatus(),
                     response.getReadStatus(),

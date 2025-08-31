@@ -54,7 +54,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
             }
           }
           setMessages(prev => {
-            const exists = prev.some(msg => msg.id === payload.id);
+            const exists = prev.some(msg => msg.broadcastId === payload.broadcastId);
             if (!exists) {
               toast({
                 title: 'New Message',

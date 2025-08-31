@@ -47,7 +47,6 @@ public abstract class BroadcastMapper {
         if (epochMilli == 0L) return null;
         return OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMilli), ZoneOffset.UTC);
     }
-    // --- End of helper methods ---
 
     @Mapping(target = "totalDelivered", constant = "0")
     @Mapping(target = "totalRead", constant = "0")
@@ -62,7 +61,7 @@ public abstract class BroadcastMapper {
     @Mapping(source = "broadcast.createdAt", target = "broadcastCreatedAt")
     @Mapping(source = "broadcast.expiresAt", target = "expiresAt")
     @Mapping(source = "broadcast.scheduledAt", target = "scheduledAt")
-    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "userMessageId", ignore = true)
     @Mapping(target = "userId", ignore = true)
     @Mapping(target = "deliveryStatus", ignore = true)
     @Mapping(target = "readStatus", ignore = true)
@@ -75,7 +74,7 @@ public abstract class BroadcastMapper {
     protected void handleNullableMessageSource(@MappingTarget UserBroadcastResponse.UserBroadcastResponseBuilder builder,
                                              UserBroadcastMessage message, BroadcastMessage broadcast) {
         if (message != null) {
-            builder.id(message.getId())
+            builder.userMessageId(message.getId())
                    .userId(message.getUserId())
                    .deliveryStatus(message.getDeliveryStatus())
                    .readStatus(message.getReadStatus())
@@ -83,7 +82,6 @@ public abstract class BroadcastMapper {
                    .readAt(message.getReadAt())
                    .createdAt(message.getCreatedAt());
         } else {
-            builder.id(broadcast.getId() * -1L);
                
             builder.deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
                .readStatus(Constants.ReadStatus.UNREAD.name())
@@ -98,10 +96,9 @@ public abstract class BroadcastMapper {
     @Mapping(source = "broadcast.category", target = "category")
     @Mapping(source = "broadcast.createdAt", target = "broadcastCreatedAt")
     @Mapping(source = "broadcast.expiresAt", target = "expiresAt")
-    @Mapping(source = "userMessage.messageId", target = "id")
+    @Mapping(source = "userMessage.messageId", target = "userMessageId")
     @Mapping(source = "userMessage.deliveryStatus", target = "deliveryStatus")
     @Mapping(source = "userMessage.readStatus", target = "readStatus")
-    // Use the new helper for the conversion
     @Mapping(source = "userMessage.createdAtEpochMilli", target = "createdAt")
     @Mapping(target = "userId", ignore = true)
     @Mapping(target = "deliveredAt", ignore = true)
@@ -109,7 +106,6 @@ public abstract class BroadcastMapper {
     public abstract UserBroadcastResponse toUserBroadcastResponseFromCache(UserMessageInbox userMessage, BroadcastMessage broadcast);
 
     @Mapping(source = "id", target = "messageId")
-    // Use the new helper for the conversion
     @Mapping(source = "createdAt", target = "createdAtEpochMilli")
     public abstract UserMessageInbox toUserMessageInbox(UserBroadcastMessage message);
 
@@ -140,7 +136,6 @@ public abstract class BroadcastMapper {
     @Mapping(source = "message", target = "message")
     @Mapping(source = "eventType", target = "eventType")
     @Mapping(target = "eventId", expression = "java(UUID.randomUUID().toString())")
-    // UPDATED to use epoch milliseconds
     @Mapping(target = "timestampEpochMilli", expression = "java(System.currentTimeMillis())")
     @Mapping(source = "broadcast.fireAndForget", target = "isFireAndForget")
     @Mapping(target = "userId", ignore = true)
@@ -152,7 +147,6 @@ public abstract class BroadcastMapper {
     @Mapping(source = "aggregateId", target = "aggregateId")
     @Mapping(source = "eventPayload.eventType", target = "eventType")
     @Mapping(source = "topicName", target = "topic")
-    // UPDATED to convert from long back to OffsetDateTime for the database
     @Mapping(source = "eventPayload.timestampEpochMilli", target = "createdAt")
     @Mapping(target = "payload", ignore = true)
     public abstract OutboxEvent toOutboxEvent(MessageDeliveryEvent eventPayload, String topicName, String aggregateId);

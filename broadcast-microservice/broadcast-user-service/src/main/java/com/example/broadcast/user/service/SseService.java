@@ -114,7 +114,11 @@ public class SseService {
             userMessage -> {
                 log.info("Delivering targeted broadcast {} to user {}", broadcast.getId(), userId);
                 UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(userMessage, broadcast);
-                sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
+                String eventId = response.getUserMessageId() != null
+                    ? response.getBroadcastId() + ":" + response.getUserMessageId()
+                    : String.valueOf(response.getBroadcastId());
+                
+                sendSseEvent(userId, SseEventType.MESSAGE, eventId, response);
                 messageStatusService.updateMessageToDelivered(userMessage.getId(), broadcast.getId());
 
                 cacheService.evictUserInbox(userId);
@@ -138,7 +142,11 @@ public class SseService {
                 .build();
         
         UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(transientMessage, broadcast);
-        sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
+        String eventId = response.getUserMessageId() != null
+            ? response.getBroadcastId() + ":" + response.getUserMessageId()
+            : String.valueOf(response.getBroadcastId());
+
+        sendSseEvent(userId, SseEventType.MESSAGE, eventId, response);
         broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
     }
     
