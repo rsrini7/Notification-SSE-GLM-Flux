@@ -15,7 +15,7 @@ import java.time.OffsetDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserBroadcastResponse {
-    private Long id;
+    private Long userMessageId;
     private Long broadcastId;
     private String userId;
     private String deliveryStatus;
@@ -23,8 +23,6 @@ public class UserBroadcastResponse {
     private OffsetDateTime deliveredAt;
     private OffsetDateTime readAt;
     private OffsetDateTime createdAt;
-    
-    // Embedded broadcast information
     private String senderName;
     private String content;
     private String priority;

@@ -4,7 +4,9 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
+import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.util.Constants;
@@ -35,15 +37,19 @@ public class KafkaOrchestratorConsumerService {
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastRepository userBroadcastRepository;
+    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final BroadcastMapper broadcastMapper;
     
-    @Qualifier("sseMessagesRegion")
-    private final Region<String, Object> sseMessagesRegion;
+    @Qualifier("sseUserMessagesRegion")
+    private final Region<String, Object> sseUserMessagesRegion;
+
+    @Qualifier("sseGroupMessagesRegion")
+    private final Region<String, Object> sseGroupMessagesRegion;
 
     @KafkaListener(
-            topics = "${broadcast.kafka.topic.name-orchestration}",
-            groupId = "${broadcast.kafka.consumer.group-orchestration}",
-            containerFactory = "kafkaListenerContainerFactory"
+            topics = "#{@kafkaListnerHelper.getOrchestrationTopic()}",
+            groupId = "#{@kafkaListnerHelper.getOrchestrationGroupId()}",
+            containerFactory = "#{@kafkaListnerHelper.getOrchestratorListnerContainerFactory()}"
     )
     @Transactional
     public void orchestrateBroadcastEvents(MessageDeliveryEvent event,
@@ -52,8 +58,16 @@ public class KafkaOrchestratorConsumerService {
                                            @Header(KafkaHeaders.OFFSET) long offset,
                                            Acknowledgment acknowledgment) {
 
-        // 1. Handle user-specific events immediately.
-        // This now covers SELECTED, ROLE, and PRODUCT broadcasts.
+        cacheService.getBroadcastContent(event.getBroadcastId()).or(() ->
+            broadcastRepository.findById(event.getBroadcastId())
+                .map(broadcastMapper::toBroadcastContentDTO)
+                .map(content -> {
+                    cacheService.cacheBroadcastContent(content);
+                    log.info("Proactively cached content for broadcast {}", event.getBroadcastId());
+                    return content;
+                })
+        );
+
         if (event.getUserId() != null) {
             handleUserSpecificEvent(event);
 
@@ -66,9 +80,7 @@ public class KafkaOrchestratorConsumerService {
                 cacheService.evictUserInbox(event.getUserId());
             }
         } else {
-            // If no userId, it's a group event for an 'ALL' type broadcast.
-            // 2. If no userId, it can only be a group event for an 'ALL' type broadcast.
-            handleAllUsersBroadcast(event);
+            handleGroupLevelEvent(event);
         }
 
         acknowledgment.acknowledge();
@@ -76,24 +88,54 @@ public class KafkaOrchestratorConsumerService {
 
     private void handleUserSpecificEvent(MessageDeliveryEvent event) {
         log.debug("Processing user-specific event for user {}", event.getUserId());
+        if (Constants.EventType.valueOf(event.getEventType()) == Constants.EventType.CREATED) {
+            log.info("Evicting inbox cache for user {} due to new CREATED event.", event.getUserId());
+            cacheService.evictUserInbox(event.getUserId());
+        }
         scatterToUser(event);
     }
 
-    private void handleAllUsersBroadcast(MessageDeliveryEvent event) {
+    /**
+     * Handles group-level events that don't have a specific userId.
+     * This includes new 'ALL' broadcasts and CANCEL/EXPIRE events for ANY broadcast type.
+     */
+    private void handleGroupLevelEvent(MessageDeliveryEvent event) {
         BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId()).orElse(null);
         if (broadcast == null) {
             log.error("BroadcastMessage {} not found for 'ALL' broadcast.", event.getBroadcastId());
             return;
         }
         
-        // The cache logic is ONLY needed for 'ALL' type broadcasts.
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
                 cacheService.cacheBroadcastContent(broadcastMapper.toBroadcastContentDTO(broadcast));
+                List<String> onlineUsers = cacheService.getOnlineUsers();
+                if (!onlineUsers.isEmpty()) {
+                    log.info("Updating statistics for 'ALL' broadcast {}: targeting and delivering to {} online users.", broadcast.getId(), onlineUsers.size());
+                    broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId(), onlineUsers.size());
+                }
                 break;
             case CANCELLED:
             case EXPIRED:
+                log.info("Processing cancellation/expiration for broadcast ID: {}. Evicting caches.", broadcast.getId());
                 cacheService.evictBroadcastContent(broadcast.getId());
+
+                if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
+                    // For an 'ALL' broadcast, we must evict the inbox for all *online* users,
+                    // as they are the only ones who could have a cached entry for it.
+                    List<String> onlineUsersForEvict = cacheService.getOnlineUsers();
+                    for (String userId : onlineUsersForEvict) {
+                        cacheService.evictUserInbox(userId);
+                    }
+                    log.info("Evicted inbox caches for {} online users due to 'ALL' broadcast cancellation.", onlineUsersForEvict.size());
+                } else {
+                    // For targeted broadcasts (ROLE, SELECTED, etc.), we can be more precise.
+                    List<UserBroadcastMessage> affectedUsers = userBroadcastRepository.findByBroadcastId(broadcast.getId());
+                    for (UserBroadcastMessage userMessage : affectedUsers) {
+                        cacheService.evictUserInbox(userMessage.getUserId());
+                    }
+                    log.info("Evicted user inbox caches for {} users affected by targeted broadcast cancellation.", affectedUsers.size());
+                }
                 break;
             case READ:
                 handleReadEvent(event);
@@ -103,17 +145,11 @@ public class KafkaOrchestratorConsumerService {
                 break;
         }
         
-        // Fan out to all users
-        List<String> onlineUsers = cacheService.getOnlineUsers();
-        if (onlineUsers.isEmpty()) {
-            log.info("No users are currently online to receive the 'ALL' broadcast {}.", broadcast.getId());
-            return;
-        }
-
-        log.info("Scattering 'ALL' type broadcast {} to {} online users.", broadcast.getId(), onlineUsers.size());
-        for (String userId : onlineUsers) {
-            scatterToUser(event.toBuilder().userId(userId).build());
-        }
+        // Instead of looping through all users, publish one generic event.
+        log.info("Putting generic broadcast event {} into 'sse-group-messages' region.", event.getBroadcastId());
+        String messageKey = UUID.randomUUID().toString();
+        // Put the raw event, as the region itself is the broadcast target.
+        sseGroupMessagesRegion.put(messageKey, event);
     }
 
      private void handleReadEvent(MessageDeliveryEvent event) {
@@ -124,8 +160,6 @@ public class KafkaOrchestratorConsumerService {
     private void scatterToUser(MessageDeliveryEvent userSpecificEvent) {
         String userId = userSpecificEvent.getUserId();
 
-        cacheService.evictUserInbox(userId);
-
         Map<String, UserConnectionInfo> userConnections = cacheService.getConnectionsForUser(userId);
 
         if (userConnections != null && !userConnections.isEmpty()) {
@@ -135,7 +169,8 @@ public class KafkaOrchestratorConsumerService {
             String messageKey = UUID.randomUUID().toString();
             GeodeSsePayload payload = new GeodeSsePayload(uniqueClusterPodName, userSpecificEvent);
 
-            sseMessagesRegion.put(messageKey, payload);
+            sseUserMessagesRegion.put(messageKey, payload);
+            log.debug("Put user-specific event for user {} into 'sse-user-messages' region, targeting pod {}", userId, uniqueClusterPodName);
         } else {
             log.trace("UserID {} is Offline.", userId);
         }

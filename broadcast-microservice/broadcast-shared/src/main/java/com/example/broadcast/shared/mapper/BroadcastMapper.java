@@ -26,28 +26,33 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.ZoneOffset;
 import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
-/**
- * A dedicated mapper component to handle conversions between Broadcast entities and DTOs.
- * Implementation is generated at compile time by MapStruct.
- */
 @Mapper(componentModel = "spring", imports = { OffsetDateTime.class, ZoneOffset.class, UUID.class, JsonUtils.class })
 public abstract class BroadcastMapper {
 
     @Autowired
     public ObjectMapper objectMapper;
 
-    // A logger for our custom logic
     public static final Logger log = LoggerFactory.getLogger(BroadcastMapper.class);
+    
+    // --- Helper methods for conversion ---
+    protected long dateTimeToEpochMilli(OffsetDateTime dateTime) {
+        if (dateTime == null) return 0L;
+        return dateTime.toInstant().toEpochMilli();
+    }
 
+    protected OffsetDateTime epochMilliToDateTime(long epochMilli) {
+        if (epochMilli == 0L) return null;
+        return OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMilli), ZoneOffset.UTC);
+    }
 
     @Mapping(target = "totalDelivered", constant = "0")
     @Mapping(target = "totalRead", constant = "0")
     @Mapping(target = "targetIds", expression = "java(JsonUtils.parseJsonArray(broadcast.getTargetIds()))")
     public abstract BroadcastResponse toBroadcastResponse(BroadcastMessage broadcast, int totalTargeted);
 
-    // This is the primary mapping. It handles fields that are ALWAYS populated from the 'broadcast' object.
     @Mapping(source = "broadcast.id", target = "broadcastId")
     @Mapping(source = "broadcast.senderName", target = "senderName")
     @Mapping(source = "broadcast.content", target = "content")
@@ -56,8 +61,7 @@ public abstract class BroadcastMapper {
     @Mapping(source = "broadcast.createdAt", target = "broadcastCreatedAt")
     @Mapping(source = "broadcast.expiresAt", target = "expiresAt")
     @Mapping(source = "broadcast.scheduledAt", target = "scheduledAt")
-    // Fields from 'message' will be handled in the @AfterMapping method below
-    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "userMessageId", ignore = true)
     @Mapping(target = "userId", ignore = true)
     @Mapping(target = "deliveryStatus", ignore = true)
     @Mapping(target = "readStatus", ignore = true)
@@ -66,13 +70,11 @@ public abstract class BroadcastMapper {
     @Mapping(target = "createdAt", ignore = true)
     public abstract UserBroadcastResponse toUserBroadcastResponseFromEntity(UserBroadcastMessage message, BroadcastMessage broadcast);
 
-    // This method is automatically called by MapStruct after the initial mapping above.
-    // It contains your original null-check logic.
     @AfterMapping
     protected void handleNullableMessageSource(@MappingTarget UserBroadcastResponse.UserBroadcastResponseBuilder builder,
                                              UserBroadcastMessage message, BroadcastMessage broadcast) {
         if (message != null) {
-            builder.id(message.getId())
+            builder.userMessageId(message.getId())
                    .userId(message.getUserId())
                    .deliveryStatus(message.getDeliveryStatus())
                    .readStatus(message.getReadStatus())
@@ -80,11 +82,10 @@ public abstract class BroadcastMapper {
                    .readAt(message.getReadAt())
                    .createdAt(message.getCreatedAt());
         } else {
-            // This handles the fan-out-on-read case where a transient message is created
-            builder.id(broadcast.getId()) // Use broadcast ID as a transient ID for the event
-                   .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
-                   .readStatus(Constants.ReadStatus.UNREAD.name())
-                   .createdAt(broadcast.getCreatedAt());
+               
+            builder.deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
+               .readStatus(Constants.ReadStatus.UNREAD.name())
+               .createdAt(broadcast.getCreatedAt());
         }
     }
 
@@ -95,22 +96,19 @@ public abstract class BroadcastMapper {
     @Mapping(source = "broadcast.category", target = "category")
     @Mapping(source = "broadcast.createdAt", target = "broadcastCreatedAt")
     @Mapping(source = "broadcast.expiresAt", target = "expiresAt")
-    @Mapping(source = "userMessage.messageId", target = "id")
+    @Mapping(source = "userMessage.messageId", target = "userMessageId")
     @Mapping(source = "userMessage.deliveryStatus", target = "deliveryStatus")
     @Mapping(source = "userMessage.readStatus", target = "readStatus")
-    @Mapping(source = "userMessage.createdAt", target = "createdAt")
+    @Mapping(source = "userMessage.createdAtEpochMilli", target = "createdAt")
     @Mapping(target = "userId", ignore = true)
     @Mapping(target = "deliveredAt", ignore = true)
     @Mapping(target = "readAt", ignore = true)
     public abstract UserBroadcastResponse toUserBroadcastResponseFromCache(UserMessageInbox userMessage, BroadcastMessage broadcast);
 
     @Mapping(source = "id", target = "messageId")
+    @Mapping(source = "createdAt", target = "createdAtEpochMilli")
     public abstract UserMessageInbox toUserMessageInbox(UserBroadcastMessage message);
 
-    /**
-     * Maps a BroadcastRequest DTO to a BroadcastMessage model.
-     * Generates creation and update timestamps during the mapping process.
-     */
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "createdAt", expression = "java(OffsetDateTime.now(ZoneOffset.UTC))")
@@ -118,7 +116,6 @@ public abstract class BroadcastMapper {
     @Mapping(source = "fireAndForget", target = "isFireAndForget") 
     @Mapping(target = "targetIds", expression = "java(JsonUtils.toJsonArray(request.getTargetIds()))")
     public abstract BroadcastMessage toBroadcastMessage(BroadcastRequest request);
-
 
     @Mapping(source = "id", target = "broadcastId")
     @Mapping(target = "deliveryRate", ignore = true)
@@ -128,11 +125,9 @@ public abstract class BroadcastMapper {
     @AfterMapping
     protected void calculateRates(@MappingTarget BroadcastStatsResponse stats, BroadcastResponse source) {
         double deliveryRate = (source.getTotalTargeted() != null && source.getTotalTargeted() > 0)
-            ? (double) source.getTotalDelivered() / source.getTotalTargeted() : 0.0;
-
+             ? (double) source.getTotalDelivered() / source.getTotalTargeted() : 0.0;
         double readRate = (source.getTotalDelivered() != null && source.getTotalDelivered() > 0)
             ? (double) source.getTotalRead() / source.getTotalDelivered() : 0.0;
-
         stats.setDeliveryRate(deliveryRate);
         stats.setReadRate(readRate);
     }
@@ -141,7 +136,7 @@ public abstract class BroadcastMapper {
     @Mapping(source = "message", target = "message")
     @Mapping(source = "eventType", target = "eventType")
     @Mapping(target = "eventId", expression = "java(UUID.randomUUID().toString())")
-    @Mapping(target = "timestamp", expression = "java(OffsetDateTime.now(ZoneOffset.UTC))")
+    @Mapping(target = "timestampEpochMilli", expression = "java(System.currentTimeMillis())")
     @Mapping(source = "broadcast.fireAndForget", target = "isFireAndForget")
     @Mapping(target = "userId", ignore = true)
     @Mapping(target = "errorDetails", ignore = true)
@@ -152,8 +147,8 @@ public abstract class BroadcastMapper {
     @Mapping(source = "aggregateId", target = "aggregateId")
     @Mapping(source = "eventPayload.eventType", target = "eventType")
     @Mapping(source = "topicName", target = "topic")
-    @Mapping(source = "eventPayload.timestamp", target = "createdAt")
-    @Mapping(target = "payload", ignore = true) // Ignore payload for now, we'll set it below
+    @Mapping(source = "eventPayload.timestampEpochMilli", target = "createdAt")
+    @Mapping(target = "payload", ignore = true)
     public abstract OutboxEvent toOutboxEvent(MessageDeliveryEvent eventPayload, String topicName, String aggregateId);
 
     @AfterMapping
@@ -163,7 +158,6 @@ public abstract class BroadcastMapper {
             builder.payload(payloadJson);
         } catch (JsonProcessingException e) {
             log.error("Critical: Failed to serialize event payload for outbox for aggregateId {}.", aggregateId, e);
-            // In case of an error, we throw a runtime exception to halt the process
             throw new RuntimeException("Failed to serialize event payload for outbox.", e);
         }
     }
@@ -178,12 +172,19 @@ public abstract class BroadcastMapper {
                                         Integer originalPartition, Long originalOffset,
                                         String displayTitle, String exceptionStackTrace, String payloadJson);
 
- 
     @Mapping(source = "fireAndForget", target = "isFireAndForget")
     @Mapping(target = "targetIds", expression = "java(JsonUtils.parseJsonArray(entity.getTargetIds()))")
+    @Mapping(source = "scheduledAt", target = "scheduledAtEpochMilli")
+    @Mapping(source = "expiresAt", target = "expiresAtEpochMilli")
+    @Mapping(source = "createdAt", target = "createdAtEpochMilli")
+    @Mapping(source = "updatedAt", target = "updatedAtEpochMilli")
     public abstract BroadcastContent toBroadcastContentDTO(BroadcastMessage entity);
     
     @Mapping(source = "fireAndForget", target = "isFireAndForget")
     @Mapping(target = "targetIds", expression = "java(JsonUtils.toJsonArray(dto.getTargetIds()))")
+    @Mapping(source = "scheduledAtEpochMilli", target = "scheduledAt")
+    @Mapping(source = "expiresAtEpochMilli", target = "expiresAt")
+    @Mapping(source = "createdAtEpochMilli", target = "createdAt")
+    @Mapping(source = "updatedAtEpochMilli", target = "updatedAt")
     public abstract BroadcastMessage toBroadcastMessage(BroadcastContent dto);
 }

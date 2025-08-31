@@ -94,7 +94,7 @@ const UserConnectionPanel: React.FC<{
             <div className="space-y-3 pr-4">
               {messages.map((message: UserBroadcastMessage, index) => (
                 <div
-                  key={message.id}
+                  key={message.userMessageId ?? `transient-${message.broadcastId}`}
                   className={`border rounded-lg p-3 space-y-2 ${message.readStatus === 'UNREAD' ? 'bg-blue-50 border-blue-200' : 'bg-white'}`}
                 >
                   <div className="flex items-start justify-between">

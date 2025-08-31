@@ -19,7 +19,15 @@ public interface UserBroadcastRepository extends CrudRepository<UserBroadcastMes
     List<UserBroadcastMessage> findByBroadcastId(Long broadcastId);
 
     // Custom Queries
-    @Query("SELECT * FROM user_broadcast_messages WHERE user_id = :userId AND read_status = 'UNREAD' AND (delivery_status = 'PENDING' OR delivery_status = 'DELIVERED') ORDER BY created_at DESC")
+    @Query("""
+        SELECT ubm.* FROM user_broadcast_messages ubm
+        JOIN broadcast_messages bm ON ubm.broadcast_id = bm.id
+        WHERE ubm.user_id = :userId
+          AND bm.status = 'ACTIVE'
+          AND ubm.read_status = 'UNREAD'
+          AND ubm.delivery_status IN ('PENDING', 'DELIVERED')
+        ORDER BY bm.created_at DESC
+    """)
     List<UserBroadcastMessage> findUnreadPendingDeliveredByUserId(@Param("userId") String userId);
 
     @Query("SELECT broadcast_id FROM user_broadcast_messages WHERE user_id = :userId AND read_status = 'READ'")
@@ -30,7 +38,7 @@ public interface UserBroadcastRepository extends CrudRepository<UserBroadcastMes
     int markAsRead(@Param("id") Long id, @Param("readAt") OffsetDateTime readAt);
 
     @Modifying
-    @Query("UPDATE user_broadcast_messages SET delivery_status = :status, delivered_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id")
+    @Query("UPDATE user_broadcast_messages SET delivery_status = :status, delivered_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND delivery_status = 'PENDING'")
     int updateDeliveryStatus(@Param("id") Long id, @Param("status") String status);
 
     @Modifying

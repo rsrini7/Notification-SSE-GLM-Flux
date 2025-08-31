@@ -19,6 +19,7 @@ import reactor.core.scheduler.Schedulers;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -226,5 +227,21 @@ public class SseConnectionManager {
     public boolean isUserConnected(String userId) {
         Set<String> connections = userToConnectionIdsMap.get(userId);
         return connections != null && !connections.isEmpty();
+    }
+
+    public void broadcastEventToLocalConnections(ServerSentEvent<String> event) {
+        if (event == null) {
+            return;
+        }
+        log.info("Broadcasting event to all {} local connections on this pod.", connectionSinks.size());
+        // Iterate over a copy of the values to avoid concurrency issues
+        for (Sinks.Many<ServerSentEvent<String>> sink : new ArrayList<>(connectionSinks.values())) {
+            sink.tryEmitNext(event);
+        }
+    }
+
+    public Set<String> getLocalUserIds() {
+        // userToConnectionIdsMap contains all users with active connections on this pod.
+        return new HashSet<>(userToConnectionIdsMap.keySet());
     }
 }

@@ -14,7 +14,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const {
     userId,
     autoConnect = true,
-    onForcedDisconnect 
+    onForcedDisconnect
   } = options;
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -23,15 +23,15 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
-      // Make a single API call to get the complete message list
-      const uniqueMessages = await userService.getUserMessages(userId);
-      setMessages(uniqueMessages);
+      const initialMessages = await userService.getUserMessages(userId);
+      setMessages(initialMessages);
     } catch (error) {
       toast({
         title: 'Error',
-         description: `Failed to fetch messages for ${userId}`,
+        description: `Failed to fetch messages for ${userId}`,
         variant: 'destructive',
       });
+      setMessages([]);
     } finally {
       setLoading(false);
     }
@@ -48,31 +48,32 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
               description: 'Your connection has been terminated by an administrator.',
               variant: 'destructive',
             });
-            sseConnection.disconnect(true); 
+            sseConnection.disconnect(true);
             if (onForcedDisconnect) {
               onForcedDisconnect(userId);
             }
+            return;
           }
+          
           setMessages(prev => {
-            const exists = prev.some(msg => msg.id === payload.id);
-            if (!exists) {
-              toast({
-                title: 'New Message',
-                description: `From ${payload.senderName}: ${payload.content.substring(0, 30)}...`,
-              });
-              return [payload, ...prev];
-            }
-            return prev;
+            const exists = prev.some(msg => msg.broadcastId === payload.broadcastId);
+            if (exists) return prev;
+
+            toast({
+              title: 'New Message',
+              description: `From ${payload.senderName}: ${payload.content.substring(0, 30)}...`,
+            });
+            return [payload, ...prev];
           });
         }
         break;
-      
+
       case 'READ_RECEIPT':
         if (payload && payload.broadcastId) {
             setMessages(prev => prev.filter(msg => msg.broadcastId !== payload.broadcastId));
         }
-       break;
-      
+        break;
+
       case 'MESSAGE_REMOVED':
         if (payload && payload.broadcastId) {
             setMessages(prev => prev.filter(msg => msg.broadcastId !== payload.broadcastId));
@@ -82,10 +83,11 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
             });
         }
         break;
+
       case 'CONNECTED':
-        // This is now intentionally left blank to prevent the race condition.
-        // Initial messages are delivered via the SSE stream itself.
+        // This event is now just for logging or UI status.
         break;
+
       case 'HEARTBEAT':
         break;
       case 'SERVER_SHUTDOWN':
@@ -102,10 +104,11 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
-  }, [toast, userId]);
-
+    // When the SSE connection is established, fetch the historical inbox.
+    fetchMessages();
+  }, [toast, userId, fetchMessages]);
+  
   const onDisconnect = useCallback(() => {
-    // Clear the message list on disconnect to ensure a fresh state on reconnect.
     setMessages([]);
   }, []);
   
@@ -145,9 +148,9 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     loading,
     stats,
     sseConnection,
-    actions: {
-      markAsRead,
-      refresh: fetchMessages,
+    actions: { 
+      markAsRead, 
+      refresh: fetchMessages
     }
   };
 };

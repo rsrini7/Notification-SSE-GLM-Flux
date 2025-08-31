@@ -35,10 +35,10 @@ public class DltKafkaConsumerService {
 
     @KafkaListener(
             topics = {
-                "${broadcast.kafka.topic.name-orchestration}" + Constants.DLT_SUFFIX
+                "#{@kafkaListnerHelper.getOrchestrationDltTopic()}",
             },
-            groupId = "${broadcast.kafka.consumer.group-dlt}",
-            containerFactory = "dltListenerContainerFactory"
+            groupId = "#{@kafkaListnerHelper.getDltGroupId()}",
+            containerFactory = "#{@kafkaListnerHelper.getDltListnerContainerFactory()}"
     )
     @Transactional
     public void listenToDlt(

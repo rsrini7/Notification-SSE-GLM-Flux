@@ -2,8 +2,8 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
+import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.util.Constants.GeodeRegionNames;
-
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,7 +11,6 @@ import org.apache.geode.cache.client.ClientCache;
 import org.apache.geode.cache.query.*;
 import org.apache.geode.cache.util.CqListenerAdapter;
 import org.springframework.stereotype.Component;
-
 
 @Component
 @Slf4j
@@ -22,23 +21,35 @@ public class SseMessageCqListener extends CqListenerAdapter {
     private final AppProperties appProperties;
     private final SseService sseService;
 
-    @PostConstruct
-    public void registerCq() {
-        try {
-            String podName = appProperties.getPodName();
-            String clusterName = appProperties.getClusterName();
-            String uniqueClusterPodName = clusterName + ":" + podName;
+    private CqQuery userMessagesCq;
+    private CqQuery groupMessagesCq;
 
+    @PostConstruct
+    public void registerCqs() {
+        try {
             QueryService queryService = clientCache.getQueryService();
             CqAttributesFactory cqf = new CqAttributesFactory();
             cqf.addCqListener(this);
             CqAttributes cqa = cqf.create();
 
-            String query = String.format("SELECT * FROM /%s s WHERE s.getTargetClusterPodName = '%s'", GeodeRegionNames.SSE_MESSAGES, uniqueClusterPodName);
-            CqQuery cq = queryService.newCq("SseMessageCQ_" + uniqueClusterPodName.replace(":", "_"), query, cqa, true);
+            String podName = appProperties.getPodName();
+            String clusterName = appProperties.getClusterName();
+            String uniqueClusterPodName = clusterName + ":" + podName;
 
-            cq.execute();
-            log.info("Continuous Query registered for  ClusterPod '{}' with query: {}", uniqueClusterPodName, query);
+            // CQ for User-Specific Messages: Filters by target pod name
+            String userQuery = String.format("SELECT * FROM /%s s WHERE s.targetClusterPodName = '%s'",
+                GeodeRegionNames.SSE_USER_MESSAGES,
+                uniqueClusterPodName);
+            this.userMessagesCq = queryService.newCq("UserMessagesCQ_" + uniqueClusterPodName.replace(":", "_"), userQuery, cqa, true);
+            this.userMessagesCq.execute();
+            log.info("Continuous Query registered for user-specific messages with query: {}", userQuery);
+
+            // CQ for 'Group / Selected' Broadcast Messages: Gets everything from the region
+            String groupQuery = String.format("SELECT * FROM /%s", GeodeRegionNames.SSE_GROUP_MESSAGES);
+            this.groupMessagesCq = queryService.newCq("GroupMessagesCQ_" + uniqueClusterPodName.replace(":", "_"), groupQuery, cqa, true);
+            this.groupMessagesCq.execute();
+            log.info("Continuous Query registered for 'Group / Selected' broadcast messages with query: {}", groupQuery);
+
         } catch (CqException | RegionNotFoundException | CqExistsException e) {
             log.error("Failed to create Continuous Query", e);
             throw new RuntimeException(e);
@@ -46,34 +57,37 @@ public class SseMessageCqListener extends CqListenerAdapter {
     }
 
     @Override
-    public void onEvent(CqEvent aCqEvent) {
-        log.info("CQ Event received. Operation: {}", aCqEvent.getQueryOperation());
-        
-        // Get the key of the message from the event
-        String messageKey = (String) aCqEvent.getKey();
+    public void onEvent(CqEvent cqEvent) {
+        String messageKey = (String) cqEvent.getKey();
+        CqQuery cq = cqEvent.getCq();
 
-        if (aCqEvent.getQueryOperation().isCreate() || aCqEvent.getQueryOperation().isUpdate()) {
-            Object newValue = aCqEvent.getNewValue();
-            if (newValue instanceof GeodeSsePayload payload) {
-                log.info("Processing CQ payload for cluster {} pod {}: {}", appProperties.getClusterName(), appProperties.getPodName(), payload.getEvent());
-                sseService.handleMessageEvent(payload.getEvent());
+        if (!cqEvent.getQueryOperation().isCreate() && !cqEvent.getQueryOperation().isUpdate()) {
+            return;
+        }
 
-                // After processing, remove the entry from the SSE_MESSAGES region to clean it up.
-                try {
-                    clientCache.getRegion(GeodeRegionNames.SSE_MESSAGES).remove(messageKey);
-                    log.debug("Cleaned up processed message with key: {}", messageKey);
-                } catch (Exception e) {
-                    log.error("Failed to clean up processed sse-message with key: {}", messageKey, e);
-                }
+        Object newValue = cqEvent.getNewValue();
 
-            } else {
-                log.warn("Received unexpected payload type from CQ event: {}", (newValue != null) ? newValue.getClass().getName() : "null");
-            }
+        if (cq.getName().equals(this.groupMessagesCq.getName()) && newValue instanceof MessageDeliveryEvent event) {
+            // Event came from the 'sse-group-messages' region
+            log.info("Processing generic 'Group / Selected' broadcast event from CQ: {}", event);
+            sseService.handleBroadcastToAllEvent(event);
+            clientCache.getRegion(GeodeRegionNames.SSE_GROUP_MESSAGES).remove(messageKey);
+            log.debug("Cleaned up 'Group / Selected' message with key: {}", messageKey);
+
+        } else if (cq.getName().equals(this.userMessagesCq.getName()) && newValue instanceof GeodeSsePayload payload) {
+            // Event came from the 'sse-user-messages' region
+            log.info("Processing user-specific event from CQ: {}", payload.getEvent());
+            sseService.handleMessageEvent(payload.getEvent());
+            clientCache.getRegion(GeodeRegionNames.SSE_USER_MESSAGES).remove(messageKey);
+            log.debug("Cleaned up user-specific message with key: {}", messageKey);
+        } else {
+            log.warn("Received unexpected payload type '{}' from CQ '{}'",
+                (newValue != null) ? newValue.getClass().getName() : "null", cq.getName());
         }
     }
 
     @Override
     public void onError(CqEvent aCqEvent) {
-        log.error("Error received on CQ: {}", aCqEvent.getThrowable().getMessage());
+        log.error("Error received on CQ '{}': {}", aCqEvent.getCq().getName(), aCqEvent.getThrowable().getMessage());
     }
 }

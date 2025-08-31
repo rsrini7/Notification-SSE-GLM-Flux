@@ -39,7 +39,7 @@ public class MessageStatusService {
     /**
      * Updates a message to DELIVERED and increments the central statistics counter.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void updateMessageToDelivered(Long userBroadcastMessageId, Long broadcastId) {
         int updatedRows = userBroadcastRepository.updateDeliveryStatus(userBroadcastMessageId, Constants.DeliveryStatus.DELIVERED.name());
         if (updatedRows > 0) {
@@ -64,7 +64,7 @@ public class MessageStatusService {
                 .broadcastId(broadcastId)
                 .userId(userId)
                 .eventType(Constants.EventType.READ.name())
-                .timestamp(OffsetDateTime.now(ZoneOffset.UTC))
+                .timestampEpochMilli(OffsetDateTime.now(ZoneOffset.UTC).toEpochSecond())
                 .build();
 
         // All user actions are now sent to the central orchestration topic for routing.

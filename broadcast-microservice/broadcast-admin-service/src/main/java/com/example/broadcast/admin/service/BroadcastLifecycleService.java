@@ -51,6 +51,7 @@ public class BroadcastLifecycleService {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
         BroadcastMessage broadcast = broadcastMapper.toBroadcastMessage(request);
 
+        // 1. Handle edge case for already expired messages
         if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(OffsetDateTime.now(ZoneOffset.UTC))) {
             log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());
             broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
@@ -58,105 +59,136 @@ public class BroadcastLifecycleService {
             return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
 
+        // 2. Delegate to the appropriate handler based on scheduling
         if (request.getScheduledAt() != null && request.getScheduledAt().isAfter(OffsetDateTime.now(ZoneOffset.UTC))) {
-            broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
-            broadcast = broadcastRepository.save(broadcast);
-            log.info("Broadcast ID {} has been scheduled for {}. No fan-out will occur yet.", broadcast.getId(), broadcast.getScheduledAt());
-            return broadcastMapper.toBroadcastResponse(broadcast, 0);
+            return handleScheduledBroadcast(broadcast);
+        } else {
+            return handleImmediateBroadcast(broadcast);
         }
-             
-        // ONLY the 'PRODUCT' type requires the intensive user list preparation (Fan-out-on-Write).
-        if (Constants.TargetType.PRODUCT.name().equals(request.getTargetType())) {
-            log.info("Immediate PRODUCT broadcast. Saving with PREPARING status.", broadcast.getId());
-            broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
-            broadcast = broadcastRepository.save(broadcast);
-            eventPublisher.publishEvent(new BroadcastCreatedEvent(broadcast.getId()));
-            return broadcastMapper.toBroadcastResponse(broadcast, 0);
+    }
+
+    /**
+     * Handles all immediate broadcast requests by delegating to the correct fan-out strategy.
+     */
+    private BroadcastResponse handleImmediateBroadcast(BroadcastMessage broadcast) {
+        Constants.TargetType targetType = Constants.TargetType.valueOf(broadcast.getTargetType());
+        switch (targetType) {
+            case PRODUCT:
+                return handleProductBroadcast(broadcast);
+            case ALL:
+                return handleAllBroadcast(broadcast);
+            case SELECTED:
+            case ROLE:
+                return handleSelectedOrRoleBroadcast(broadcast);
+            default:
+                log.warn("Unhandled immediate broadcast target type: {}. Saving as is.", targetType);
+                broadcast = broadcastRepository.save(broadcast);
+                return broadcastMapper.toBroadcastResponse(broadcast, 0);
         }
+    }
 
-        // For 'ALL' type, we use the fan-out-on-read strategy
-        if (Constants.TargetType.ALL.name().equals(request.getTargetType())) {
-            log.info("Immediate ALL broadcast. Publishing single orchestration event for fan-out-on-read.");
-            broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
-            broadcast = broadcastRepository.save(broadcast);
-            
-            // Initialize stats with 0. The consumer will update the delivered count.
-            initializeStatistics(broadcast.getId(), 0);
-
-            // Publish one generic event to the main orchestration topic
-            publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
-            
-            return broadcastMapper.toBroadcastResponse(broadcast, 0);
-        }
-
-         if (Constants.TargetType.SELECTED.name().equals(request.getTargetType()) ||
-            Constants.TargetType.ROLE.name().equals(request.getTargetType())) {
-
-            log.info("Immediate {} broadcast. Using early fan-out-on-write strategy.", request.getTargetType());
-            broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
-            broadcast = broadcastRepository.save(broadcast);
-
-            List<String> targetUserIds = determineTargetUsersForWrite(broadcast);
-            
-            if (!targetUserIds.isEmpty()) {
-                // Persist the user message records for inbox history
-                persistUserMessages(broadcast, targetUserIds);
-
-                // Create and publish one outbox event for EACH user.
-                log.info("Creating a batch of {} outbox events for broadcast ID: {}", targetUserIds.size(), broadcast.getId());
-                List<OutboxEvent> outboxEvents = new ArrayList<>();
-                for (String userId : targetUserIds) {
-                    MessageDeliveryEvent eventPayload = broadcastMapper.toMessageDeliveryEvent(broadcast, Constants.EventType.CREATED.name(), broadcast.getContent())
-                            .toBuilder()
-                            .userId(userId) // Set the specific user ID here
-                            .build();
-                    // The aggregateId for Kafka partitioning is now the userId
-                    outboxEvents.add(broadcastMapper.toOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
-                }
-                outboxEventPublisher.publishBatch(outboxEvents);
-                log.info("Successfully published batch of {} events to outbox.", outboxEvents.size());
-            }
-
-            return broadcastMapper.toBroadcastResponse(broadcast, targetUserIds.size());
-        }
-
-        // Fallback for any unhandled type
+    /**
+     * Strategy: Persists a broadcast with SCHEDULED status for later processing.
+     */
+    private BroadcastResponse handleScheduledBroadcast(BroadcastMessage broadcast) {
+        broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
         broadcast = broadcastRepository.save(broadcast);
+        log.info("Broadcast ID {} has been scheduled for {}. No fan-out will occur yet.", broadcast.getId(), broadcast.getScheduledAt());
         return broadcastMapper.toBroadcastResponse(broadcast, 0);
     }
 
-    // NEW private helper method to determine users for write strategies
+    /**
+     * Strategy: Saves the broadcast as PREPARING and triggers an async event for pre-computation.
+     */
+    private BroadcastResponse handleProductBroadcast(BroadcastMessage broadcast) {
+        log.info("Immediate PRODUCT broadcast. Saving with PREPARING status for async pre-computation.", broadcast.getId());
+        broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
+        broadcast = broadcastRepository.save(broadcast);
+        eventPublisher.publishEvent(new BroadcastCreatedEvent(broadcast.getId()));
+        return broadcastMapper.toBroadcastResponse(broadcast, 0);
+    }
+
+    /**
+     * Strategy: Fan-out on Read. Activates the broadcast and publishes a single orchestration event.
+     */
+    private BroadcastResponse handleAllBroadcast(BroadcastMessage broadcast) {
+        log.info("Immediate ALL broadcast. Publishing single orchestration event for fan-out-on-read.");
+        broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
+        broadcast = broadcastRepository.save(broadcast);
+        initializeStatistics(broadcast.getId(), 0);
+        publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
+        return broadcastMapper.toBroadcastResponse(broadcast, 0);
+    }
+
+    /**
+     * Strategy: Early Fan-out on Write. Persists user messages and publishes an outbox event for each user.
+     */
+    private BroadcastResponse handleSelectedOrRoleBroadcast(BroadcastMessage broadcast) {
+        log.info("Immediate {} broadcast. Using early fan-out-on-write strategy.", broadcast.getTargetType());
+        broadcast.setStatus(Constants.BroadcastStatus.ACTIVE.name());
+        broadcast = broadcastRepository.save(broadcast);
+
+        List<String> targetUserIds = determineTargetUsersForWrite(broadcast);
+        if (!targetUserIds.isEmpty()) {
+            persistUserMessages(broadcast, targetUserIds);
+            publishBatchUserEvents(broadcast, targetUserIds);
+        }
+
+        return broadcastMapper.toBroadcastResponse(broadcast, targetUserIds.size());
+    }
+
+    /**
+     * Helper to publish a batch of user-specific events to the outbox.
+     */
+    private void publishBatchUserEvents(BroadcastMessage broadcast, List<String> userIds) {
+        log.info("Creating a batch of {} outbox events for broadcast ID: {}", userIds.size(), broadcast.getId());
+        List<OutboxEvent> outboxEvents = new ArrayList<>();
+        for (String userId : userIds) {
+            MessageDeliveryEvent eventPayload = broadcastMapper.toMessageDeliveryEvent(broadcast, Constants.EventType.CREATED.name(), broadcast.getContent())
+                    .toBuilder()
+                    .userId(userId)
+                    .build();
+            outboxEvents.add(broadcastMapper.toOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
+        }
+        outboxEventPublisher.publishBatch(outboxEvents);
+        log.info("Successfully published batch of {} events to outbox.", outboxEvents.size());
+    }
+
+    // Helper method to determine users for write strategies
     private List<String> determineTargetUsersForWrite(BroadcastMessage broadcast) {
-    return switch (Constants.TargetType.valueOf(broadcast.getTargetType())) {
-        // MODIFIED: Parse the JSON string back to a List
-        case SELECTED -> JsonUtils.parseJsonArray(broadcast.getTargetIds());
-        
-        case ROLE -> JsonUtils.parseJsonArray(broadcast.getTargetIds()).stream() // MODIFIED
-                .flatMap(role -> userService.getUserIdsByRole(role).stream())
-                .distinct()
-                .collect(Collectors.toList());
-        
-        case PRODUCT -> {
-            // This case also needs to parse the JSON string
-            yield JsonUtils.parseJsonArray(broadcast.getTargetIds()).stream() // MODIFIED
-                    .flatMap(productId -> userService.getUserIdsByProduct(productId).stream())
+        return switch (Constants.TargetType.valueOf(broadcast.getTargetType())) {
+            // MODIFIED: Parse the JSON string back to a List
+            case SELECTED -> JsonUtils.parseJsonArray(broadcast.getTargetIds());
+            
+            case ROLE -> JsonUtils.parseJsonArray(broadcast.getTargetIds()).stream() // MODIFIED
+                    .flatMap(role -> userService.getUserIdsByRole(role).stream())
                     .distinct()
                     .collect(Collectors.toList());
-        }
-        
-        default -> Collections.emptyList();
-    };
-}
+            
+            case PRODUCT -> {
+                // This case also needs to parse the JSON string
+                yield JsonUtils.parseJsonArray(broadcast.getTargetIds()).stream() // MODIFIED
+                        .flatMap(productId -> userService.getUserIdsByProduct(productId).stream())
+                        .distinct()
+                        .collect(Collectors.toList());
+            }
+            
+            default -> Collections.emptyList();
+        };
+    }
 
-    // NEW private helper to perform the batch insert and stats initialization
-    private void persistUserMessages(BroadcastMessage broadcast, List<String> userIds) {
+    public void persistUserMessages(BroadcastMessage broadcast, List<String> userIds) {
         log.info("Persisting {} user_broadcast_messages records for broadcast ID: {}", userIds.size(), broadcast.getId());
+
+        final OffsetDateTime creationTime = OffsetDateTime.now(ZoneOffset.UTC);
+
         List<UserBroadcastMessage> userMessages = userIds.stream()
                 .map(userId -> UserBroadcastMessage.builder()
                         .broadcastId(broadcast.getId())
                         .userId(userId)
                         .deliveryStatus(Constants.DeliveryStatus.PENDING.name())
                         .readStatus(Constants.ReadStatus.UNREAD.name())
+                        .createdAt(creationTime)
                         .build())
                 .collect(Collectors.toList());
 
@@ -181,7 +213,7 @@ public class BroadcastLifecycleService {
         broadcast.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         broadcastRepository.save(broadcast);
         
-        // 2. --- NEW EARLY FAN-OUT LOGIC ---
+        // 2. --- EARLY FAN-OUT LOGIC ---
         // Fetch the list of users that the async task already persisted.
         List<String> targetUserIds = userBroadcastRepository.findByBroadcastId(broadcastId).stream()
                 .map(UserBroadcastMessage::getUserId)
@@ -265,7 +297,7 @@ public class BroadcastLifecycleService {
                 .eventId(UUID.randomUUID().toString())
                 .broadcastId(deliveryEvent.getBroadcastId())
                 .eventType(eventType.name())
-                .timestamp(OffsetDateTime.now(ZoneOffset.UTC))
+                .timestampEpochMilli(OffsetDateTime.now(ZoneOffset.UTC).toEpochSecond())
                 .message(message)
                 .build();
     }
