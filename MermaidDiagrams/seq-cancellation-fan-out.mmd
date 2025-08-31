@@ -1,27 +1,35 @@
 sequenceDiagram
-    participant AdminSvc as Admin Service (Lifecycle)
-    participant DB as DB (Outbox)
-    participant KafkaOrchestration as Kafka (broadcast-orchestration)
-    participant Orchestrator as User Service (Orchestrator Pod)
-    participant Geode as Apache Geode (sse-user-messages Region)
-    participant Worker as User Service (Worker Pod)
+    participant AdminSvc as Admin Service
+    participant Kafka as Kafka (Orchestration)
+    participant Orchestrator as User Service (Orchestrator)
+    participant Geode as Apache Geode
+    participant TargetedWorker as Worker Pod (Targeted)
+    participant AllWorkers as All Worker Pods
 
-    AdminSvc->>+DB: 1- Writes ONE orchestration event (type=CANCELLED) to Outbox
-    DB-->>-AdminSvc: 
+    Note over AdminSvc, Kafka: Admin cancels a broadcast, an event is published via the Outbox...
 
-    Note right of KafkaOrchestration: Outbox Poller publishes the event...
+    Kafka->>+Orchestrator: Consumes CANCELLED event
+    Orchestrator->>Orchestrator: Checks broadcast type
 
-    KafkaOrchestration->>+Orchestrator: 2- Orchestrator consumes event
-    Orchestrator->>+DB: 3- Fetches full user list for the broadcast
-    DB-->>-Orchestrator: Returns user list
+    alt Targeted Broadcast (e.g., ROLE/SELECTED)
+        Orchestrator->>+DB: Fetches list of all affected users
+        DB-->>-Orchestrator: Returns user list
 
-    loop For each targeted user
-        Orchestrator->>+Geode: 4- "Scatters" by PUT-ting a user-specific event into the 'sse-user-messages' region
+        loop For each targeted user
+            Orchestrator->>+Geode: "Scatters" user-specific event into 'sse-user-messages'
+        end
+        Geode-->>-Orchestrator: ...
+
+        Note over Geode, TargetedWorker: Geode CQ notifies the specific worker pod responsible for the user.
+        Geode-->>+TargetedWorker: CqListener is invoked with event
+        TargetedWorker->>TargetedWorker: Pushes 'MESSAGE_REMOVED' via SSE to the specific user
+    else ALL Broadcast
+        Orchestrator->>+Geode: Puts ONE generic event into 'sse-group-messages'
+        Geode-->>-Orchestrator: ...
+
+        Note over Geode, AllWorkers: Geode CQ notifies ALL worker pods subscribed to the group region.
+        Geode-->>+AllWorkers: CqListeners on ALL pods are invoked
+        AllWorkers->>AllWorkers: Each pod pushes 'MESSAGE_REMOVED' via SSE to all its connected users
     end
-    Geode-->>-Orchestrator: 
-
-    Orchestrator-->>-KafkaOrchestration: 5- Acknowledges orchestration event
-
-    Note over Geode, Worker: 6- Geode server notifies subscribed clients via Continuous Query (CQ).
-    Geode-->>+Worker: 7- CqListener on the correct worker pod is invoked with the event
-    Worker->>Worker: 8- Handles event: Removes message and pushes 'MESSAGE_REMOVED' via SSE.
+    
+    Orchestrator-->>-Kafka: Acknowledges orchestration event

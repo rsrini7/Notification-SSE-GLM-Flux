@@ -1,0 +1,25 @@
+sequenceDiagram
+    autonumber
+    participant Orchestrator as Orchestrator Pod
+    participant Geode as Apache Geode Server
+    participant WorkerA as Worker Pod A (CqListener)
+    participant WorkerB as Worker Pod B (CqListener)
+    participant WorkerC as Worker Pod C (CqListener)
+
+    Note over Geode, WorkerC: On startup, all worker pods register a CQ:<br/>"SELECT * FROM /sse-group-messages"
+
+    Orchestrator->>+Geode: 1- PUT generic MessageDeliveryEvent into '/sse-group-messages'
+    Geode-->>-Orchestrator: 
+
+    Note over Geode, WorkerC: Geode's CQ engine finds a match for ALL worker pods' queries.
+
+    par "Geode pushes event to all subscribed CQs simultaneously"
+        Geode-->>+WorkerA: 2a- Pushes CQ event to Pod A
+        WorkerA->>WorkerA: 3a- Broadcasts to its local SSE connections
+    and
+        Geode-->>+WorkerB: 2b- Pushes CQ event to Pod B
+        WorkerB->>WorkerB: 3b- Broadcasts to its local SSE connections
+    and
+        Geode-->>+WorkerC: 2c- Pushes CQ event to Pod C
+        WorkerC->>WorkerC: 3c- Broadcasts to its local SSE connections
+    end
