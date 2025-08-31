@@ -153,7 +153,12 @@ public class UserMessageService {
             List<UserBroadcastResponse> reconstructedList = cachedInbox.stream()
                     .map(inboxItem -> {
                         BroadcastMessage content = contentMap.get(inboxItem.getBroadcastId());
-                        return content != null ? broadcastMapper.toUserBroadcastResponseFromCache(inboxItem, content) : null;
+                        // If the broadcast is no longer active (i.e., it was cancelled/expired),
+                        // treat it as if the content was not found.
+                        if (content != null && Constants.BroadcastStatus.ACTIVE.name().equals(content.getStatus())) {
+                            return broadcastMapper.toUserBroadcastResponseFromCache(inboxItem, content);
+                        }
+                        return null; // Discard if content is null OR not ACTIVE
                     })
                     .filter(Objects::nonNull)
                     .sorted(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed())
