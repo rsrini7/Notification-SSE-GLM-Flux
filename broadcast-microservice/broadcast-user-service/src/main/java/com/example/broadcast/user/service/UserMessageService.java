@@ -86,9 +86,6 @@ public class UserMessageService {
                     .collect(Collectors.toList());
             finalInbox.addAll(allTypeResponses);
 
-            // --- To ensure newest messages are first ---
-            finalInbox.sort(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed());
-
             // (Optional) Add this log for debugging to confirm the order before returning
             log.debug("Final sorted inbox order for user {}: {}", userId, finalInbox.stream().map(UserBroadcastResponse::getBroadcastId).collect(Collectors.toList()));
 
@@ -130,7 +127,6 @@ public class UserMessageService {
                         return content != null ? broadcastMapper.toUserBroadcastResponseFromCache(inboxItem, content) : null;
                     })
                     .filter(Objects::nonNull)
-                    .sorted(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed())
                     .collect(Collectors.toList());
             
             return reconstructedList;
