@@ -93,7 +93,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
-    if (connectionIdRef.current && !isForceDisconnect) {
+    if (connectionIdRef.current) {
       navigator.sendBeacon(`${baseUrl}/sse/disconnect?userId=${userId}&connectionId=${connectionIdRef.current}`);
     }
     // Check the ref for the current connection state to avoid stale closures.
