@@ -67,7 +67,7 @@ public class UserMessageService {
             // Step 3: Fetch all required content in a single, unified call.
             Map<Long, BroadcastMessage> contentMap = getBroadcastContent(allRequiredBroadcastIds);
 
-            // Step 4: Map targeted messages to the final response DTO using the complete contentMap.
+            // Step 4: Map targeted messages to the final response DTO.
             List<UserBroadcastResponse> finalInbox = targetedMessages.stream()
                     .map(msg -> {
                         BroadcastMessage broadcast = contentMap.get(msg.getBroadcastId());
@@ -76,7 +76,7 @@ public class UserMessageService {
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
 
-            // Step 5: Map 'ALL' broadcasts using the same complete contentMap.
+            // Step 5: Map 'ALL' broadcasts and add them to the list.
             List<UserBroadcastResponse> allTypeResponses = allTypeBroadcasts.stream()
                     .map(broadcast -> {
                         BroadcastMessage content = contentMap.get(broadcast.getId());
@@ -86,12 +86,16 @@ public class UserMessageService {
                     .collect(Collectors.toList());
             finalInbox.addAll(allTypeResponses);
 
-            // Step 6: Sort the final combined list by creation date.
+            // --- To ensure newest messages are first ---
             finalInbox.sort(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed());
 
-            // Step 7: Create a new, correct cache entry from the final, complete list.
+            // (Optional) Add this log for debugging to confirm the order before returning
+            log.debug("Final sorted inbox order for user {}: {}", userId, finalInbox.stream().map(UserBroadcastResponse::getBroadcastId).collect(Collectors.toList()));
+
+
+            // Step 7: Create a new, correct cache entry from the final, sorted list.
             List<UserMessageInbox> inboxToCache = finalInbox.stream()
-                .map(response -> new UserMessageInbox(
+            .map(response -> new UserMessageInbox(
                     response.getUserMessageId(),
                     response.getBroadcastId(),
                     response.getDeliveryStatus(),
