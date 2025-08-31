@@ -83,10 +83,11 @@ public abstract class BroadcastMapper {
                    .readAt(message.getReadAt())
                    .createdAt(message.getCreatedAt());
         } else {
-            builder.id(broadcast.getId())
-                   .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
-                   .readStatus(Constants.ReadStatus.UNREAD.name())
-                   .createdAt(broadcast.getCreatedAt());
+            builder.id(broadcast.getId() * -1L);
+               
+            builder.deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
+               .readStatus(Constants.ReadStatus.UNREAD.name())
+               .createdAt(broadcast.getCreatedAt());
         }
     }
 
