@@ -38,7 +38,7 @@ public interface UserBroadcastRepository extends CrudRepository<UserBroadcastMes
     int markAsRead(@Param("id") Long id, @Param("readAt") OffsetDateTime readAt);
 
     @Modifying
-    @Query("UPDATE user_broadcast_messages SET delivery_status = :status, delivered_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id")
+    @Query("UPDATE user_broadcast_messages SET delivery_status = :status, delivered_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND delivery_status = 'PENDING'")
     int updateDeliveryStatus(@Param("id") Long id, @Param("status") String status);
 
     @Modifying

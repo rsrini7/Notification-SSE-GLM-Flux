@@ -39,7 +39,7 @@ public class MessageStatusService {
     /**
      * Updates a message to DELIVERED and increments the central statistics counter.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void updateMessageToDelivered(Long userBroadcastMessageId, Long broadcastId) {
         int updatedRows = userBroadcastRepository.updateDeliveryStatus(userBroadcastMessageId, Constants.DeliveryStatus.DELIVERED.name());
         if (updatedRows > 0) {

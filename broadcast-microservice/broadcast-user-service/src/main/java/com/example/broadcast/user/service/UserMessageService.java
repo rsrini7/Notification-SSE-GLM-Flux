@@ -45,7 +45,7 @@ public class UserMessageService {
         log.info("Assembling inbox for user: {}", userId);
 
         Optional<List<UserMessageInbox>> cachedInboxOpt = cacheService.getUserInbox(userId);
-        if (cachedInboxOpt.isPresent()) {
+        if (cachedInboxOpt.isPresent()  && !cachedInboxOpt.get().isEmpty()) {
             log.info("Cache HIT for user {} inbox.", userId);
             return reconstructInboxFromCache(cachedInboxOpt.get());
         }
@@ -54,6 +54,12 @@ public class UserMessageService {
         return Mono.fromCallable(() -> {
             // Step 1: Fetch all relevant records and IDs from the database.
             List<UserBroadcastMessage> targetedMessages = userBroadcastRepository.findUnreadPendingDeliveredByUserId(userId);
+            
+            // Identify PENDING messages and update their status to DELIVERED
+            List<UserBroadcastMessage> pendingMessagesToProcess = targetedMessages.stream()
+                .filter(msg -> Constants.DeliveryStatus.PENDING.name().equals(msg.getDeliveryStatus()))
+                .collect(Collectors.toList());
+            
             Set<Long> readBroadcastIds = new HashSet<>(userBroadcastRepository.findReadBroadcastIdsByUserId(userId));
             List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findByStatusAndTargetType(
                 Constants.BroadcastStatus.ACTIVE.name(), Constants.TargetType.ALL.name()
@@ -107,10 +113,33 @@ public class UserMessageService {
                 updateDeliveryStatsForOfflineUsers(allTypeResponses);
             }
 
+            if (!pendingMessagesToProcess.isEmpty()) {
+                processPendingMessagesAsynchronously(pendingMessagesToProcess);
+            }
+
             log.info("Assembled and cached {} total messages for user {}", finalInbox.size(), userId);
             return finalInbox;
 
         }).subscribeOn(jdbcScheduler);
+    }
+
+    /**
+     *  Runs in a separate thread to update statuses without blocking the user response.
+     */
+    @Async
+    public void processPendingMessagesAsynchronously(List<UserBroadcastMessage> pendingMessages) {
+        if (pendingMessages.isEmpty()) {
+            return;
+        }
+        log.info("Asynchronously updating status for {} PENDING messages.", pendingMessages.size());
+        for (UserBroadcastMessage message : pendingMessages) {
+            try {
+                // This call now runs in its own independent transaction due to the REQUIRES_NEW fix
+                messageStatusService.updateMessageToDelivered(message.getId(), message.getBroadcastId());
+            } catch (Exception e) {
+                log.error("Error updating pending message {} for broadcast {} asynchronously.", message.getId(), message.getBroadcastId(), e);
+            }
+        }
     }
 
     private Mono<List<UserBroadcastResponse>> reconstructInboxFromCache(List<UserMessageInbox> cachedInbox) {
