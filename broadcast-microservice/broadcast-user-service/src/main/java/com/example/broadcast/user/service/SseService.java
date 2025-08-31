@@ -23,7 +23,6 @@ import reactor.core.publisher.Flux;
 import java.util.Map;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -37,8 +36,7 @@ public class SseService {
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
-    private final SseEventFactory sseEventFactory; 
-    private final UserMessageService userMessageService;
+    private final SseEventFactory sseEventFactory;
     private final MessageStatusService messageStatusService;
     private final CacheService cacheService;
 
@@ -47,32 +45,10 @@ public class SseService {
         sseConnectionManager.registerConnection(userId, connectionId);
     }
 
-    /**
-     * Establishes the live SSE stream immediately and triggers
-     * the fetch for historical messages as a separate, non-blocking operation.
-     */
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
-        log.info("Establishing event stream for user: {}, connection: {}", userId, connectionId);
-
-        // 1. Create the live stream sink. This is where new, real-time events will be pushed.
-        // The connection manager returns the Flux immediately, establishing the connection.
-        Flux<ServerSentEvent<String>> liveStream = sseConnectionManager.createEventStream(userId, connectionId);
-
-        // 2. Create a stream that fetches all historical/pending messages from the database.
-        // This will run in the background on the JDBC scheduler thread pool.
-        Flux<ServerSentEvent<String>> historicalStream = userMessageService.getUserMessages(userId)
-            .flatMapMany(Flux::fromIterable)
-            .map(response -> {
-                log.debug("Streaming historical message for broadcast {} to user {}", response.getBroadcastId(), userId);
-                // Convert the database DTO into a real SSE Event
-                return sseEventFactory.createEvent(SseEventType.MESSAGE, response.getBroadcastId().toString(), response);
-            })
-            .filter(Objects::nonNull);
-
-        // 3. Merge the two streams.
-        // `merge` subscribes to both streams at once. The live stream is active immediately,
-        // and the historical stream will emit its items as soon as the database query completes.
-        return Flux.merge(historicalStream, liveStream);
+        log.info("Establishing LIVE event stream for user: {}, connection: {}", userId, connectionId);
+        // It no longer fetches historical messages. It just returns the live connection sink.
+        return sseConnectionManager.createEventStream(userId, connectionId);
     }
 
     @Transactional

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useSseConnection } from './useSseConnection';
 import { userService, type UserBroadcastMessage } from '../services/api';
@@ -20,20 +20,18 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  // --- FIX #1: Use a ref to track if we are processing the initial list of messages ---
-  const isInitialLoadRef = useRef(true);
-
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
-      const uniqueMessages = await userService.getUserMessages(userId);
-      setMessages(uniqueMessages);
+      const initialMessages = await userService.getUserMessages(userId);
+      setMessages(initialMessages);
     } catch (error) {
       toast({
         title: 'Error',
         description: `Failed to fetch messages for ${userId}`,
         variant: 'destructive',
       });
+      setMessages([]);
     } finally {
       setLoading(false);
     }
@@ -54,24 +52,18 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
             if (onForcedDisconnect) {
               onForcedDisconnect(userId);
             }
+            return;
           }
-
-          // --- FIX #2: Use different logic for initial load vs. real-time updates ---
+          
           setMessages(prev => {
             const exists = prev.some(msg => msg.broadcastId === payload.broadcastId);
             if (exists) return prev;
 
-            if (isInitialLoadRef.current) {
-              // During initial load, APPEND messages to preserve the server's sort order.
-              return [...prev, payload];
-            } else {
-              // For new real-time messages, PREPEND to show them at the top.
-              toast({
-                title: 'New Message',
-                description: `From ${payload.senderName}: ${payload.content.substring(0, 30)}...`,
-              });
-              return [payload, ...prev];
-            }
+            toast({
+              title: 'New Message',
+              description: `From ${payload.senderName}: ${payload.content.substring(0, 30)}...`,
+            });
+            return [payload, ...prev];
           });
         }
         break;
@@ -93,9 +85,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         break;
 
       case 'CONNECTED':
-        // --- FIX #3: When the 'CONNECTED' event arrives, the historical stream is finished. ---
-        // Switch off initial load mode so subsequent messages are treated as real-time.
-        isInitialLoadRef.current = false;
+        // This event is now just for logging or UI status.
         break;
 
       case 'HEARTBEAT':
@@ -114,16 +104,15 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
-    // Reset state for the new connection
-    isInitialLoadRef.current = true;
-    setMessages([]);
-  }, [toast, userId]);
-  
-  const onError = useCallback(() => { /* Silent */ }, []);
+    // When the SSE connection is established, fetch the historical inbox.
+    fetchMessages();
+  }, [toast, userId, fetchMessages]);
   
   const onDisconnect = useCallback(() => {
     setMessages([]);
   }, []);
+  
+  const onError = useCallback(() => { /* Silent */ }, []);
 
   const sseConnection = useSseConnection({
     userId,
@@ -159,9 +148,9 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     loading,
     stats,
     sseConnection,
-    actions: {
-      markAsRead,
-      refresh: fetchMessages,
+    actions: { 
+      markAsRead, 
+      refresh: fetchMessages
     }
   };
 };
