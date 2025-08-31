@@ -47,55 +47,64 @@ public class UserMessageService {
         log.info("Assembling inbox for user: {}", userId);
 
         Optional<List<UserMessageInbox>> cachedInboxOpt = cacheService.getUserInbox(userId);
-        if (cachedInboxOpt.isPresent() && !cachedInboxOpt.get().isEmpty()) {
+        if (cachedInboxOpt.isPresent()) { // NOTE: Removed "!isEmpty()" to allow caching of empty lists
             log.info("Cache HIT for user {} inbox.", userId);
             return reconstructInboxFromCache(cachedInboxOpt.get());
         }
         log.info("Cache MISS for user {} inbox. Fetching from database.", userId);
 
         return Mono.fromCallable(() -> {
-            // Step 1: Fetch all necessary data from the database
-            List<UserBroadcastMessage> unreadTargetedMessages = userBroadcastRepository.findUnreadPendingDeliveredByUserId(userId);
-            List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findByStatusAndTargetType(Constants.BroadcastStatus.ACTIVE.name(), TargetType.ALL.name());
+            // Step 1: Fetch targeted messages from the user-specific table.
+            List<UserBroadcastMessage> targetedMessages = userBroadcastRepository.findUnreadPendingDeliveredByUserId(userId);
+
+            // Step 2: Fetch active 'ALL' broadcasts that the user has NOT yet read.
             Set<Long> readBroadcastIds = new HashSet<>(userBroadcastRepository.findReadBroadcastIdsByUserId(userId));
+            List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findByStatusAndTargetType(
+                Constants.BroadcastStatus.ACTIVE.name(), TargetType.ALL.name()
+            ).stream().filter(b -> !readBroadcastIds.contains(b.getId())).collect(Collectors.toList());
 
-            // Step 2: Prepare a list that will be cached and assemble targeted responses
-            List<UserMessageInbox> inboxToCache = new ArrayList<>();
-            unreadTargetedMessages.forEach(msg -> inboxToCache.add(broadcastMapper.toUserMessageInbox(msg)));
+            // Step 3: Get the content for all targeted broadcasts in a single query.
+            Set<Long> targetedBroadcastIds = targetedMessages.stream()
+                    .map(UserBroadcastMessage::getBroadcastId)
+                    .collect(Collectors.toSet());
+            Map<Long, BroadcastMessage> contentMap = getBroadcastContent(targetedBroadcastIds);
 
-            Map<Long, BroadcastMessage> contentMap = getBroadcastContent(unreadTargetedMessages.stream()
-                    .map(UserBroadcastMessage::getBroadcastId).collect(Collectors.toSet()));
-
-            Stream<UserBroadcastResponse> targetedResponses = unreadTargetedMessages.stream()
+            // Step 4: Map targeted messages to the final response DTO.
+            List<UserBroadcastResponse> finalInbox = targetedMessages.stream()
                     .map(msg -> {
                         BroadcastMessage broadcast = contentMap.get(msg.getBroadcastId());
                         return broadcast != null ? broadcastMapper.toUserBroadcastResponseFromEntity(msg, broadcast) : null;
                     })
-                    .filter(Objects::nonNull);
-            
-            // Step 3: Collect the newly "delivered" ALL-type broadcasts into a list
-            List<UserBroadcastResponse> allTypeResponsesList = allTypeBroadcasts.stream()
-                    .filter(broadcast -> !readBroadcastIds.contains(broadcast.getId()))
-                    .map(broadcast -> {
-                        UserMessageInbox transientInbox = new UserMessageInbox(broadcast.getId(), broadcast.getId(), "DELIVERED", "UNREAD", broadcast.getCreatedAt().toEpochSecond());
-                        inboxToCache.add(transientInbox);
-                        return broadcastMapper.toUserBroadcastResponseFromCache(transientInbox, broadcast);
-                    })
+                    .filter(Objects::nonNull)
                     .collect(Collectors.toList());
+            
+            // Step 5: Map 'ALL' broadcasts to the final response DTO and add them to the same list.
+            List<UserBroadcastResponse> allTypeResponses = allTypeBroadcasts.stream()
+                    .map(broadcast -> broadcastMapper.toUserBroadcastResponseFromEntity(null, broadcast))
+                    .collect(Collectors.toList());
+            finalInbox.addAll(allTypeResponses);
 
-            // Step 4: If any ALL-type broadcasts were newly delivered, trigger the async stats update
-            if (!allTypeResponsesList.isEmpty()) {
-                updateDeliveryStatsForOfflineUsers(allTypeResponsesList);
+            // Step 6: Sort the final combined list by creation date.
+            finalInbox.sort(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed());
+            
+            // Step 7: Create a new, correct cache entry from the final list.
+            List<UserMessageInbox> inboxToCache = finalInbox.stream()
+                .map(response -> new UserMessageInbox(
+                    response.getId(),
+                    response.getBroadcastId(),
+                    response.getDeliveryStatus(),
+                    response.getReadStatus(),
+                    response.getCreatedAt().toInstant().toEpochMilli() // Use the correct timestamp
+                ))
+                .collect(Collectors.toList());
+            cacheService.cacheUserInbox(userId, inboxToCache);
+            
+            // Step 8: Asynchronously update stats for any newly delivered 'ALL' messages.
+            if (!allTypeResponses.isEmpty()) {
+                updateDeliveryStatsForOfflineUsers(allTypeResponses);
             }
 
-            // Step 5: Combine the targeted responses with the stream from the newly created list
-            List<UserBroadcastResponse> finalInbox = Stream.concat(targetedResponses, allTypeResponsesList.stream())
-                    .sorted(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed())
-                    .collect(Collectors.toList());
-
-            // Step 6: Populate the cache and return the final inbox
-            cacheService.cacheUserInbox(userId, inboxToCache);
-            log.info("Assembled and cached {} messages for user {}", finalInbox.size(), userId);
+            log.info("Assembled and cached {} total messages for user {}", finalInbox.size(), userId);
             return finalInbox;
 
         }).subscribeOn(jdbcScheduler);

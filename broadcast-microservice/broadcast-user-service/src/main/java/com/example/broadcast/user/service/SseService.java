@@ -11,6 +11,8 @@ import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.SseEventType;
+import com.example.broadcast.user.service.cache.CacheService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
@@ -21,6 +23,9 @@ import reactor.core.publisher.Flux;
 import java.util.Map;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 
 @Service
 @Slf4j
@@ -35,6 +40,7 @@ public class SseService {
     private final SseEventFactory sseEventFactory; 
     private final UserMessageService userMessageService;
     private final MessageStatusService messageStatusService;
+    private final CacheService cacheService;
 
     @Transactional
     public void registerConnection(String userId, String connectionId) {
@@ -48,25 +54,25 @@ public class SseService {
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
         log.info("Establishing event stream for user: {}, connection: {}", userId, connectionId);
 
-        // 1. Create the live, infinite stream that will be returned to the client.
+        // 1. Create the live stream sink. This is where new, real-time events will be pushed.
+        // The connection manager returns the Flux immediately, establishing the connection.
         Flux<ServerSentEvent<String>> liveStream = sseConnectionManager.createEventStream(userId, connectionId);
 
-        // 2. Trigger the fetch for historical/pending messages as a separate, fire-and-forget operation.
-        // We subscribe here to kick it off, but we do NOT merge it into the liveStream.
-        // This prevents the database stream from terminating the live SSE connection.
-        userMessageService.getUserMessages(userId)
+        // 2. Create a stream that fetches all historical/pending messages from the database.
+        // This will run in the background on the JDBC scheduler thread pool.
+        Flux<ServerSentEvent<String>> historicalStream = userMessageService.getUserMessages(userId)
             .flatMapMany(Flux::fromIterable)
-            .subscribe(
-                response -> {
-                    // This logic runs for each historical message found in the DB
-                    log.info("Delivering persisted message for broadcast {} to newly connected user {}", response.getBroadcastId(), userId);
-                    sendSseEvent(userId, SseEventType.MESSAGE, response.getBroadcastId().toString(), response);
-                },
-                error -> log.error("Error fetching initial messages from DB for user {}", userId, error)
-            );
+            .map(response -> {
+                log.debug("Streaming historical message for broadcast {} to user {}", response.getBroadcastId(), userId);
+                // Convert the database DTO into a real SSE Event
+                return sseEventFactory.createEvent(SseEventType.MESSAGE, response.getBroadcastId().toString(), response);
+            })
+            .filter(Objects::nonNull);
 
-        // 3. Return the live stream to the user immediately.
-        return liveStream;
+        // 3. Merge the two streams.
+        // `merge` subscribes to both streams at once. The live stream is active immediately,
+        // and the historical stream will emit its items as soon as the database query completes.
+        return Flux.merge(historicalStream, liveStream);
     }
 
     @Transactional
@@ -110,6 +116,8 @@ public class SseService {
                 UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(userMessage, broadcast);
                 sendSseEvent(userId, SseEventType.MESSAGE, response.getId().toString(), response);
                 messageStatusService.updateMessageToDelivered(userMessage.getId(), broadcast.getId());
+
+                cacheService.evictUserInbox(userId);
             },
             () -> log.warn("Prevented delivery of targeted broadcast {} to user {}. No user_broadcast_messages record found.", broadcast.getId(), userId)
         );
@@ -162,26 +170,38 @@ public class SseService {
     public void handleBroadcastToAllEvent(MessageDeliveryEvent event) {
         log.debug("Handling generic broadcast event: {}", event.getEventType());
 
-        // For CREATED, CANCELLED, and EXPIRED events, the logic is the same:
-        // create the appropriate SSE event and broadcast it to all local clients.
+        ServerSentEvent<String> sseEvent = null;
+
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
-                broadcastRepository.findById(event.getBroadcastId()).ifPresent(broadcast -> {
+                Optional<BroadcastMessage> broadcastOpt = broadcastRepository.findById(event.getBroadcastId());
+                if (broadcastOpt.isPresent()) {
+                    BroadcastMessage broadcast = broadcastOpt.get();
                     log.info("Delivering generic 'ALL' broadcast {} to all local clients.", broadcast.getId());
                     UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(null, broadcast);
-                    ServerSentEvent<String> sseEvent = sseEventFactory.createEvent(SseEventType.MESSAGE, response.getBroadcastId().toString(), response);
-                    sseConnectionManager.broadcastEventToLocalConnections(sseEvent);
-                });
+                    sseEvent = sseEventFactory.createEvent(SseEventType.MESSAGE, response.getBroadcastId().toString(), response);
+                }
                 break;
             case CANCELLED:
             case EXPIRED:
                 Map<String, Long> payload = Map.of("broadcastId", event.getBroadcastId());
-                ServerSentEvent<String> sseEvent = sseEventFactory.createEvent(SseEventType.MESSAGE_REMOVED, event.getBroadcastId().toString(), payload);
-                sseConnectionManager.broadcastEventToLocalConnections(sseEvent);
+                sseEvent = sseEventFactory.createEvent(SseEventType.MESSAGE_REMOVED, event.getBroadcastId().toString(), payload);
                 break;
             default:
                 log.warn("Unhandled generic event type: {}", event.getEventType());
                 break;
+        }
+
+        if (sseEvent != null) {
+            sseConnectionManager.broadcastEventToLocalConnections(sseEvent);
+
+            // --- THIS IS THE FIX ---
+            // Evict the inbox cache for all users connected to this pod
+            Set<String> localUserIds = sseConnectionManager.getLocalUserIds();
+            log.info("Evicting inbox cache for {} local users due to group-level event.", localUserIds.size());
+            for (String userId : localUserIds) {
+                cacheService.evictUserInbox(userId);
+            }
         }
     }
 }
