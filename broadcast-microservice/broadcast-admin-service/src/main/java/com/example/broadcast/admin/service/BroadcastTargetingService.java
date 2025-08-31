@@ -24,6 +24,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 @Service
 @RequiredArgsConstructor
@@ -61,6 +63,7 @@ public class BroadcastTargetingService {
                             .userId(userId)
                             .deliveryStatus(Constants.DeliveryStatus.PENDING.name())
                             .readStatus(Constants.ReadStatus.UNREAD.name())
+                            .createdAt(OffsetDateTime.now(ZoneOffset.UTC))
                             .build())
                     .collect(Collectors.toList());
                 userBroadcastRepository.saveAll(userMessages);
