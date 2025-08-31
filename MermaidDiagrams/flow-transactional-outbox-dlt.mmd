@@ -1,0 +1,26 @@
+graph TD
+    subgraph "1- Business Transaction (Admin Service)"
+        A[API Call: Create/Update Broadcast] --> B{Begin DB Transaction};
+        B --> C[1a- INSERT/UPDATE `broadcast_messages`];
+        C --> D[1b- INSERT event into `outbox_events`];
+        D --> E{Commit DB Transaction};
+    end
+
+    subgraph "2- Event Publishing (Admin Service)"
+        F[Outbox Polling Service] -- "Scans `outbox_events` every 2s" --> E;
+        F -- "Locks & Reads Event" --> G[Event Data];
+        G -- "Publishes to Kafka" --> H[Kafka Topic: broadcast-orchestration];
+        H -- "On Successful Publish" --> I[DELETE from `outbox_events`];
+    end
+
+    subgraph "3- Event Consumption (User Service)"
+        H --> J[Kafka Consumer];
+        J -- "Processes Event" --> K{Processing Successful?};
+        K -- Yes --> L[Update `user_broadcast_messages`, etc.];
+        K -- No, after retries --> M[Publish to DLT Topic];
+    end
+
+    subgraph "4- Failure Persistence (Admin Service)"
+        M[Kafka Topic: broadcast-orchestration-dlt] --> N[DLT Consumer];
+        N --> O[INSERT into `dlt_messages` table for admin review];
+    end

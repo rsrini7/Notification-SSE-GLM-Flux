@@ -1,51 +1,59 @@
 erDiagram
     BROADCAST_MESSAGES {
-        BIGINT id PK "Primary Key"
-        VARCHAR content
+        BIGINT id PK
+        VARCHAR sender_id
+        TEXT content
         VARCHAR status
         VARCHAR target_type
-    }
-
-    USER_PREFERENCES {
-        VARCHAR user_id UK "Unique Key"
-        BOOLEAN notification_enabled
+        TEXT target_ids
+        VARCHAR priority
+        TIMESTAMP scheduled_at
+        TIMESTAMP expires_at
+        TIMESTAMP created_at
     }
 
     USER_BROADCAST_MESSAGES {
-        BIGINT id PK "Primary Key"
-        BIGINT broadcast_id FK "Foreign Key"
+        BIGINT id PK
+        BIGINT broadcast_id FK
         VARCHAR user_id
         VARCHAR delivery_status
         VARCHAR read_status
+        TIMESTAMP delivered_at
+        TIMESTAMP read_at
     }
 
     BROADCAST_STATISTICS {
-        BIGINT id PK "Primary Key"
-        BIGINT broadcast_id UK, FK "Unique, Foreign Key"
+        BIGINT id PK
+        BIGINT broadcast_id UK, FK
         INT total_targeted
         INT total_delivered
         INT total_read
+        INT total_failed
     }
 
     OUTBOX_EVENTS {
-        UUID id PK "Primary Key"
-        VARCHAR aggregate_id
+        UUID id PK
+        VARCHAR aggregate_id "Kafka Key"
         VARCHAR event_type
         VARCHAR topic
+        TEXT payload
+        TIMESTAMP created_at
     }
 
     DLT_MESSAGES {
-        VARCHAR id PK "Primary Key"
+        VARCHAR id PK
         BIGINT broadcast_id
+        VARCHAR original_key
         VARCHAR original_topic
+        TEXT exception_message
+        TIMESTAMP failed_at
     }
 
     SHEDLOCK {
-        VARCHAR name PK "Primary Key"
+        VARCHAR name PK
         TIMESTAMP lock_until
         VARCHAR locked_by
     }
 
-    BROADCAST_MESSAGES ||--o{ USER_BROADCAST_MESSAGES : "tracks status for"
-    BROADCAST_MESSAGES ||..|| BROADCAST_STATISTICS : "has stats"
-    USER_PREFERENCES |o..o{ USER_BROADCAST_MESSAGES : "influences"
+    BROADCAST_MESSAGES ||--|{ USER_BROADCAST_MESSAGES : "targets"
+    BROADCAST_MESSAGES ||..|| BROADCAST_STATISTICS : "has"

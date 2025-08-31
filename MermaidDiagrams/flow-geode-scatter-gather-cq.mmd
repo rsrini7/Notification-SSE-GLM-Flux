@@ -1,0 +1,22 @@
+sequenceDiagram
+    autonumber
+    participant Orchestrator as Orchestrator (Pod A)
+    participant Geode as Apache Geode Server
+    participant CqListener as CqListener (Pod B)
+    participant SseService as SseService (Pod B)
+    participant UserUI as User UI
+
+    Note over Geode, CqListener: On startup, Pod B registers a Continuous Query (CQ):<br/>"SELECT * FROM /sse-user-messages WHERE targetPodName = 'pod-b'"
+
+    Orchestrator->>+Geode: 1. LOOKUP connection for 'user-xyz'
+    Geode-->>-Orchestrator: Returns { podName: 'pod-b' }
+
+    Orchestrator->>+Geode: 2. SCATTER: PUT event into '/sse-user-messages'<br/>Payload includes `targetPodName: 'pod-b'`
+    Geode-->>-Orchestrator: ...
+
+    Note over Geode, CqListener: Geode's CQ engine detects the new entry and finds a match for Pod B's query.
+
+    Geode-->>+CqListener: 3. GATHER: Pushes CQ event to the CqListener on Pod B
+    CqListener->>+SseService: 4. handleMessageEvent(payload)
+    SseService->>+UserUI: 5. Pushes message via persistent SSE connection
+    UserUI-->>-SseService: ...

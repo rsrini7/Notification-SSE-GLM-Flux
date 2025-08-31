@@ -1,14 +1,53 @@
 classDiagram
     direction TB
 
-    namespace dto {
+    namespace geode_dto {
+        class BroadcastContent {
+            <<DTO>>
+            Long id
+            String content
+            String status
+            String priority
+            String category
+            long expiresAtEpochMilli
+            boolean isFireAndForget
+        }
+        class ConnectionHeartbeat {
+            <<DTO>>
+            String userId
+            long lastHeartbeatTimestamp
+        }
+        class GeodeSsePayload {
+            <<DTO>>
+            String targetClusterPodName
+            MessageDeliveryEvent event
+        }
+        class UserConnectionInfo {
+            <<DTO>>
+            String userId
+            String connectionId
+            String podName
+            String clusterName
+            long connectedAtEpochMilli
+        }
+        class UserMessageInbox {
+            <<DTO>>
+            Long messageId
+            Long broadcastId
+            String deliveryStatus
+            String readStatus
+            long createdAtEpochMilli
+        }
+    }
+
+    namespace shared_dto {
         class MessageDeliveryEvent {
             <<DTO>>
             String eventId
             Long broadcastId
             String userId
             String eventType
-            OffsetDateTime timestamp
+            long timestampEpochMilli
             String message
             String errorDetails
             boolean isFireAndForget
@@ -20,11 +59,6 @@ classDiagram
             String error
             String message
             String path
-        }
-        class GeodeSsePayload {
-            <<DTO>>
-            String targetClusterPodName
-            MessageDeliveryEvent event
         }
     }
 
@@ -63,6 +97,7 @@ classDiagram
             int originalPartition
             long originalOffset
             String exceptionMessage
+            String exceptionStackTrace
             OffsetDateTime failedAt
             String originalMessagePayload
         }
@@ -99,29 +134,6 @@ classDiagram
         }
     }
 
-    namespace cache {
-        class UserConnectionInfo {
-            <<DTO>>
-            String userId
-            String connectionId
-            String podName
-            String clusterName
-            OffsetDateTime connectedAt
-        }
-        class ConnectionHeartbeat {
-            <<DTO>>
-            String userId
-            long lastHeartbeatTimestamp
-        }
-        class UserMessageInbox {
-            <<DTO>>
-            Long messageId
-            Long broadcastId
-            String deliveryStatus
-            String readStatus
-            OffsetDateTime createdAt
-        }
-    }
     
     RedriveAllResult "1" *-- "1" RedriveFailureDetail : contains
     GeodeSsePayload o-- "1" MessageDeliveryEvent : contains

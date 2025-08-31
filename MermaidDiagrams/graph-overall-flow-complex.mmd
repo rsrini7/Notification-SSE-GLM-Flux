@@ -9,17 +9,20 @@ graph TD
         CreationTriage{"Broadcast Type?"}
     end
 
-    %% MODIFIED: Schedulers are now represented as one unified service
-    subgraph "2. Background Processing (Admin Service)"
-        UnifiedScheduler["Unified Scheduler<br/>(BroadcastActivationService)<br/>(Every 1 min)"]
-        AsyncPrecomputation["Async TargetingService"]
+    subgraph "2. Async Pre-computation (Admin Service)"
+        PrecomputationScheduler["Precomputation Scheduler<br/>(Every 1 min)"]
+        AsyncPrecomputation["Async TargetingService<br/>(Fan-out on Write)"]
     end
     
-    subgraph "3. Publishing (Admin Service)"
+    subgraph "3. Activation (Admin Service)"
+        ActivationScheduler["Activation Scheduler<br/>(Every 1 min)"]
+    end
+
+    subgraph "4. Publishing (Admin Service)"
         OutboxPoller["Outbox Polling Service<br/>(Every 2s)"]
     end
 
-    subgraph "4. Delivery (User Service & Infra)"
+    subgraph "5. Delivery (User Service & Infra)"
         OrchestratorConsumer["Orchestrator Consumer (Kafka)"]
         WorkerCqListener["Worker CqListener (Geode)"]
         SseService["SSE Service"]
@@ -33,37 +36,38 @@ graph TD
     AdminUI --> AdminAPI --> LifecycleSvc --> CreationTriage
 
     %% --- PATH A: IMMEDIATE BROADCASTS ---
-    CreationTriage -- "Immediate" --> ImmediateType{"Targeting Strategy?"}
-    %% MODIFIED: ROLE and SELECTED now follow the same early fan-out path
-    ImmediateType -- "Early Fan-out (ROLE/SELECTED)" --> SaveActiveAndOutboxBatch["DB: status=ACTIVE<br/>BATCH INSERT N events into outbox_events"]
-    ImmediateType -- "Fan-out on Read (ALL)" --> SaveActiveAndOutboxSingle["DB: status=ACTIVE<br/>INSERT ONE event into outbox_events"]
-    ImmediateType -- "Fan-out on Write (PRODUCT)" --> SavePreparing["DB: status=PREPARING"]
+    CreationTriage -- "Immediate" --> ImmediateType{"Fan-out on Read or Write?"}
+    ImmediateType -- "Read (ALL/ROLE/SELECTED)" --> SaveActiveAndOutbox["DB: status=ACTIVE<br/>INSERT into outbox_events"]
+    ImmediateType -- "Write (PRODUCT)" --> SavePreparing["DB: status=PREPARING"]
     
     SavePreparing -- "Triggers" --> AsyncPrecomputation
 
     %% --- PATH B: SCHEDULED BROADCASTS ---
     CreationTriage -- "Scheduled" --> SaveScheduled["DB: status=SCHEDULED"]
-    SaveScheduled -- "Handled by" --> UnifiedScheduler
+    SaveScheduled --> ScheduledType{"Fan-out on Read or Write?"}
     
+    ScheduledType -- "Write (PRODUCT)" --> PrecomputationScheduler
+    PrecomputationScheduler -- "Polls for due broadcasts" --> Postgres
+    PrecomputationScheduler --> SavePreparing
+    
+    ScheduledType -- "Read (ALL/ROLE/SELECTED)" --> ActivationScheduler
+
     %% --- PRECOMPUTATION & ACTIVATION FLOW ---
-    %% MODIFIED: Description now reflects writing to user_broadcast_messages
-    AsyncPrecomputation -- "Saves user messages & sets status=READY" --> Postgres
-    Postgres -- "status=READY" --> UnifiedScheduler
+    AsyncPrecomputation -- "Saves targets & sets status=READY" --> Postgres
+    Postgres -- "status=READY" --> ActivationScheduler
     
-    UnifiedScheduler -- "Polls for READY or<br/>due SCHEDULED broadcasts" --> Postgres
-    UnifiedScheduler --> SaveActiveAndOutboxSingle
+    ActivationScheduler -- "Polls for READY or<br/>due SCHEDULED broadcasts" --> Postgres
+    ActivationScheduler --> SaveActiveAndOutbox
     
     %% --- CONVERGENCE & PUBLISHING ---
-    SaveActiveAndOutboxSingle --> Postgres
-    SaveActiveAndOutboxBatch --> Postgres
-    Postgres -- "Events wait in 'outbox_events'" --> OutboxPoller
-    OutboxPoller -- "Polls & Locks Events" --> Postgres
-    OutboxPoller -- "Publishes Events" --> Kafka
+    SaveActiveAndOutbox --> Postgres
+    Postgres -- "Event waits in 'outbox_events'" --> OutboxPoller
+    OutboxPoller -- "Polls & Locks Event" --> Postgres
+    OutboxPoller -- "Publishes ONE Event" --> Kafka
 
-    %% --- DELIVERY (Real-time Push Path) ---
+    %% --- DELIVERY ---
     Kafka --> OrchestratorConsumer
-    %% MODIFIED: Description of Geode interaction is now more specific
-    OrchestratorConsumer -- "Looks up user pod, Puts event<br/>into 'sse-user-messages' region" --> Geode
-    Geode -- "CQ invokes Listener on correct pod" --> WorkerCqListener
+    OrchestratorConsumer -- "Determines Audience & Pod, <br/> Puts event into Geode Region" --> Geode
+    Geode -- "CQ invokes Listener" --> WorkerCqListener
     WorkerCqListener --> SseService
-    SseService -- "Pushes via SSE" --> User
+    SseService --> User

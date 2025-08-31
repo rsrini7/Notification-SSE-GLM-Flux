@@ -1,0 +1,20 @@
+sequenceDiagram
+    autonumber
+    participant UserMessageService as UserMessageService
+    participant Geode as Geode Cache
+    participant DB as PostgreSQL DB
+    
+    UserMessageService->>+Geode: 1- Attempt to GET user inbox from 'user-messages-inbox' region
+    
+    alt Cache Hit
+        Geode-->>-UserMessageService: 2a- Returns cached List<UserMessageInbox>
+        Note right of UserMessageService: 3a- Reconstructs full response using<br/>the 'broadcast-content' cache.
+    else Cache Miss
+        Geode-->>UserMessageService: 2b- Returns null
+        UserMessageService->>+DB: 3b- Query database for full inbox (Source of Truth)
+        DB-->>-UserMessageService: 4b- Returns complete message list
+        UserMessageService->>Geode: 5b- PRIME CACHE: PUT the new inbox list into 'user-messages-inbox' region
+        Geode-->>UserMessageService: 6b- Cache update confirmation
+    end
+    
+    UserMessageService->>UserMessageService: 6- Return final inbox list
