@@ -44,11 +44,11 @@ public class SseMessageCqListener extends CqListenerAdapter {
             this.userMessagesCq.execute();
             log.info("Continuous Query registered for user-specific messages with query: {}", userQuery);
 
-            // CQ for 'ALL/ROLE/PRODUCT' Broadcast Messages: Gets everything from the region
+            // CQ for 'Group / Selected' Broadcast Messages: Gets everything from the region
             String groupQuery = String.format("SELECT * FROM /%s", GeodeRegionNames.SSE_GROUP_MESSAGES);
             this.groupMessagesCq = queryService.newCq("GroupMessagesCQ_" + uniqueClusterPodName.replace(":", "_"), groupQuery, cqa, true);
             this.groupMessagesCq.execute();
-            log.info("Continuous Query registered for 'ALL' broadcast messages with query: {}", groupQuery);
+            log.info("Continuous Query registered for 'Group / Selected' broadcast messages with query: {}", groupQuery);
 
         } catch (CqException | RegionNotFoundException | CqExistsException e) {
             log.error("Failed to create Continuous Query", e);
@@ -69,10 +69,10 @@ public class SseMessageCqListener extends CqListenerAdapter {
 
         if (cq.getName().equals(this.groupMessagesCq.getName()) && newValue instanceof MessageDeliveryEvent event) {
             // Event came from the 'sse-group-messages' region
-            log.info("Processing generic 'ALL/ROLE/PRODUCT' broadcast event from CQ: {}", event);
+            log.info("Processing generic 'Group / Selected' broadcast event from CQ: {}", event);
             sseService.handleBroadcastToAllEvent(event);
             clientCache.getRegion(GeodeRegionNames.SSE_GROUP_MESSAGES).remove(messageKey);
-            log.debug("Cleaned up 'ALL/ROLE/PRODUCT' message with key: {}", messageKey);
+            log.debug("Cleaned up 'Group / Selected' message with key: {}", messageKey);
 
         } else if (cq.getName().equals(this.userMessagesCq.getName()) && newValue instanceof GeodeSsePayload payload) {
             // Event came from the 'sse-user-messages' region

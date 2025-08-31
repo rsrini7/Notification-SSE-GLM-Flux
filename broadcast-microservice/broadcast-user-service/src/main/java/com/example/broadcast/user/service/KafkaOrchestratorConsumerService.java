@@ -106,14 +106,21 @@ public class KafkaOrchestratorConsumerService {
                 log.info("Processing cancellation/expiration for broadcast ID: {}. Evicting caches.", broadcast.getId());
                 cacheService.evictBroadcastContent(broadcast.getId());
 
-                // This check is now clear: if the cancelled broadcast was for a specific group,
-                // we must evict their individual caches.
-                if (!Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
+                if (Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
+                    // For an 'ALL' broadcast, we must evict the inbox for all *online* users,
+                    // as they are the only ones who could have a cached entry for it.
+                    List<String> onlineUsersForEvict = cacheService.getOnlineUsers();
+                    for (String userId : onlineUsersForEvict) {
+                        cacheService.evictUserInbox(userId);
+                    }
+                    log.info("Evicted inbox caches for {} online users due to 'ALL' broadcast cancellation.", onlineUsersForEvict.size());
+                } else {
+                    // For targeted broadcasts (ROLE, SELECTED, etc.), we can be more precise.
                     List<UserBroadcastMessage> affectedUsers = userBroadcastRepository.findByBroadcastId(broadcast.getId());
                     for (UserBroadcastMessage userMessage : affectedUsers) {
                         cacheService.evictUserInbox(userMessage.getUserId());
                     }
-                    log.info("Evicted user inbox caches for {} users affected by broadcast ID: {}", affectedUsers.size(), broadcast.getId());
+                    log.info("Evicted user inbox caches for {} users affected by targeted broadcast cancellation.", affectedUsers.size());
                 }
                 break;
             case READ:
