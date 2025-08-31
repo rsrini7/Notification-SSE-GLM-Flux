@@ -93,8 +93,8 @@ public class UserMessageService {
             finalInbox.addAll(allTypeResponses);
 
             // (Optional) Add this log for debugging to confirm the order before returning
-            log.debug("Final sorted inbox order for user {}: {}", userId, finalInbox.stream().map(UserBroadcastResponse::getBroadcastId).collect(Collectors.toList()));
-
+            finalInbox.sort(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed());
+            // log.debug("Final sorted inbox order for user {}: {}", userId, finalInbox.stream().map(UserBroadcastResponse::getBroadcastId).collect(Collectors.toList()));
 
             // Step 7: Create a new, correct cache entry from the final, sorted list.
             List<UserMessageInbox> inboxToCache = finalInbox.stream()
@@ -156,6 +156,7 @@ public class UserMessageService {
                         return content != null ? broadcastMapper.toUserBroadcastResponseFromCache(inboxItem, content) : null;
                     })
                     .filter(Objects::nonNull)
+                    .sorted(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed())
                     .collect(Collectors.toList());
             
             return reconstructedList;

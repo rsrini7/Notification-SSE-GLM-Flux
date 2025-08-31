@@ -26,7 +26,7 @@ public interface UserBroadcastRepository extends CrudRepository<UserBroadcastMes
           AND bm.status = 'ACTIVE'
           AND ubm.read_status = 'UNREAD'
           AND ubm.delivery_status IN ('PENDING', 'DELIVERED')
-        ORDER BY ubm.created_at DESC
+        ORDER BY bm.created_at DESC
     """)
     List<UserBroadcastMessage> findUnreadPendingDeliveredByUserId(@Param("userId") String userId);
 

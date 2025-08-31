@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useSseConnection } from './useSseConnection';
 import { userService, type UserBroadcastMessage } from '../services/api';
@@ -14,22 +14,24 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   const {
     userId,
     autoConnect = true,
-    onForcedDisconnect 
+    onForcedDisconnect
   } = options;
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  // --- FIX #1: Use a ref to track if we are processing the initial list of messages ---
+  const isInitialLoadRef = useRef(true);
+
   const fetchMessages = useCallback(async () => {
     setLoading(true);
     try {
-      // Make a single API call to get the complete message list
       const uniqueMessages = await userService.getUserMessages(userId);
       setMessages(uniqueMessages);
     } catch (error) {
       toast({
         title: 'Error',
-         description: `Failed to fetch messages for ${userId}`,
+        description: `Failed to fetch messages for ${userId}`,
         variant: 'destructive',
       });
     } finally {
@@ -48,31 +50,38 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
               description: 'Your connection has been terminated by an administrator.',
               variant: 'destructive',
             });
-            sseConnection.disconnect(true); 
+            sseConnection.disconnect(true);
             if (onForcedDisconnect) {
               onForcedDisconnect(userId);
             }
           }
+
+          // --- FIX #2: Use different logic for initial load vs. real-time updates ---
           setMessages(prev => {
             const exists = prev.some(msg => msg.broadcastId === payload.broadcastId);
-            if (!exists) {
+            if (exists) return prev;
+
+            if (isInitialLoadRef.current) {
+              // During initial load, APPEND messages to preserve the server's sort order.
+              return [...prev, payload];
+            } else {
+              // For new real-time messages, PREPEND to show them at the top.
               toast({
                 title: 'New Message',
                 description: `From ${payload.senderName}: ${payload.content.substring(0, 30)}...`,
               });
               return [payload, ...prev];
             }
-            return prev;
           });
         }
         break;
-      
+
       case 'READ_RECEIPT':
         if (payload && payload.broadcastId) {
             setMessages(prev => prev.filter(msg => msg.broadcastId !== payload.broadcastId));
         }
-       break;
-      
+        break;
+
       case 'MESSAGE_REMOVED':
         if (payload && payload.broadcastId) {
             setMessages(prev => prev.filter(msg => msg.broadcastId !== payload.broadcastId));
@@ -82,10 +91,13 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
             });
         }
         break;
+
       case 'CONNECTED':
-        // This is now intentionally left blank to prevent the race condition.
-        // Initial messages are delivered via the SSE stream itself.
+        // --- FIX #3: When the 'CONNECTED' event arrives, the historical stream is finished. ---
+        // Switch off initial load mode so subsequent messages are treated as real-time.
+        isInitialLoadRef.current = false;
         break;
+
       case 'HEARTBEAT':
         break;
       case 'SERVER_SHUTDOWN':
@@ -102,14 +114,16 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
-  }, [toast, userId]);
-
-  const onDisconnect = useCallback(() => {
-    // Clear the message list on disconnect to ensure a fresh state on reconnect.
+    // Reset state for the new connection
+    isInitialLoadRef.current = true;
     setMessages([]);
-  }, []);
+  }, [toast, userId]);
   
   const onError = useCallback(() => { /* Silent */ }, []);
+  
+  const onDisconnect = useCallback(() => {
+    setMessages([]);
+  }, []);
 
   const sseConnection = useSseConnection({
     userId,
