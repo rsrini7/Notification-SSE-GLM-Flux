@@ -4,6 +4,7 @@ import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
@@ -42,8 +43,8 @@ public class KafkaOrchestratorConsumerService {
     @Qualifier("sseUserMessagesRegion")
     private final Region<String, Object> sseUserMessagesRegion;
 
-    @Qualifier("sseAllMessagesRegion")
-    private final Region<String, Object> sseAllMessagesRegion;
+    @Qualifier("sseGroupMessagesRegion")
+    private final Region<String, Object> sseGroupMessagesRegion;
 
     @KafkaListener(
             topics = "#{@kafkaListnerHelper.getOrchestrationTopic()}",
@@ -69,7 +70,7 @@ public class KafkaOrchestratorConsumerService {
                 cacheService.evictUserInbox(event.getUserId());
             }
         } else {
-            handleAllUsersBroadcast(event);
+            handleGroupLevelEvent(event);
         }
 
         acknowledgment.acknowledge();
@@ -80,7 +81,11 @@ public class KafkaOrchestratorConsumerService {
         scatterToUser(event);
     }
 
-    private void handleAllUsersBroadcast(MessageDeliveryEvent event) {
+    /**
+     * Handles group-level events that don't have a specific userId.
+     * This includes new 'ALL' broadcasts and CANCEL/EXPIRE events for ANY broadcast type.
+     */
+    private void handleGroupLevelEvent(MessageDeliveryEvent event) {
         BroadcastMessage broadcast = broadcastRepository.findById(event.getBroadcastId()).orElse(null);
         if (broadcast == null) {
             log.error("BroadcastMessage {} not found for 'ALL' broadcast.", event.getBroadcastId());
@@ -98,7 +103,18 @@ public class KafkaOrchestratorConsumerService {
                 break;
             case CANCELLED:
             case EXPIRED:
+                log.info("Processing cancellation/expiration for broadcast ID: {}. Evicting caches.", broadcast.getId());
                 cacheService.evictBroadcastContent(broadcast.getId());
+
+                // This check is now clear: if the cancelled broadcast was for a specific group,
+                // we must evict their individual caches.
+                if (!Constants.TargetType.ALL.name().equals(broadcast.getTargetType())) {
+                    List<UserBroadcastMessage> affectedUsers = userBroadcastRepository.findByBroadcastId(broadcast.getId());
+                    for (UserBroadcastMessage userMessage : affectedUsers) {
+                        cacheService.evictUserInbox(userMessage.getUserId());
+                    }
+                    log.info("Evicted user inbox caches for {} users affected by broadcast ID: {}", affectedUsers.size(), broadcast.getId());
+                }
                 break;
             case READ:
                 handleReadEvent(event);
@@ -109,10 +125,10 @@ public class KafkaOrchestratorConsumerService {
         }
         
         // Instead of looping through all users, publish one generic event.
-        log.info("Putting generic 'ALL' broadcast event {} into 'sse-all-messages' region.", event.getBroadcastId());
+        log.info("Putting generic broadcast event {} into 'sse-group-messages' region.", event.getBroadcastId());
         String messageKey = UUID.randomUUID().toString();
         // Put the raw event, as the region itself is the broadcast target.
-        sseAllMessagesRegion.put(messageKey, event);
+        sseGroupMessagesRegion.put(messageKey, event);
     }
 
      private void handleReadEvent(MessageDeliveryEvent event) {

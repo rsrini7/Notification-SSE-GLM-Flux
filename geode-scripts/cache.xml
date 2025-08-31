@@ -8,7 +8,7 @@
     <region name="connection-heartbeat" refid="REPLICATE"/>
     <region name="broadcast-content" refid="REPLICATE"/>
     <region name="sse-user-messages" refid="REPLICATE"/>
-    <region name="sse-all-messages" refid="REPLICATE"/>
+    <region name="sse-group-messages" refid="REPLICATE"/>
 
     <region name="user-messages-inbox">
         <region-attributes refid="PARTITION_REDUNDANT">

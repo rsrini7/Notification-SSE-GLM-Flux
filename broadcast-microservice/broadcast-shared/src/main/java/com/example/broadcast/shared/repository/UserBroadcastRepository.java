@@ -19,7 +19,15 @@ public interface UserBroadcastRepository extends CrudRepository<UserBroadcastMes
     List<UserBroadcastMessage> findByBroadcastId(Long broadcastId);
 
     // Custom Queries
-    @Query("SELECT * FROM user_broadcast_messages WHERE user_id = :userId AND read_status = 'UNREAD' AND (delivery_status = 'PENDING' OR delivery_status = 'DELIVERED') ORDER BY created_at DESC")
+    @Query("""
+        SELECT ubm.* FROM user_broadcast_messages ubm
+        JOIN broadcast_messages bm ON ubm.broadcast_id = bm.id
+        WHERE ubm.user_id = :userId
+          AND bm.status = 'ACTIVE'
+          AND ubm.read_status = 'UNREAD'
+          AND ubm.delivery_status IN ('PENDING', 'DELIVERED')
+        ORDER BY ubm.created_at DESC
+    """)
     List<UserBroadcastMessage> findUnreadPendingDeliveredByUserId(@Param("userId") String userId);
 
     @Query("SELECT broadcast_id FROM user_broadcast_messages WHERE user_id = :userId AND read_status = 'READ'")

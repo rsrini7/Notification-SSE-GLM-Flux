@@ -16,7 +16,7 @@ $replicatedRegions = @(
     "broadcast-content",
     "connection-heartbeat",
     "sse-user-messages",
-    "sse-all-messages"
+    "sse-group-messages"
     "user-connections"
 )
 

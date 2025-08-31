@@ -74,10 +74,10 @@ public class GeodeClientConfig {
                 .create(GeodeRegionNames.SSE_USER_MESSAGES);
     }
 
-    @Bean("sseAllMessagesRegion")
-    public Region<String, Object> sseAllMessagesRegion(ClientCache clientCache) {
+    @Bean("sseGroupMessagesRegion")
+    public Region<String, Object> sseGroupMessagesRegion(ClientCache clientCache) {
         return clientCache.<String, Object>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create(GeodeRegionNames.SSE_ALL_MESSAGES);
+                .create(GeodeRegionNames.SSE_GROUP_MESSAGES);
     }
 
 }
