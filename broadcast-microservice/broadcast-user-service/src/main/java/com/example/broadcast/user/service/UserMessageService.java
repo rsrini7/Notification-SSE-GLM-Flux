@@ -77,7 +77,7 @@ public class UserMessageService {
             List<UserBroadcastResponse> allTypeResponsesList = allTypeBroadcasts.stream()
                     .filter(broadcast -> !readBroadcastIds.contains(broadcast.getId()))
                     .map(broadcast -> {
-                        UserMessageInbox transientInbox = new UserMessageInbox(broadcast.getId(), broadcast.getId(), "DELIVERED", "UNREAD", broadcast.getCreatedAt());
+                        UserMessageInbox transientInbox = new UserMessageInbox(broadcast.getId(), broadcast.getId(), "DELIVERED", "UNREAD", broadcast.getCreatedAt().toEpochSecond());
                         inboxToCache.add(transientInbox);
                         return broadcastMapper.toUserBroadcastResponseFromCache(transientInbox, broadcast);
                     })
@@ -174,7 +174,7 @@ public class UserMessageService {
         }
         log.info("Asynchronously updating delivery stats for {} broadcasts for a reconnected user.", newlyDeliveredBroadcasts.size());
         for (UserBroadcastResponse broadcast : newlyDeliveredBroadcasts) {
-            broadcastStatisticsRepository.incrementDeliveredAndTargetedCount(broadcast.getBroadcastId(), 1);
+            broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getBroadcastId(), 1);
         }
     }
 

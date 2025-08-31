@@ -23,7 +23,6 @@ public class BroadcastResponse {
     private String category;
     private OffsetDateTime expiresAt;
     private OffsetDateTime createdAt;
-    // **FIX:** Added the scheduledAt field to be sent to the frontend.
     private OffsetDateTime scheduledAt;
     private String status;
     private Integer totalTargeted;

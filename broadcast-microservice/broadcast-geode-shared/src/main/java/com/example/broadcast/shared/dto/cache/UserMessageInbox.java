@@ -1,6 +1,5 @@
 package com.example.broadcast.shared.dto.cache;
 
-import java.time.OffsetDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -18,5 +17,5 @@ public class UserMessageInbox implements Serializable{
     // User-specific status fields
     private final String deliveryStatus;
     private final String readStatus;
-    private final OffsetDateTime createdAt;
+    private final long createdAtEpochMilli;
 }

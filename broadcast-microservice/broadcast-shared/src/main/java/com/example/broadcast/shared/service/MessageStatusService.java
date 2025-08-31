@@ -64,7 +64,7 @@ public class MessageStatusService {
                 .broadcastId(broadcastId)
                 .userId(userId)
                 .eventType(Constants.EventType.READ.name())
-                .timestamp(OffsetDateTime.now(ZoneOffset.UTC))
+                .timestampEpochMilli(OffsetDateTime.now(ZoneOffset.UTC).toEpochSecond())
                 .build();
 
         // All user actions are now sent to the central orchestration topic for routing.

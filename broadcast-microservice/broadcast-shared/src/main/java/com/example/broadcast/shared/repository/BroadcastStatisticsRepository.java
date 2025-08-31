@@ -25,5 +25,5 @@ public interface BroadcastStatisticsRepository extends CrudRepository<BroadcastS
 
     @Modifying
     @Query("UPDATE broadcast_statistics SET total_delivered = total_delivered + :count, calculated_at = CURRENT_TIMESTAMP WHERE broadcast_id = :broadcastId")
-    int incrementDeliveredAndTargetedCount(@Param("broadcastId") Long broadcastId, @Param("count") int count);
+    int incrementDeliveredCount(@Param("broadcastId") Long broadcastId, @Param("count") int count);
 }

@@ -265,7 +265,7 @@ public class BroadcastLifecycleService {
                 .eventId(UUID.randomUUID().toString())
                 .broadcastId(deliveryEvent.getBroadcastId())
                 .eventType(eventType.name())
-                .timestamp(OffsetDateTime.now(ZoneOffset.UTC))
+                .timestampEpochMilli(OffsetDateTime.now(ZoneOffset.UTC).toEpochSecond())
                 .message(message)
                 .build();
     }

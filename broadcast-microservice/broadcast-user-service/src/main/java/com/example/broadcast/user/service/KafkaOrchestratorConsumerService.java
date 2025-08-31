@@ -5,6 +5,7 @@ import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
+import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.util.Constants;
@@ -21,6 +22,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.time.OffsetDateTime;
@@ -34,6 +36,7 @@ public class KafkaOrchestratorConsumerService {
     private final CacheService cacheService;
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastRepository userBroadcastRepository;
+    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final BroadcastMapper broadcastMapper;
     
     @Qualifier("sseUserMessagesRegion")
@@ -87,6 +90,11 @@ public class KafkaOrchestratorConsumerService {
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
                 cacheService.cacheBroadcastContent(broadcastMapper.toBroadcastContentDTO(broadcast));
+                List<String> onlineUsers = cacheService.getOnlineUsers();
+                if (!onlineUsers.isEmpty()) {
+                    log.info("Updating statistics for 'ALL' broadcast {}: targeting and delivering to {} online users.", broadcast.getId(), onlineUsers.size());
+                    broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId(), onlineUsers.size());
+                }
                 break;
             case CANCELLED:
             case EXPIRED:
