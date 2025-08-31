@@ -2,9 +2,7 @@ package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.model.BroadcastMessage;
-import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
-import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.service.BroadcastStatisticsService;
 import com.example.broadcast.shared.service.UserService;
 import com.example.broadcast.shared.util.Constants;
@@ -30,7 +28,6 @@ import java.util.Collections;
 public class BroadcastActivationService {
 
     private final UserService userService;
-    private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
     private final BroadcastLifecycleService broadcastLifecycleService;
     private final BroadcastTargetingService broadcastTargetingService;
@@ -83,28 +80,12 @@ public class BroadcastActivationService {
                 List<String> targetUserIds = determineTargetUsersForWrite(broadcast);
                 // 2. Persist the user message records and initialize statistics.
                 if (!targetUserIds.isEmpty()) {
-                    persistUserMessages(broadcast, targetUserIds);
+                    broadcastLifecycleService.persistUserMessages(broadcast, targetUserIds);
                 }
                 // 3. Activate the broadcast, which now publishes one event PER USER to the outbox.
                 broadcastLifecycleService.activateAndPublishFanOutOnWriteBroadcast(broadcast);
             }
         }
-    }
-
-    private void persistUserMessages(BroadcastMessage broadcast, List<String> userIds) {
-        log.info("Persisting {} user_broadcast_messages records for scheduled broadcast ID: {}", userIds.size(), broadcast.getId());
-        List<UserBroadcastMessage> userMessages = userIds.stream()
-                .map(userId -> UserBroadcastMessage.builder()
-                        .broadcastId(broadcast.getId())
-                        .userId(userId)
-                        .deliveryStatus(Constants.DeliveryStatus.PENDING.name())
-                        .readStatus(Constants.ReadStatus.UNREAD.name())
-                        .build())
-                .collect(Collectors.toList());
-
-        userBroadcastRepository.saveAll(userMessages);
-        broadcastLifecycleService.initializeStatistics(broadcast.getId(), userIds.size());
-        
     }
 
     private List<String> determineTargetUsersForWrite(BroadcastMessage broadcast) {

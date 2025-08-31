@@ -127,36 +127,39 @@ public class BroadcastLifecycleService {
 
     // NEW private helper method to determine users for write strategies
     private List<String> determineTargetUsersForWrite(BroadcastMessage broadcast) {
-    return switch (Constants.TargetType.valueOf(broadcast.getTargetType())) {
-        // MODIFIED: Parse the JSON string back to a List
-        case SELECTED -> JsonUtils.parseJsonArray(broadcast.getTargetIds());
-        
-        case ROLE -> JsonUtils.parseJsonArray(broadcast.getTargetIds()).stream() // MODIFIED
-                .flatMap(role -> userService.getUserIdsByRole(role).stream())
-                .distinct()
-                .collect(Collectors.toList());
-        
-        case PRODUCT -> {
-            // This case also needs to parse the JSON string
-            yield JsonUtils.parseJsonArray(broadcast.getTargetIds()).stream() // MODIFIED
-                    .flatMap(productId -> userService.getUserIdsByProduct(productId).stream())
+        return switch (Constants.TargetType.valueOf(broadcast.getTargetType())) {
+            // MODIFIED: Parse the JSON string back to a List
+            case SELECTED -> JsonUtils.parseJsonArray(broadcast.getTargetIds());
+            
+            case ROLE -> JsonUtils.parseJsonArray(broadcast.getTargetIds()).stream() // MODIFIED
+                    .flatMap(role -> userService.getUserIdsByRole(role).stream())
                     .distinct()
                     .collect(Collectors.toList());
-        }
-        
-        default -> Collections.emptyList();
-    };
-}
+            
+            case PRODUCT -> {
+                // This case also needs to parse the JSON string
+                yield JsonUtils.parseJsonArray(broadcast.getTargetIds()).stream() // MODIFIED
+                        .flatMap(productId -> userService.getUserIdsByProduct(productId).stream())
+                        .distinct()
+                        .collect(Collectors.toList());
+            }
+            
+            default -> Collections.emptyList();
+        };
+    }
 
-    // NEW private helper to perform the batch insert and stats initialization
-    private void persistUserMessages(BroadcastMessage broadcast, List<String> userIds) {
+    public void persistUserMessages(BroadcastMessage broadcast, List<String> userIds) {
         log.info("Persisting {} user_broadcast_messages records for broadcast ID: {}", userIds.size(), broadcast.getId());
+
+        final OffsetDateTime creationTime = OffsetDateTime.now(ZoneOffset.UTC);
+
         List<UserBroadcastMessage> userMessages = userIds.stream()
                 .map(userId -> UserBroadcastMessage.builder()
                         .broadcastId(broadcast.getId())
                         .userId(userId)
                         .deliveryStatus(Constants.DeliveryStatus.PENDING.name())
                         .readStatus(Constants.ReadStatus.UNREAD.name())
+                        .createdAt(creationTime)
                         .build())
                 .collect(Collectors.toList());
 
@@ -181,7 +184,7 @@ public class BroadcastLifecycleService {
         broadcast.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         broadcastRepository.save(broadcast);
         
-        // 2. --- NEW EARLY FAN-OUT LOGIC ---
+        // 2. --- EARLY FAN-OUT LOGIC ---
         // Fetch the list of users that the async task already persisted.
         List<String> targetUserIds = userBroadcastRepository.findByBroadcastId(broadcastId).stream()
                 .map(UserBroadcastMessage::getUserId)
