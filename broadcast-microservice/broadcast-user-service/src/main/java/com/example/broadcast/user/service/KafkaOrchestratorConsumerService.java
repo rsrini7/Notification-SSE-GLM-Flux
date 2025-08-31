@@ -58,6 +58,16 @@ public class KafkaOrchestratorConsumerService {
                                            @Header(KafkaHeaders.OFFSET) long offset,
                                            Acknowledgment acknowledgment) {
 
+        cacheService.getBroadcastContent(event.getBroadcastId()).or(() ->
+            broadcastRepository.findById(event.getBroadcastId())
+                .map(broadcastMapper::toBroadcastContentDTO)
+                .map(content -> {
+                    cacheService.cacheBroadcastContent(content);
+                    log.info("Proactively cached content for broadcast {}", event.getBroadcastId());
+                    return content;
+                })
+        );
+
         if (event.getUserId() != null) {
             handleUserSpecificEvent(event);
 
@@ -78,6 +88,10 @@ public class KafkaOrchestratorConsumerService {
 
     private void handleUserSpecificEvent(MessageDeliveryEvent event) {
         log.debug("Processing user-specific event for user {}", event.getUserId());
+        if (Constants.EventType.valueOf(event.getEventType()) == Constants.EventType.CREATED) {
+            log.info("Evicting inbox cache for user {} due to new CREATED event.", event.getUserId());
+            cacheService.evictUserInbox(event.getUserId());
+        }
         scatterToUser(event);
     }
 

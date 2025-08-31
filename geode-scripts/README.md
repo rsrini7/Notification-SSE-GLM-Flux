@@ -26,4 +26,6 @@ query --query="SELECT e.key, e.value FROM /user-connections.entries e"
 query --query="SELECT e.key, e.value FROM /broadcast-content.entries e"
 query --query="SELECT e.key, e.value FROM /user-messages-inbox.entries e"
 
+get --key="user-002" --region="/user-messages-inbox"
 
+query --query="SELECT e as messages FROM /user-messages-inbox.entries e WHERE e.key = 'user-002'"
