@@ -5,8 +5,8 @@ import com.example.broadcast.shared.dto.admin.RedriveFailureDetail;
 import com.example.broadcast.shared.dto.admin.DltMessage;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
+import com.example.broadcast.shared.service.KafkaListnerHelper;
 import com.example.broadcast.shared.service.MessageStatusService;
-import com.example.broadcast.shared.service.TopicNamer;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
@@ -36,7 +36,7 @@ public class DltService {
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastRepository broadcastRepository;
     private final MessageStatusService messageStatusService;
-    private final TopicNamer topicNamer;
+    private final KafkaListnerHelper kafkaListnerHelper ;
     
     public Collection<DltMessage> getDltMessages() {
         return dltRepository.findAllByOrderByFailedAtDesc();
@@ -170,6 +170,6 @@ public class DltService {
     private String resolveDltTopicName(String originalTopic) {
         // This logic should not be recursive. It should always derive the DLT name
         // from the primary orchestration topic, not from another DLT.
-        return topicNamer.getOrchestrationDltTopic();
+        return kafkaListnerHelper.getOrchestrationDltTopic();
     }
 }

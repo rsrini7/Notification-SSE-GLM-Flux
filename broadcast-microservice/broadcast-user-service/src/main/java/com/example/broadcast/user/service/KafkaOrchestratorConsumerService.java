@@ -46,9 +46,9 @@ public class KafkaOrchestratorConsumerService {
     private final Region<String, Object> sseAllMessagesRegion;
 
     @KafkaListener(
-            topics = "#{@topicNamer.getOrchestrationTopic()}",
-            groupId = "${broadcast.kafka.consumer.group-orchestration}",
-            containerFactory = "kafkaListenerContainerFactory"
+            topics = "#{@kafkaListnerHelper.getOrchestrationTopic()}",
+            groupId = "#{@kafkaListnerHelper.getOrchestrationGroupId()}",
+            containerFactory = "#{@kafkaListnerHelper.getOrchestratorListnerContainerFactory()}"
     )
     @Transactional
     public void orchestrateBroadcastEvents(MessageDeliveryEvent event,
