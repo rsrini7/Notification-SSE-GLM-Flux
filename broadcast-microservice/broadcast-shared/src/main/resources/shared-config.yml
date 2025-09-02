@@ -1,0 +1,150 @@
+# This file centralizes all common configuration for both microservices.
+
+# Common server settings for both services
+server:
+  shutdown: graceful
+  http2:
+    enabled: true
+
+# Spring Boot application settings, applied to both services
+spring:
+  application:
+    # Service-specific names will override this in their respective application.yml files
+    name: broadcast-service
+  threads:
+    virtual:
+      enabled: true
+  # H2 Database Configuration (default profile)
+  datasource:
+    url: jdbc:h2:~/broadcast-system/broadcastdb;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: false
+      path: /h2-console
+
+  # Kafka Configuration
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        '[enable.idempotence]': true
+        '[max.in.flight.requests.per.connection]': 5
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      properties:
+        '[spring.json.trusted.packages]': "*"
+        '[max.poll.records]': 500
+        '[fetch.max.wait.ms]': 1000
+    listener:
+      ack-mode: MANUAL_IMMEDIATE
+      concurrency: 3
+
+  # Jackson JSON Configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: UTC
+
+# Management and Monitoring Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,env,metrics,prometheus,circuitbreakers,bulkheads,ratelimiters
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+      validate-group-membership: false
+      group:
+        readiness:
+          include: db,kafka
+        liveness:
+          include: ping
+
+# Logging Configuration
+logging:
+  level:
+    '[com.example.broadcast]': INFO
+    '[org.springframework.kafka]': WARN
+    '[org.springframework.web]': INFO
+    '[org.springframework.jdbc]': INFO
+    '[io.github.resilience4j]': INFO
+    '[org.apache.kafka.clients.admin.AdminClientConfig]': WARN
+    '[org.apache.kafka.clients.consumer.ConsumerConfig]': WARN
+    '[org.apache.kafka.clients.producer.ProducerConfig]': WARN
+    '[org.apache.kafka.common.metrics]': WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Resilience4j Configuration for fault tolerance
+resilience4j:
+  circuitbreaker:
+    instances:
+      userService:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+  bulkhead:
+    instances:
+      userService:
+        maxConcurrentCalls: 10
+        maxWaitDuration: 10ms
+
+# Custom Application Properties
+broadcast:
+  # h2-console ports must be unique per service, so they remain in service-specific files.
+  simulation:
+    user-fetch-delay-ms: 5000
+  sse:
+    clientTimeoutThreshold: 60000
+    heartbeat-interval: 30000
+  db:
+    batch-size: 1000
+    connection-pool-size: 50
+  kafka:
+    topic:
+      name-orchestration: broadcast-orchestration
+      partitions: 1
+      replication-factor: 1
+    consumer:
+      group-dlt: "broadcast-dlt-group"
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+  geode:
+    locator:
+      host: ${BROADCAST_GEODE_LOCATOR_HOST:localhost}
+      port: 10334
+
+---
+# PostgreSQL-specific profile shared by both services
+spring:
+  config:
+    activate:
+      on-profile: "dev-pg"
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/broadcastdb?serverTimezone=UTC}
+    driver-class-name: org.postgresql.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:user}
+    password: ${SPRING_DATASOURCE_PASSWORD:password}
+    hikari:
+      max-lifetime: 1800000 # 30 minutes
+      maximum-pool-size: 50
+      data-source-properties:
+        serverTimezone: UTC
