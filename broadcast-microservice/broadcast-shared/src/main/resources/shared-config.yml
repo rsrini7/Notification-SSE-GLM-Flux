@@ -145,6 +145,8 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:password}
     hikari:
       max-lifetime: 1800000 # 30 minutes
-      maximum-pool-size: 50
+      maximum-pool-size: 20 # to avoid too many connections
+      minimum-idle: 5 # set minimum idle connctions
+      idle-timeout: 600000 #10 mins before idle connections are removed
       data-source-properties:
         serverTimezone: UTC
