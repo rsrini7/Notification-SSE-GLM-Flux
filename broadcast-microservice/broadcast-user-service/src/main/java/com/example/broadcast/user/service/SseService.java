@@ -33,7 +33,7 @@ public class SseService {
 
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastRepository userBroadcastRepository; 
-    private final BroadcastStatisticsRepository broadcastStatisticsRepository;
+    private final UserMessageService userMessageService;
     private final BroadcastMapper broadcastMapper;
     private final SseConnectionManager sseConnectionManager;
     private final SseEventFactory sseEventFactory;
@@ -123,7 +123,7 @@ public class SseService {
             : String.valueOf(response.getBroadcastId());
 
         sendSseEvent(userId, SseEventType.MESSAGE, eventId, response);
-        broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getId());
+        userMessageService.recordDeliveryForFanOutOnRead(userId, broadcast.getId());
     }
     
     private void sendRemoveMessageEvent(String userId, Long broadcastId) {

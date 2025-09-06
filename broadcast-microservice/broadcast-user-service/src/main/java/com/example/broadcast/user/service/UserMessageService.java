@@ -14,6 +14,8 @@ import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.user.service.cache.CacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -256,5 +258,48 @@ public class UserMessageService {
         broadcastStatisticsRepository.incrementReadCount(broadcastId);
         messageStatusService.publishReadEvent(broadcastId, userId);
         log.info("Successfully processed 'mark as read' for broadcast {} for user {} and published READ event.", broadcastId, userId);
+    }
+
+
+     /**
+     * Asynchronously creates a 'DELIVERED' record for a user who has just received
+     * a fan-out-on-read ('ALL') broadcast via SSE.
+     * This runs in a new transaction to avoid blocking the real-time delivery path.
+     * It is idempotent and will not create a duplicate record.
+     *
+     * @param userId The ID of the user who received the message.
+     * @param broadcastId The ID of the broadcast that was delivered.
+     */
+    @Async
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordDeliveryForFanOutOnRead(String userId, Long broadcastId) {
+        try {
+            // Idempotency check: Don't create a record if one already exists.
+            if (userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcastId).isPresent()) {
+                log.info("User message record for user {} and broadcast {} already exists. No new record created.", userId, broadcastId);
+                return;
+            }
+
+            log.info("Creating 'DELIVERED' record for user {} for 'ALL' broadcast {}", userId, broadcastId);
+            UserBroadcastMessage deliveredMessage = UserBroadcastMessage.builder()
+                    .userId(userId)
+                    .broadcastId(broadcastId)
+                    .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
+                    .readStatus(Constants.ReadStatus.UNREAD.name())
+                    .deliveredAt(OffsetDateTime.now(ZoneOffset.UTC))
+                    .build();
+
+            userBroadcastRepository.save(deliveredMessage);
+
+            // Atomically increment the central delivery counter
+            broadcastStatisticsRepository.incrementDeliveredCount(broadcastId);
+
+        } catch (DataIntegrityViolationException e) {
+            // This handles the rare race condition where another thread creates the record
+            // between our check and our save operation.
+            log.warn("Caught race condition when creating delivered record for user {} and broadcast {}. Ignoring.", userId, broadcastId);
+        } catch (Exception e) {
+            log.error("Failed to record 'DELIVERED' status for user {} and broadcast {}", userId, broadcastId, e);
+        }
     }
 }
