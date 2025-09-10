@@ -10,8 +10,6 @@ import com.example.broadcast.shared.util.Constants.GeodeRegionNames;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.apache.geode.cache.EvictionAction;
-import org.apache.geode.cache.EvictionAttributes;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.ClientCache;
 import org.apache.geode.cache.client.ClientCacheFactory;
@@ -60,19 +58,7 @@ public class GeodeClientConfig {
 
     @Bean("userMessagesInboxRegion")
     public Region<String, List<UserMessageInbox>> userMessagesInboxRegion(ClientCache clientCache) {
-        log.info("Programmatically creating 'user-messages-inbox' region with LRU entry limit: {}",
-                appProperties.getGeode().getRegions().getUserMessagesInbox().getLruMaxEntries());
-
-        // Define the LRU eviction attributes based on application properties
-        EvictionAttributes evictionAttributes = EvictionAttributes.createLRUEntryAttributes(
-                appProperties.getGeode().getRegions().getUserMessagesInbox().getLruMaxEntries(),
-                EvictionAction.LOCAL_DESTROY
-        );
-
-        // Create the region programmatically
-        // Note: Using CACHING_PROXY to enable local caching and eviction policies
-        return clientCache.<String, List<UserMessageInbox>>createClientRegionFactory(ClientRegionShortcut.CACHING_PROXY)
-                .setEvictionAttributes(evictionAttributes)
+        return clientCache.<String, List<UserMessageInbox>>createClientRegionFactory(ClientRegionShortcut.PROXY)
                 .create("user-messages-inbox");
     }
 

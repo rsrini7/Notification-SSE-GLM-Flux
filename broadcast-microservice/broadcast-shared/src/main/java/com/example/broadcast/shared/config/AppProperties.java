@@ -48,7 +48,9 @@ public class AppProperties {
             @Data
             public static class UserMessagesInbox {
                 @Positive
-                private int lruMaxEntries = 100000; // Default value
+                private int cleanupThreshold = 100000;
+                @Positive
+                private long cleanupJobRateMs = 300000L;
             }
         }
 
