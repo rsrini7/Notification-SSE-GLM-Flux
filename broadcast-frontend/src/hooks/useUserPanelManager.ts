@@ -38,11 +38,16 @@ export const useUserPanelManager = () => {
     fetchAllUsers();
   }, [toast]);
 
-  // CORRECTED: availableUsers is now derived from userPanels
+  // availableUsers is now derived from userPanels
   const availableUsers = useMemo(() => {
-    const currentPanelUserIds = userPanels.map(panel => panel.userId);
-    return allUsers.filter(u => !currentPanelUserIds.includes(u));
-  }, [allUsers, userPanels]);
+      // If duplicates are allowed, the available list is always the full list of users.
+      if (allowDuplicates) {
+        return allUsers;
+      }
+      // Otherwise (default behavior), filter out users who are already in a panel.
+      const currentPanelUserIds = userPanels.map(panel => panel.userId);
+      return allUsers.filter(u => !currentPanelUserIds.includes(u));
+  }, [allUsers, userPanels, allowDuplicates]);
 
   // CORRECTED: addUser logic is mostly the same, but was already correct
   const addUser = useCallback(() => {
