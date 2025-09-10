@@ -2,8 +2,6 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
-import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
-import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
@@ -18,18 +16,11 @@ import com.example.broadcast.user.service.cache.CacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.apache.geode.cache.Region;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -51,107 +42,33 @@ public class SseService {
     private final CacheService cacheService;
     private final AppProperties appProperties;
 
-    @Qualifier("userConnectionsRegion")
-    private final Region<String, Map<String, UserConnectionInfo>> userConnectionsRegion;
-    @Qualifier("connectionHeartbeatRegion")
-    private final Region<String, ConnectionHeartbeat> connectionHeartbeatRegion;
-    @Qualifier("geodeScheduler")
-    private final Scheduler geodeScheduler;
 
-    /**
-     * The main entry point for establishing an SSE connection.
-     * It atomically checks the connection limit and returns either a full event stream
-     * or a single "limit reached" event.
-     */
     public Flux<ServerSentEvent<String>> establishSseConnection(String userId, String connectionId) {
-        // This reactive chain now uses the optimistic locking registration method
-        return registerConnectionAtomically(userId, connectionId)
-            .flatMapMany(canAccept -> {
-                if (Boolean.TRUE.equals(canAccept)) {
-                    log.info("Connection limit check passed for user '{}'. Establishing full SSE stream.", userId);
-                    return sseConnectionManager.createEventStream(userId, connectionId);
-                } else {
-                    log.warn("Connection limit reached for user '{}'. Sending degraded connection event.", userId);
-                    ServerSentEvent<String> limitEvent = sseEventFactory.createEvent(
-                        Constants.SseEventType.CONNECTION_LIMIT_REACHED,
-                        connectionId,
-                        Map.of("message", "Connection limit per user reached.")
-                    );
-                    return Flux.just(limitEvent);
-                }
-            })
-            .onErrorResume(MaxRetriesExceededException.class, ex -> {
-                 log.error("Failed to register connection due to high contention.", ex);
-                 return Flux.error(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage()));
-            });
-    }
-
-     /**
-     * Atomically registers a connection using an optimistic locking (compare-and-set) retry loop.
-     * This is non-blocking from the caller's perspective as it runs on a dedicated scheduler.
-     * @return A Mono emitting true if the connection was registered, false if the limit was reached.
-     */
-    private Mono<Boolean> registerConnectionAtomically(String userId, String connectionId) {
-        return Mono.fromCallable(() -> {
-            int maxRetries = 5;
-            for (int i = 0; i < maxRetries; i++) {
-                // 1. READ from the userConnectionsRegion
-                Map<String, UserConnectionInfo> oldConnections = userConnectionsRegion.get(userId);
-                
-                int currentSize = (oldConnections == null) ? 0 : oldConnections.size();
-                if (currentSize >= appProperties.getSse().getMaxConnectionsPerUser()) {
-                    return false; // Limit reached
-                }
-
-                // 2. MODIFY the map in memory
-                UserConnectionInfo newConnectionInfo = createNewConnectionInfo(userId, connectionId);
-                Map<String, UserConnectionInfo> newConnections = (oldConnections == null) ? new HashMap<>() : new HashMap<>(oldConnections);
-                newConnections.put(connectionId, newConnectionInfo);
-
-                // 3. COMPARE-AND-SET on the userConnectionsRegion
-                boolean success = (oldConnections == null)
-                    ? (userConnectionsRegion.putIfAbsent(userId, newConnections) == null)
-                    : userConnectionsRegion.replace(userId, oldConnections, newConnections);
-
-                if (success) {
-                    log.info("Successfully updated userConnectionsRegion for user '{}'", userId);
-
-                    // 4. On success, NOW put the metadata into the connectionHeartbeatRegion
-                    ConnectionHeartbeat connectionHeartbeat = new ConnectionHeartbeat(userId, newConnectionInfo.getConnectedAtEpochMilli());
-                    
-                    // This is the CRITICAL line: Use the correct region
-                    connectionHeartbeatRegion.put(connectionId, connectionHeartbeat);
-                    
-                    log.info("Successfully registered heartbeat for connection '{}'", connectionId);
-                    return true; // Success!
-                }
-                
-                log.warn("Optimistic locking conflict for user '{}'. Retrying... (attempt {}/{})", userId, i + 1, maxRetries);
-            }
-            throw new MaxRetriesExceededException("Failed to register connection for user " + userId + " after multiple attempts.");
-
-        }).subscribeOn(geodeScheduler);
-    }
-    
-    private UserConnectionInfo createNewConnectionInfo(String userId, String connectionId) {
-        long nowEpochMilli = OffsetDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli();
         String podName = appProperties.getPodName();
         String clusterName = appProperties.getClusterName();
-        return new UserConnectionInfo(userId, connectionId, podName, clusterName, nowEpochMilli, nowEpochMilli);
-    }
-    
-    // You'll need a new exception for this
-    // Create new file: broadcast-microservice/broadcast-shared/src/main/java/com/example/broadcast/shared/exception/MaxRetriesExceededException.java
-    public class MaxRetriesExceededException extends RuntimeException {
-        public MaxRetriesExceededException(String message) {
-            super(message);
+
+        // Directly call the synchronous, blocking method.
+        // This is acceptable here as the controller is the entry point, and the operation
+        // is expected to be fast under normal conditions.
+        boolean registrationSuccess = cacheService.registerUserConnection(userId, connectionId, podName, clusterName);
+
+        if (registrationSuccess) {
+            log.info("Registration successful for user '{}'. Establishing full SSE stream.", userId);
+            return sseConnectionManager.createEventStream(userId, connectionId);
+        } else {
+            // If registration fails (limit reached), return the degraded connection event.
+            log.warn("Registration failed for user '{}' (limit reached). Sending degraded connection event.", userId);
+            ServerSentEvent<String> limitEvent = sseEventFactory.createEvent(
+                Constants.SseEventType.CONNECTION_LIMIT_REACHED,
+                connectionId,
+                Map.of("message", "Connection limit per user reached.")
+            );
+            return Flux.just(limitEvent);
         }
     }
 
-    public Mono<Void> registerConnection(String userId, String connectionId) {
-         return Mono.fromRunnable(() -> {
-            sseConnectionManager.registerConnection(userId, connectionId); //This will call the GeodeCacheService
-        }).subscribeOn(geodeScheduler).then();
+    public void registerConnection(String userId, String connectionId) {
+        sseConnectionManager.registerConnection(userId, connectionId); //This will call the GeodeCacheService
     }
 
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {

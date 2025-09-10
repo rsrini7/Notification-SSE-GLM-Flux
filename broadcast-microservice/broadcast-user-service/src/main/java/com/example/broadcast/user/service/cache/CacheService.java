@@ -3,8 +3,6 @@ package com.example.broadcast.user.service.cache;
 import com.example.broadcast.shared.dto.BroadcastContent;
 import com.example.broadcast.shared.dto.cache.*;
 
-import reactor.core.publisher.Mono;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -12,8 +10,8 @@ import java.util.Set;
 
 public interface CacheService {
 
-    Mono<Void> registerUserConnection(String userId, String connectionId, String podId, String clusterName);
-    Mono<Void> unregisterUserConnection(String userId, String connectionId);
+    boolean registerUserConnection(String userId, String connectionId, String podId, String clusterName);
+    void unregisterUserConnection(String userId, String connectionId);
     Map<String, UserConnectionInfo> getConnectionsForUser(String userId);
     boolean isUserOnline(String userId);
     void updateHeartbeats(Set<String> connectionIds);

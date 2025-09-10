@@ -3,10 +3,9 @@ package com.example.broadcast.user.service.cache;
 import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.BroadcastContent;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.ClientCache;
@@ -27,62 +26,98 @@ public class GeodeCacheService implements CacheService {
     private final Region<String, ConnectionHeartbeat> connectionHeartbeatRegion;
     private final Region<String, List<UserMessageInbox>> userMessagesInboxRegion;
     private final Region<Long, BroadcastContent> broadcastContentRegion;
-    private final Scheduler geodeScheduler;
+    private final AppProperties appProperties;
 
     public GeodeCacheService(ClientCache clientCache,
                              @Qualifier("userConnectionsRegion") Region<String, Map<String, UserConnectionInfo>> userConnectionsRegion,
                              @Qualifier("connectionHeartbeatRegion") Region<String, ConnectionHeartbeat> connectionHeartbeatRegion,
                              @Qualifier("userMessagesInboxRegion") Region<String, List<UserMessageInbox>> userMessagesInboxRegion,
                              @Qualifier("broadcastContentRegion") Region<Long, BroadcastContent> broadcastContentRegion,
-                             @Qualifier("geodeScheduler") Scheduler geodeScheduler
+                             AppProperties appProperties
     ) {
         this.clientCache = clientCache;
         this.userConnectionsRegion = userConnectionsRegion;
         this.connectionHeartbeatRegion = connectionHeartbeatRegion;
         this.userMessagesInboxRegion = userMessagesInboxRegion;
         this.broadcastContentRegion = broadcastContentRegion;
-        this.geodeScheduler = geodeScheduler;
+        this.appProperties = appProperties;
     }
 
     @Override
-    public Mono<Void> registerUserConnection(String userId, String connectionId, String podName, String clusterName) {
-        return Mono.fromRunnable(() -> {
+    public boolean registerUserConnection(String userId, String connectionId, String podName, String clusterName) {
+        int maxRetries = 5; // Prevent an infinite loop in high-contention scenarios
+        for (int i = 0; i < maxRetries; i++) {
+            
+            // 1. GET: Read the current value from Geode.
+            Map<String, UserConnectionInfo> oldConnections = userConnectionsRegion.get(userId);
+            
+            int currentSize = (oldConnections == null) ? 0 : oldConnections.size();
+            if (currentSize >= appProperties.getSse().getMaxConnectionsPerUser()) {
+                log.warn("Connection limit reached for user '{}'. Registration failed.", userId);
+                return false; // Limit reached
+            }
+
+            // 2. MODIFY: Create the new connection and add it to a new map.
             long nowEpochMilli = OffsetDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli();
             UserConnectionInfo newConnectionInfo = new UserConnectionInfo(userId, connectionId, podName, clusterName, nowEpochMilli, nowEpochMilli);
+            Map<String, UserConnectionInfo> newConnections = (oldConnections == null) ? new HashMap<>() : new HashMap<>(oldConnections);
+            newConnections.put(connectionId, newConnectionInfo);
 
-            // Atomically update the user's connection map
-            userConnectionsRegion.compute(userId, (key, existingConnections) -> {
-                if (existingConnections == null) {
-                    existingConnections = new HashMap<>();
-                }
-                existingConnections.put(connectionId, newConnectionInfo);
-                return existingConnections;
-            });
+            // 3. ATOMIC REPLACE (Compare-and-Set)
+            boolean success;
+            if (oldConnections == null) {
+                success = (userConnectionsRegion.putIfAbsent(userId, newConnections) == null);
+            } else {
+                success = userConnectionsRegion.replace(userId, oldConnections, newConnections);
+            }
+
+            if (success) {
+                log.info("Successfully registered connection {} for user '{}'", connectionId, userId);
+                ConnectionHeartbeat metadata = new ConnectionHeartbeat(userId, nowEpochMilli);
+                connectionHeartbeatRegion.put(connectionId, metadata);
+                return true; // Success! Exit the method.
+            }
             
-            // Heartbeat logic remains the same
-            ConnectionHeartbeat metadata = new ConnectionHeartbeat(userId, nowEpochMilli);
-            connectionHeartbeatRegion.put(connectionId, metadata);
-         }).subscribeOn(geodeScheduler).then();
+            // If success is false, another thread updated the data. Loop to retry.
+            log.warn("Optimistic locking conflict for user '{}'. Retrying... (attempt {}/{})", userId, i + 1, maxRetries);
+        }
+        
+        // If the loop finishes, all retries have failed.
+        log.error("Failed to register connection for user {} after {} attempts.", userId, maxRetries);
+        return false;
     }
 
     @Override
-    public Mono<Void> unregisterUserConnection(String userId, String connectionId) {
-        return Mono.fromRunnable(() -> {
-            // Atomically update the user's connection map
-            userConnectionsRegion.compute(userId, (key, existingConnections) -> {
-                if (existingConnections != null) {
-                    existingConnections.remove(connectionId);
-                    // If the map is now empty, remove the user's entry completely
-                    if (existingConnections.isEmpty()) {
-                        return null; 
-                    }
-                }
-                return existingConnections;
-            });
+    public void unregisterUserConnection(String userId, String connectionId) {
+    log.info("Synchronously unregistering connection {} for user {}", connectionId, userId);
+    try {
+        // GET the current map of connections for the user.
+        Map<String, UserConnectionInfo> existingConnections = userConnectionsRegion.get(userId);
 
-            connectionHeartbeatRegion.remove(connectionId);
-        }).subscribeOn(geodeScheduler).then();
+        if (existingConnections != null) {
+            // MODIFY the map in local memory.
+            Map<String, UserConnectionInfo> updatedConnections = new HashMap<>(existingConnections);
+            updatedConnections.remove(connectionId);
+
+            if (updatedConnections.isEmpty()) {
+                // If the map is now empty, REMOVE the entire entry for the user.
+                userConnectionsRegion.remove(userId);
+                log.info("Removed last connection for user '{}'. User key is now removed from region.", userId);
+            } else {
+                // Otherwise, PUT the updated map back into the region.
+                userConnectionsRegion.put(userId, updatedConnections);
+                log.info("Removed connection {} for user '{}'. User now has {} connections.", connectionId, userId, updatedConnections.size());
+            }
+        }
+
+        // Always remove the individual connection's heartbeat.
+        connectionHeartbeatRegion.remove(connectionId);
+        log.info("Synchronously completed unregister for connection {}", connectionId);
+
+    } catch (Exception e) {
+        log.error("Error during synchronous unregister for connection {}: {}", connectionId, e.getMessage());
     }
+}
     
     @Override
     public boolean isUserOnline(String userId) {

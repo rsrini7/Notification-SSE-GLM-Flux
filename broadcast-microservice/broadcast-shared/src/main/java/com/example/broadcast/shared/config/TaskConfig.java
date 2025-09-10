@@ -50,9 +50,4 @@ public class TaskConfig {
         return Schedulers.newParallel("jdbc-io-", parallelism);
     }
 
-    @Bean
-    public Scheduler geodeScheduler() {
-        // Creates a cached thread pool that is optimized for short-lived blocking tasks.
-        return Schedulers.newBoundedElastic(100, 100000, "geode-io-");
-    }
 }
