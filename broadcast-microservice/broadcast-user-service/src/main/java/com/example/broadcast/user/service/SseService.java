@@ -1,6 +1,8 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
+import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
 import com.example.broadcast.shared.mapper.BroadcastMapper;
@@ -14,16 +16,21 @@ import com.example.broadcast.user.service.cache.CacheService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.apache.geode.cache.Region;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 
 import java.util.Map;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.locks.Lock;
 
 @Service
 @Slf4j
@@ -38,10 +45,67 @@ public class SseService {
     private final SseEventFactory sseEventFactory;
     private final MessageStatusService messageStatusService;
     private final CacheService cacheService;
+    private final AppProperties appProperties;
 
-    @Transactional
-    public void registerConnection(String userId, String connectionId) {
-        sseConnectionManager.registerConnection(userId, connectionId);
+    @Qualifier("userConnectionsRegion")
+    private final Region<String, Map<String, UserConnectionInfo>> userConnectionsRegion;
+    @Qualifier("geodeScheduler")
+    private final Scheduler geodeScheduler;
+
+    /**
+     * The main entry point for establishing an SSE connection.
+     * It atomically checks the connection limit and returns either a full event stream
+     * or a single "limit reached" event.
+     */
+    public Flux<ServerSentEvent<String>> establishSseConnection(String userId, String connectionId) {
+        // This reactive chain will determine if a connection can be accepted
+        return canAcceptConnection(userId)
+            .flatMapMany(canAccept -> {
+                if (canAccept) {
+                    // If accepted, register and create the full, persistent event stream
+                    log.info("Connection limit check passed for user '{}'. Establishing full SSE stream.", userId);
+                    return registerConnection(userId, connectionId)
+                        .thenMany(sseConnectionManager.createEventStream(userId, connectionId));
+                } else {
+                    // If rejected, create a temporary stream that sends one event and closes
+                    log.warn("Connection limit reached for user '{}'. Sending degraded connection event.", userId);
+                    ServerSentEvent<String> limitEvent = sseEventFactory.createEvent(
+                        Constants.SseEventType.CONNECTION_LIMIT_REACHED,
+                        connectionId,
+                        Map.of("message", "Connection limit per user reached.")
+                    );
+                    return Flux.just(limitEvent);
+                }
+            });
+    }
+
+    /**
+     * Atomically checks if a new connection can be accepted for a user using a distributed lock.
+     * This entire operation is performed on a separate thread pool to avoid blocking the event loop.
+     * @return A Mono emitting true if the connection is allowed, false otherwise.
+     */
+    private Mono<Boolean> canAcceptConnection(String userId) {
+        return Mono.fromCallable(() -> {
+            Lock userLock = this.userConnectionsRegion.getDistributedLock(userId);
+            log.debug("Attempting to acquire distributed lock for user '{}' to check connection limit.", userId);
+            userLock.lock();
+            try {
+                log.debug("Lock acquired for user '{}'.", userId);
+                int maxConnections = appProperties.getSse().getMaxConnectionsPerUser();
+                Map<String, UserConnectionInfo> currentConnections = userConnectionsRegion.get(userId);
+                int currentSize = (currentConnections == null) ? 0 : currentConnections.size();
+                return currentSize < maxConnections;
+            } finally {
+                userLock.unlock();
+                log.debug("Lock released for user '{}'.", userId);
+            }
+        }).subscribeOn(geodeScheduler);
+    }
+
+    public Mono<Void> registerConnection(String userId, String connectionId) {
+         return Mono.fromRunnable(() -> {
+            sseConnectionManager.registerConnection(userId, connectionId); //This will call the GeodeCacheService
+        }).subscribeOn(geodeScheduler).then();
     }
 
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
@@ -50,7 +114,6 @@ public class SseService {
         return sseConnectionManager.createEventStream(userId, connectionId);
     }
 
-    @Transactional
     public void removeEventStream(String userId, String connectionId) {
         sseConnectionManager.removeEventStream(userId, connectionId);
     }

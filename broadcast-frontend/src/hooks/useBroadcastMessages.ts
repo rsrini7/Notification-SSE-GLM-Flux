@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useSseConnection } from './useSseConnection';
 import { userService, type UserBroadcastMessage } from '../services/api';
@@ -37,6 +37,10 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
       setLoading(false);
     }
   }, [userId, toast]);
+
+  useEffect(() => {
+    fetchMessages();
+  }, [fetchMessages]);
 
   const handleSseEvent = (event: { type: string; data: any }) => {
     const payload = event.data;
@@ -114,8 +118,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
-    // When the SSE connection is established, fetch the historical inbox.
-    fetchMessages();
   }, [toast, userId, fetchMessages]);
   
   const onDisconnect = useCallback(() => {
