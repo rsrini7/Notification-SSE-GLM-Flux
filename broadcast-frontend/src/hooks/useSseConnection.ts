@@ -68,6 +68,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const connectionIdRef = useRef<string | null>(null);
   const isForceDisconnectRef = useRef(false);
 
+  // STEP 1: Add a new ref to track if the limit was reached.
   const isLimitReachedRef = useRef(false);
 
   const generateConnectionId = useCallback(() => {
@@ -79,6 +80,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       const eventType = event.type.toUpperCase();
       const data = event.data ? JSON.parse(event.data) : {};
 
+      // STEP 2: Set the flag immediately when the event is received.
       if (eventType === 'CONNECTION_LIMIT_REACHED') {
         isLimitReachedRef.current = true;
       }
@@ -117,6 +119,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     // Use the ref to get the current state inside the function.
     if (eventSourceRef.current || stateRef.current.connecting) return;
 
+    // STEP 3: Reset the flag at the beginning of every new connection attempt.
     isLimitReachedRef.current = false;
 
     reconnectAttemptsRef.current++;
@@ -147,6 +150,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       setState(prev => ({...prev, connected: false, connecting: false}));
       onErrorRef.current?.(new Error('SSE connection error'));
 
+      // STEP 4: Add a guard clause to the error handler.
+      // If the limit was reached, do not attempt to reconnect.
       if (isLimitReachedRef.current) {
         console.log(`[SSE - ${userId}] Connection closed due to connection limit. Reconnect disabled.`);
         return;
