@@ -68,6 +68,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const connectionIdRef = useRef<string | null>(null);
   const isForceDisconnectRef = useRef(false);
 
+  const isLimitReachedRef = useRef(false);
+
   const generateConnectionId = useCallback(() => {
     return `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }, []);
@@ -76,6 +78,11 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     try {
       const eventType = event.type.toUpperCase();
       const data = event.data ? JSON.parse(event.data) : {};
+
+      if (eventType === 'CONNECTION_LIMIT_REACHED') {
+        isLimitReachedRef.current = true;
+      }
+
       console.log(`[SSE - ${userId}] Received event:`, { type: eventType, data });
       onMessageRef.current?.({ type: eventType, data: data });
     } catch (error) {
@@ -110,6 +117,8 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     // Use the ref to get the current state inside the function.
     if (eventSourceRef.current || stateRef.current.connecting) return;
 
+    isLimitReachedRef.current = false;
+
     reconnectAttemptsRef.current++;
     console.log(`[SSE - ${userId}] Attempting to connect... (Attempt ${reconnectAttemptsRef.current})`);
     setState(prev => ({ ...prev, connecting: true, error: prev.reconnectAttempt > 0 ? `Reconnecting...` : null, reconnectAttempt: reconnectAttemptsRef.current }));
@@ -137,6 +146,11 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       eventSourceRef.current = null;
       setState(prev => ({...prev, connected: false, connecting: false}));
       onErrorRef.current?.(new Error('SSE connection error'));
+
+      if (isLimitReachedRef.current) {
+        console.log(`[SSE - ${userId}] Connection closed due to connection limit. Reconnect disabled.`);
+        return;
+      }
       
       if (isForceDisconnectRef.current) {
         console.log(`[SSE - ${userId}] Force disconnect detected. Auto-reconnect disabled.`);
