@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
+import java.util.Map;
 
 @Configuration
 @RequiredArgsConstructor
@@ -45,8 +46,9 @@ public class GeodeClientConfig {
     }
 
     @Bean("userConnectionsRegion")
-    public Region<String, UserConnectionInfo> userConnectionsRegion(ClientCache clientCache) {
-        return clientCache.<String, UserConnectionInfo>createClientRegionFactory(ClientRegionShortcut.PROXY)
+    public Region<String, Map<String, UserConnectionInfo>> userConnectionsRegion(ClientCache clientCache) {
+        // The type signature is changed here
+        return clientCache.<String, Map<String, UserConnectionInfo>>createClientRegionFactory(ClientRegionShortcut.PROXY)
                 .create(GeodeRegionNames.USER_CONNECTIONS);
     }
    

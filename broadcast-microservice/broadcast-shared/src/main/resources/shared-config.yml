@@ -112,6 +112,7 @@ broadcast:
   simulation:
     user-fetch-delay-ms: 5000
   sse:
+    max-connections-per-user: 4
     clientTimeoutThreshold: 60000
     heartbeat-interval: 30000
   db:

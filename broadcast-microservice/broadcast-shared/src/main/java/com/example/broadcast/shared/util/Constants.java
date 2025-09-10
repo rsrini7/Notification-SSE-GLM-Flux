@@ -59,6 +59,7 @@ public final class Constants {
         READ_RECEIPT,
         MESSAGE_REMOVED,
         HEARTBEAT,
-        SERVER_SHUTDOWN
+        SERVER_SHUTDOWN,
+        CONNECTION_LIMIT_REACHED
     }
 }

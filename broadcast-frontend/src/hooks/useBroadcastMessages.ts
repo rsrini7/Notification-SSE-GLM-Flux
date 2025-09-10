@@ -18,6 +18,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   } = options;
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isDegraded, setIsDegraded] = useState(false);
   const { toast } = useToast();
 
   const fetchMessages = useCallback(async () => {
@@ -97,6 +98,15 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         });
         sseConnection.disconnect(false);
         break;
+      case 'CONNECTION_LIMIT_REACHED': // NEW CASE
+        toast({
+          title: 'Connection Limit Reached',
+          description: `Real-time updates are disabled for this panel for ${userId}.`,
+          variant: 'destructive',
+        });
+        setIsDegraded(true); // Set degraded mode
+        sseConnection.disconnect(true); // Ensure connection is fully terminated
+        break;
       default:
         console.log('Unhandled SSE event type:', event.type);
     }
@@ -148,6 +158,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     loading,
     stats,
     sseConnection,
+    isDegraded,
     actions: { 
       markAsRead, 
       refresh: fetchMessages

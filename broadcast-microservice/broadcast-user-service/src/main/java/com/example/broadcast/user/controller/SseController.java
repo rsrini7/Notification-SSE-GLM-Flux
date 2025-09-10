@@ -1,6 +1,8 @@
 package com.example.broadcast.user.controller;
 
 import com.example.broadcast.shared.config.AppProperties;
+import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.user.service.SseEventFactory;
 import com.example.broadcast.user.service.SseService;
 import com.example.broadcast.user.service.cache.CacheService;
 
@@ -19,6 +21,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import java.time.OffsetDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -31,6 +34,7 @@ public class SseController {
     private final CacheService cacheService;
     private final AppProperties appProperties;
     private final Scheduler jdbcScheduler;
+    private final SseEventFactory sseEventFactory;
 
     @GetMapping(value = "/connect", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RateLimiter(name = "sseConnectLimiter", fallbackMethod = "connectFallback")
@@ -39,6 +43,24 @@ public class SseController {
             @RequestParam(required = false) String connectionIdParam,
             ServerWebExchange exchange) {
         
+        // CONNECTION LIMIT
+        int maxConnections = appProperties.getSse().getMaxConnectionsPerUser();
+        int currentConnections = cacheService.getConnectionsForUser(userId).size();
+
+        if (currentConnections >= maxConnections) {
+            log.warn("Connection limit reached for user '{}'. Max: {}, Current: {}. Rejecting new connection.",
+                    userId, maxConnections, currentConnections);
+           // Create a specific event for the limit
+            ServerSentEvent<String> limitEvent = sseEventFactory.createEvent(
+                Constants.SseEventType.CONNECTION_LIMIT_REACHED,
+                connectionIdParam,
+                Map.of("message", "Connection limit per user reached.")
+            );
+
+            // Return a Flux that emits this single event and then completes.
+            return Flux.just(limitEvent).concatWith(Flux.empty());
+        }
+
         final String connectionId = (connectionIdParam == null || connectionIdParam.trim().isEmpty())
                                     ? UUID.randomUUID().toString()
                                     : connectionIdParam;

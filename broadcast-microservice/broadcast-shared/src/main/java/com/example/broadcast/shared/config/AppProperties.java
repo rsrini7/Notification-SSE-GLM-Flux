@@ -65,6 +65,8 @@ public class AppProperties {
     @Data
     public static class Sse {
         @Positive
+        private int maxConnectionsPerUser = 4;
+        @Positive
         private long clientTimeoutThreshold = 60000L;
         @Positive
         private long heartbeatInterval = 30000L;

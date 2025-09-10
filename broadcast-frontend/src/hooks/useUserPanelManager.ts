@@ -1,8 +1,19 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { userService } from '../services/api';
+import { v4 as uuidv4 } from 'uuid';
+
+// Define the new state structure for a panel
+export interface UserPanel {
+  panelId: string;
+  userId: string;
+}
 
 export const useUserPanelManager = () => {
+
+  const [userPanels, setUserPanels] = useState<UserPanel[]>([{ panelId: uuidv4(), userId: 'user-001' }]);
+  const [allowDuplicates, setAllowDuplicates] = useState<boolean>(false);
+
   const [users, setUsers] = useState<string[]>(['user-001']);
   const [allUsers, setAllUsers] = useState<string[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -35,14 +46,20 @@ export const useUserPanelManager = () => {
   const addUser = useCallback(() => {
     const userToAdd = selectedUserId || (availableUsers.length > 0 ? availableUsers[0] : '');
 
-    if (userToAdd && !users.includes(userToAdd)) {
-      setUsers(prevUsers => [...prevUsers, userToAdd]);
-      setSelectedUserId('');
-      toast({ title: 'User Added', description: `Panel for ${userToAdd} is now active.` });
-    } else if (userToAdd && users.includes(userToAdd)) {
+    if (!userToAdd) return;
+
+    // Check for duplicates only if the checkbox is NOT checked
+    const userExists = userPanels.some(panel => panel.userId === userToAdd);
+    if (!allowDuplicates && userExists) {
       toast({ title: 'User Exists', description: `A panel for ${userToAdd} is already open.`, variant: 'destructive' });
+      return;
     }
-  }, [selectedUserId, users, availableUsers, toast]);
+    
+    setUserPanels(prevPanels => [...prevPanels, { panelId: uuidv4(), userId: userToAdd }]);
+    setSelectedUserId('');
+    toast({ title: 'User Added', description: `Panel for ${userToAdd} is now active.` });
+    
+  }, [selectedUserId, userPanels, availableUsers, toast, allowDuplicates]);
 
   const addAllUsers = useCallback(() => {
     const usersToAdd = allUsers.filter(u => !users.includes(u));
@@ -70,13 +87,19 @@ export const useUserPanelManager = () => {
     }
   }, [users.length, toast]);
 
-  const removeUser = useCallback((userIdToRemove: string) => {
-    setUsers(users => users.filter(user => user !== userIdToRemove));
-    toast({ title: 'User Removed', description: `Panel for ${userIdToRemove} has been closed.` });
-  }, [toast]);
+   // Update removeUser to work with panelId
+  const removeUser = useCallback((panelIdToRemove: string) => {
+    const userId = userPanels.find(p => p.panelId === panelIdToRemove)?.userId;
+    setUserPanels(panels => panels.filter(panel => panel.panelId !== panelIdToRemove));
+    if (userId) {
+      toast({ title: 'User Removed', description: `Panel for ${userId} has been closed.` });
+    }
+  }, [toast, userPanels]);
 
   return {
     state: {
+        userPanels,
+        allowDuplicates,
         users,
         allUsers,
         selectedUserId,
@@ -85,6 +108,7 @@ export const useUserPanelManager = () => {
     actions: {
         addUser,
         addAllUsers,
+        setAllowDuplicates,
         removeAllUsers,
         removeUser,
         setSelectedUserId
