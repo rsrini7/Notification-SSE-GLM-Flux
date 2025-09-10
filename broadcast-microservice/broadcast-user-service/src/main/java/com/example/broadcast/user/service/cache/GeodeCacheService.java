@@ -89,35 +89,26 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public void unregisterUserConnection(String userId, String connectionId) {
-    log.info("Synchronously unregistering connection {} for user {}", connectionId, userId);
-    try {
-        // GET the current map of connections for the user.
-        Map<String, UserConnectionInfo> existingConnections = userConnectionsRegion.get(userId);
+        log.info("Synchronously unregistering connection {} for user {}", connectionId, userId);
+        try {
+            userConnectionsRegion.compute(userId, (key, existingConnections) -> {
+                if (existingConnections == null) {
+                    return null;
+                }
 
-        if (existingConnections != null) {
-            // MODIFY the map in local memory.
-            Map<String, UserConnectionInfo> updatedConnections = new HashMap<>(existingConnections);
-            updatedConnections.remove(connectionId);
+                // Create a new map to avoid modifying the existing one directly
+                Map<String, UserConnectionInfo> updatedConnections = new HashMap<>(existingConnections);
+                updatedConnections.remove(connectionId);
+                return updatedConnections.isEmpty() ? null : updatedConnections;
+            });
 
-            if (updatedConnections.isEmpty()) {
-                // If the map is now empty, REMOVE the entire entry for the user.
-                userConnectionsRegion.remove(userId);
-                log.info("Removed last connection for user '{}'. User key is now removed from region.", userId);
-            } else {
-                // Otherwise, PUT the updated map back into the region.
-                userConnectionsRegion.put(userId, updatedConnections);
-                log.info("Removed connection {} for user '{}'. User now has {} connections.", connectionId, userId, updatedConnections.size());
-            }
+            connectionHeartbeatRegion.remove(connectionId);
+            log.info("Synchronously completed unregister for connection {}", connectionId);
+
+        } catch (Exception e) {
+            log.error("Error during synchronous unregister for connection {}: {}", connectionId, e.getMessage());
         }
-
-        // Always remove the individual connection's heartbeat.
-        connectionHeartbeatRegion.remove(connectionId);
-        log.info("Synchronously completed unregister for connection {}", connectionId);
-
-    } catch (Exception e) {
-        log.error("Error during synchronous unregister for connection {}: {}", connectionId, e.getMessage());
     }
-}
     
     @Override
     public boolean isUserOnline(String userId) {
