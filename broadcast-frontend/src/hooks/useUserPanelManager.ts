@@ -3,31 +3,28 @@ import { useToast } from '@/hooks/use-toast';
 import { userService } from '../services/api';
 import { v4 as uuidv4 } from 'uuid';
 
-// Define the new state structure for a panel
+// Define the state structure for a panel
 export interface UserPanel {
   panelId: string;
   userId: string;
 }
 
 export const useUserPanelManager = () => {
-
   const [userPanels, setUserPanels] = useState<UserPanel[]>([{ panelId: uuidv4(), userId: 'user-001' }]);
   const [allowDuplicates, setAllowDuplicates] = useState<boolean>(false);
-
-  const [users, setUsers] = useState<string[]>(['user-001']);
   const [allUsers, setAllUsers] = useState<string[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
   const { toast } = useToast();
 
   useEffect(() => {
+    // This effect remains the same
     const fetchAllUsers = async () => {
       try {
         const userList = await userService.getAllUsers();
         if (Array.isArray(userList)) {
           setAllUsers(userList);
         } else {
-          console.error("Failed to fetch a valid user list. API response was not an array.");
-          setAllUsers([]); // Ensure it remains a valid array
+          setAllUsers([]);
         }
       } catch (error) {
         toast({
@@ -41,14 +38,17 @@ export const useUserPanelManager = () => {
     fetchAllUsers();
   }, [toast]);
 
-  const availableUsers = useMemo(() => allUsers.filter(u => !users.includes(u)), [allUsers, users]);
+  // CORRECTED: availableUsers is now derived from userPanels
+  const availableUsers = useMemo(() => {
+    const currentPanelUserIds = userPanels.map(panel => panel.userId);
+    return allUsers.filter(u => !currentPanelUserIds.includes(u));
+  }, [allUsers, userPanels]);
 
+  // CORRECTED: addUser logic is mostly the same, but was already correct
   const addUser = useCallback(() => {
     const userToAdd = selectedUserId || (availableUsers.length > 0 ? availableUsers[0] : '');
-
     if (!userToAdd) return;
 
-    // Check for duplicates only if the checkbox is NOT checked
     const userExists = userPanels.some(panel => panel.userId === userToAdd);
     if (!allowDuplicates && userExists) {
       toast({ title: 'User Exists', description: `A panel for ${userToAdd} is already open.`, variant: 'destructive' });
@@ -61,10 +61,12 @@ export const useUserPanelManager = () => {
     
   }, [selectedUserId, userPanels, availableUsers, toast, allowDuplicates]);
 
+  // CORRECTED: addAllUsers now updates the correct state
   const addAllUsers = useCallback(() => {
-    const usersToAdd = allUsers.filter(u => !users.includes(u));
+    const usersToAdd = allUsers.filter(u => !userPanels.some(p => p.userId === u));
     if (usersToAdd.length > 0) {
-      setUsers(prevUsers => [...prevUsers, ...usersToAdd]);
+      const newPanels = usersToAdd.map(userId => ({ panelId: uuidv4(), userId }));
+      setUserPanels(prevPanels => [...prevPanels, ...newPanels]);
       toast({
         title: 'All Users Added',
         description: `Added ${usersToAdd.length} new user panels.`,
@@ -75,19 +77,20 @@ export const useUserPanelManager = () => {
         description: 'All available users already have a panel open.',
       });
     }
-  }, [allUsers, users, toast]);
+  }, [allUsers, userPanels, toast]);
 
+  // CORRECTED: removeAllUsers now updates the correct state
   const removeAllUsers = useCallback(() => {
-    if (users.length > 0) {
-      setUsers([]);
+    if (userPanels.length > 0) {
+      setUserPanels([]);
       toast({
         title: 'All Users Removed',
         description: 'All user connection panels have been closed.',
       });
     }
-  }, [users.length, toast]);
+  }, [userPanels.length, toast]);
 
-   // Update removeUser to work with panelId
+  // This function was already correct
   const removeUser = useCallback((panelIdToRemove: string) => {
     const userId = userPanels.find(p => p.panelId === panelIdToRemove)?.userId;
     setUserPanels(panels => panels.filter(panel => panel.panelId !== panelIdToRemove));
@@ -98,20 +101,19 @@ export const useUserPanelManager = () => {
 
   return {
     state: {
-        userPanels,
-        allowDuplicates,
-        users,
-        allUsers,
-        selectedUserId,
-        availableUsers
+      userPanels,
+      allowDuplicates,
+      allUsers,
+      selectedUserId,
+      availableUsers
     },
     actions: {
-        addUser,
-        addAllUsers,
-        setAllowDuplicates,
-        removeAllUsers,
-        removeUser,
-        setSelectedUserId
+      addUser,
+      addAllUsers,
+      setAllowDuplicates,
+      removeAllUsers,
+      removeUser,
+      setSelectedUserId
     }
   };
 };

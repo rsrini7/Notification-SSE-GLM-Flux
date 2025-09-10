@@ -6,13 +6,13 @@ import { UserPlus, Users, UserMinus } from 'lucide-react';
 import { Label } from '../ui/label';
 import UserConnectionPanel from './UserConnectionPanel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { useUserPanelManager } from '../../hooks/useUserPanelManager'; // Import the new hook
+import { useUserPanelManager } from '../../hooks/useUserPanelManager';
 
 // Main component to manage multiple user panels
 const BroadcastUserPanel: React.FC = () => {
   // All state and logic is now managed by the custom hook
   const { state, actions } = useUserPanelManager();
-  const { userPanels, allowDuplicates, users, selectedUserId, availableUsers } = state;
+  const { userPanels, allowDuplicates, selectedUserId, availableUsers } = state;
   const { addUser, addAllUsers, setAllowDuplicates, removeAllUsers, removeUser, setSelectedUserId } = actions;
 
   return (
@@ -52,7 +52,8 @@ const BroadcastUserPanel: React.FC = () => {
                   <Users className="h-4 w-4 mr-2" />
                   Add All
                 </Button>
-                <Button variant="destructive" onClick={removeAllUsers} disabled={users.length === 0}>
+                {/* CORRECTED: disabled prop now uses userPanels.length */}
+                <Button variant="destructive" onClick={removeAllUsers} disabled={userPanels.length === 0}>
                   <UserMinus className="h-4 w-4 mr-2" />
                   Remove All
                 </Button>
@@ -66,7 +67,7 @@ const BroadcastUserPanel: React.FC = () => {
               <label htmlFor="allow-duplicates" className="text-sm font-medium">
                   Allow Duplicate User Connections (for testing)
               </label>
-          </div>
+            </div>
         </CardContent>
       </Card>
 
