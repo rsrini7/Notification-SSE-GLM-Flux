@@ -34,10 +34,22 @@ public class AppProperties {
     @Data
     public static class Geode{
         private final Locator locator = new Locator();
+        private final Regions regions = new Regions();
         @Data
         public static class Locator{
             private String host = "localhost";
             private int port = 10334;
+        }
+
+        @Data
+        public static class Regions {
+            private final UserMessagesInbox userMessagesInbox = new UserMessagesInbox();
+
+            @Data
+            public static class UserMessagesInbox {
+                @Positive
+                private int lruMaxEntries = 100000; // Default value
+            }
         }
 
     }

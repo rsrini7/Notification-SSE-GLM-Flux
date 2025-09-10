@@ -131,6 +131,9 @@ broadcast:
     locator:
       host: ${BROADCAST_GEODE_LOCATOR_HOST:localhost}
       port: 10334
+    regions:
+      user-messages-inbox:
+        lru-max-entries: 100000
 
 ---
 # PostgreSQL-specific profile shared by both services
