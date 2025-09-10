@@ -5,6 +5,9 @@ import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
 import com.example.broadcast.shared.dto.BroadcastContent;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.ClientCache;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -24,54 +27,61 @@ public class GeodeCacheService implements CacheService {
     private final Region<String, ConnectionHeartbeat> connectionHeartbeatRegion;
     private final Region<String, List<UserMessageInbox>> userMessagesInboxRegion;
     private final Region<Long, BroadcastContent> broadcastContentRegion;
+    private final Scheduler geodeScheduler;
 
     public GeodeCacheService(ClientCache clientCache,
                              @Qualifier("userConnectionsRegion") Region<String, Map<String, UserConnectionInfo>> userConnectionsRegion,
                              @Qualifier("connectionHeartbeatRegion") Region<String, ConnectionHeartbeat> connectionHeartbeatRegion,
                              @Qualifier("userMessagesInboxRegion") Region<String, List<UserMessageInbox>> userMessagesInboxRegion,
-                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastContent> broadcastContentRegion
+                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastContent> broadcastContentRegion,
+                             @Qualifier("geodeScheduler") Scheduler geodeScheduler
     ) {
         this.clientCache = clientCache;
         this.userConnectionsRegion = userConnectionsRegion;
         this.connectionHeartbeatRegion = connectionHeartbeatRegion;
         this.userMessagesInboxRegion = userMessagesInboxRegion;
         this.broadcastContentRegion = broadcastContentRegion;
+        this.geodeScheduler = geodeScheduler;
     }
 
     @Override
-    public void registerUserConnection(String userId, String connectionId, String podName, String clusterName) {
-        long nowEpochMilli = OffsetDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli();
-        UserConnectionInfo newConnectionInfo = new UserConnectionInfo(userId, connectionId, podName, clusterName, nowEpochMilli, nowEpochMilli);
+    public Mono<Void> registerUserConnection(String userId, String connectionId, String podName, String clusterName) {
+        return Mono.fromRunnable(() -> {
+            long nowEpochMilli = OffsetDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli();
+            UserConnectionInfo newConnectionInfo = new UserConnectionInfo(userId, connectionId, podName, clusterName, nowEpochMilli, nowEpochMilli);
 
-        // Atomically update the user's connection map
-        userConnectionsRegion.compute(userId, (key, existingConnections) -> {
-            if (existingConnections == null) {
-                existingConnections = new HashMap<>();
-            }
-            existingConnections.put(connectionId, newConnectionInfo);
-            return existingConnections;
-        });
-        
-        // Heartbeat logic remains the same
-        ConnectionHeartbeat metadata = new ConnectionHeartbeat(userId, nowEpochMilli);
-        connectionHeartbeatRegion.put(connectionId, metadata);
-    }
-
-    @Override
-    public void unregisterUserConnection(String userId, String connectionId) {
-        // Atomically update the user's connection map
-        userConnectionsRegion.compute(userId, (key, existingConnections) -> {
-            if (existingConnections != null) {
-                existingConnections.remove(connectionId);
-                // If the map is now empty, remove the user's entry completely
-                if (existingConnections.isEmpty()) {
-                    return null; 
+            // Atomically update the user's connection map
+            userConnectionsRegion.compute(userId, (key, existingConnections) -> {
+                if (existingConnections == null) {
+                    existingConnections = new HashMap<>();
                 }
-            }
-            return existingConnections;
-        });
+                existingConnections.put(connectionId, newConnectionInfo);
+                return existingConnections;
+            });
+            
+            // Heartbeat logic remains the same
+            ConnectionHeartbeat metadata = new ConnectionHeartbeat(userId, nowEpochMilli);
+            connectionHeartbeatRegion.put(connectionId, metadata);
+         }).subscribeOn(geodeScheduler).then();
+    }
 
-        connectionHeartbeatRegion.remove(connectionId);
+    @Override
+    public Mono<Void> unregisterUserConnection(String userId, String connectionId) {
+        return Mono.fromRunnable(() -> {
+            // Atomically update the user's connection map
+            userConnectionsRegion.compute(userId, (key, existingConnections) -> {
+                if (existingConnections != null) {
+                    existingConnections.remove(connectionId);
+                    // If the map is now empty, remove the user's entry completely
+                    if (existingConnections.isEmpty()) {
+                        return null; 
+                    }
+                }
+                return existingConnections;
+            });
+
+            connectionHeartbeatRegion.remove(connectionId);
+        }).subscribeOn(geodeScheduler).then();
     }
     
     @Override

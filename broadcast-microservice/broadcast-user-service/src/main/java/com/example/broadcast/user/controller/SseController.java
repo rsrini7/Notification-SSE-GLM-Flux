@@ -50,7 +50,7 @@ public class SseController {
         if (currentConnections >= maxConnections) {
             log.warn("Connection limit reached for user '{}'. Max: {}, Current: {}. Rejecting new connection.",
                     userId, maxConnections, currentConnections);
-           // Create a specific event for the limit
+            // Create a specific event for the limit
             ServerSentEvent<String> limitEvent = sseEventFactory.createEvent(
                 Constants.SseEventType.CONNECTION_LIMIT_REACHED,
                 connectionIdParam,
