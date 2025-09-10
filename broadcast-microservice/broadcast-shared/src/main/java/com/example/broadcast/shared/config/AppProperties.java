@@ -47,6 +47,7 @@ public class AppProperties {
 
             @Data
             public static class UserMessagesInbox {
+                private boolean cleanupEnabled = false;
                 @Positive
                 private int cleanupThreshold = 100000;
                 @Positive

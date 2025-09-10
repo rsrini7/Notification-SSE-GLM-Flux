@@ -133,6 +133,7 @@ broadcast:
       port: 10334
     regions:
       user-messages-inbox:
+        cleanup-enabled: false
         cleanup-threshold: 100000        # The max desired entries
         cleanup-job-rate-ms: 300000      # Run job every 5 minutes
 

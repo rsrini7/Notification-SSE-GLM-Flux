@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.apache.geode.cache.Region;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,12 @@ import java.util.Set;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@ConditionalOnProperty(
+    prefix = "broadcast.geode.regions.user-messages-inbox",
+    name = "cleanup-enabled",
+    havingValue = "true",
+    matchIfMissing = false // Ensures the job is disabled if the property is not set
+)
 public class GeodeRegionCleanupService {
 
     @Qualifier("userMessagesInboxRegion")
