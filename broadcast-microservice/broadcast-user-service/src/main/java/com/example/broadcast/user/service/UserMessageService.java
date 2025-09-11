@@ -72,7 +72,12 @@ public class UserMessageService {
             targetedMessages.forEach(msg -> allRequiredBroadcastIds.add(msg.getBroadcastId()));
             allTypeBroadcasts.forEach(msg -> allRequiredBroadcastIds.add(msg.getId()));
 
-            // Step 3: Fetch all required content in a single, unified call.
+            // Step 3.1: Get the IDs of broadcasts already handled
+            Set<Long> targetedBroadcastIds = targetedMessages.stream()
+                .map(UserBroadcastMessage::getBroadcastId)
+                .collect(Collectors.toSet());
+
+            // Step 3.2: Fetch all required content in a single, unified call.
             Map<Long, BroadcastMessage> contentMap = getBroadcastContent(allRequiredBroadcastIds);
 
             // Step 4: Map targeted messages to the final response DTO.
@@ -84,14 +89,17 @@ public class UserMessageService {
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
 
-            // Step 5: Map 'ALL' broadcasts and add them to the list.
+            // Step 5: Filter the 'ALL' broadcasts to exclude any that are already in the inbox
             List<UserBroadcastResponse> allTypeResponses = allTypeBroadcasts.stream()
-                    .map(broadcast -> {
-                        BroadcastMessage content = contentMap.get(broadcast.getId());
-                        return content != null ? broadcastMapper.toUserBroadcastResponseFromEntity(null, content) : null;
-                    })
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
+                .filter(broadcast -> !targetedBroadcastIds.contains(broadcast.getId()))
+                .map(broadcast -> {
+                    BroadcastMessage content = contentMap.get(broadcast.getId());
+                    return content != null ? broadcastMapper.toUserBroadcastResponseFromEntity(null, content) : null;
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+
             finalInbox.addAll(allTypeResponses);
 
             // (Optional) Add this log for debugging to confirm the order before returning

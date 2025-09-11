@@ -206,6 +206,14 @@ public class SseService {
 
              // Evict the inbox cache for all users connected to this pod
             Set<String> localUserIds = sseConnectionManager.getLocalUserIds();
+
+            log.info("Persisting 'DELIVERED' status for {} local users due to 'ALL' broadcast {}.", localUserIds.size(), event.getBroadcastId());
+            // For each user who just received the message, call the persistence method.
+            for (String userId : localUserIds) {
+                // This method is already async, so it won't block the event loop.
+                userMessageService.recordDeliveryForFanOutOnRead(userId, event.getBroadcastId());
+            }
+
             log.info("Evicting inbox cache for {} local users due to group-level event.", localUserIds.size());
             for (String userId : localUserIds) {
                 cacheService.evictUserInbox(userId);
