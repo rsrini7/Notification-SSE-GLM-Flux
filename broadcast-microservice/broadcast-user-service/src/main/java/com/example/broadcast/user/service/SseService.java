@@ -67,12 +67,6 @@ public class SseService {
         }
     }
 
-    public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
-        log.info("Establishing LIVE event stream for user: {}, connection: {}", userId, connectionId);
-        // It no longer fetches historical messages. It just returns the live connection sink.
-        return sseConnectionManager.createEventStream(userId, connectionId);
-    }
-
     public void removeEventStream(String userId, String connectionId) {
         sseConnectionManager.removeEventStream(userId, connectionId);
     }

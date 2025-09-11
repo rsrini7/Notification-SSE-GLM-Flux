@@ -273,18 +273,6 @@ public class UserMessageService {
         return resultMap;
     }
 
-    @Async
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void updateDeliveryStatsForOfflineUsers(List<UserBroadcastResponse> newlyDeliveredBroadcasts) {
-        if (newlyDeliveredBroadcasts.isEmpty()) {
-            return;
-        }
-        log.info("Asynchronously updating delivery stats for {} broadcasts for a reconnected user.", newlyDeliveredBroadcasts.size());
-        for (UserBroadcastResponse broadcast : newlyDeliveredBroadcasts) {
-            broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getBroadcastId(), 1);
-        }
-    }
-
     @Transactional
     public void markMessageAsRead(String userId, Long broadcastId) {
         log.info("Attempting to mark broadcast {} as read for user {}", broadcastId, userId);
