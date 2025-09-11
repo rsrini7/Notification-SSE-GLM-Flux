@@ -295,6 +295,7 @@ public class UserMessageService {
                     .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
                     .readStatus(Constants.ReadStatus.UNREAD.name())
                     .deliveredAt(OffsetDateTime.now(ZoneOffset.UTC))
+                    .createdAt(OffsetDateTime.now(ZoneOffset.UTC))
                     .build();
 
             userBroadcastRepository.save(deliveredMessage);
