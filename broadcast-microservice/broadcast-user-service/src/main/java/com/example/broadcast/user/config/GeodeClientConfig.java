@@ -5,7 +5,7 @@ import com.example.broadcast.shared.dto.BroadcastContent;
 import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
-import com.example.broadcast.shared.util.Constants.GeodeRegionNames;
+import com.example.broadcast.user.constants.CacheConstants.GeodeRegionNames;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

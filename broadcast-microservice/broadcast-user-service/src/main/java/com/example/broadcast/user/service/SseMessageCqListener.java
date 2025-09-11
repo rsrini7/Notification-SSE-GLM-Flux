@@ -3,7 +3,8 @@ package com.example.broadcast.user.service;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
-import com.example.broadcast.shared.util.Constants.GeodeRegionNames;
+import com.example.broadcast.user.constants.CacheConstants.GeodeRegionNames;
+
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
