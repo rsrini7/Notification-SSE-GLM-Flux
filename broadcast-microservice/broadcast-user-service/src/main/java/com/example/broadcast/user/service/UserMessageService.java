@@ -118,9 +118,14 @@ public class UserMessageService {
                 .collect(Collectors.toList());
             cacheService.cacheUserInbox(userId, inboxToCache);
 
-            // Step 8: Asynchronously update stats for any newly delivered 'ALL' messages.
+            // Step 8: Asynchronously create delivery records and update stats for any newly delivered 'ALL' messages.
             if (!allTypeResponses.isEmpty()) {
-                updateDeliveryStatsForOfflineUsers(allTypeResponses);
+                log.info("Creating 'DELIVERED' records for {} missed 'ALL' broadcasts for reconnected user {}",
+                    allTypeResponses.size(), userId);
+                for (UserBroadcastResponse response : allTypeResponses) {
+                    // Reuse the existing async, idempotent method to create the record and update stats
+                    recordDeliveryForFanOutOnRead(userId, response.getBroadcastId());
+                }
             }
 
             if (!pendingMessagesToProcess.isEmpty()) {
