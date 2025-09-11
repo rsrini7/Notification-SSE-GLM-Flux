@@ -67,10 +67,6 @@ public class SseService {
         }
     }
 
-    public void registerConnection(String userId, String connectionId) {
-        sseConnectionManager.registerConnection(userId, connectionId); //This will call the GeodeCacheService
-    }
-
     public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
         log.info("Establishing LIVE event stream for user: {}, connection: {}", userId, connectionId);
         // It no longer fetches historical messages. It just returns the live connection sink.
