@@ -118,6 +118,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
+    fetchMessages();
   }, [toast, userId, fetchMessages]);
   
   const onDisconnect = useCallback(() => {
