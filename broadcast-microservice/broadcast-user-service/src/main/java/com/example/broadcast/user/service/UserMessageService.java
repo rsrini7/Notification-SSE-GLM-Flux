@@ -42,87 +42,146 @@ public class UserMessageService {
     private final BroadcastMapper broadcastMapper;
     private final Scheduler jdbcScheduler;
 
+    /**
+     * A private record to act as a data holder for results from the database fetch.
+     */
+    private record InboxDataFetchResult(
+        List<UserBroadcastMessage> targetedMessages,
+        List<BroadcastMessage> allTypeBroadcasts,
+        List<UserBroadcastMessage> pendingMessagesToProcess
+    ) {}
+
     @Transactional(readOnly = true)
     public Mono<List<UserBroadcastResponse>> getUserMessages(String userId) {
         log.info("Assembling inbox for user: {}", userId);
 
-        Optional<List<UserMessageInbox>> cachedInboxOpt = cacheService.getUserInbox(userId);
-        if (cachedInboxOpt.isPresent()  && !cachedInboxOpt.get().isEmpty()) {
-            log.info("Cache HIT for user {} inbox.", userId);
-            return reconstructInboxFromCache(cachedInboxOpt.get());
-        }
-        log.info("Cache MISS for user {} inbox. Fetching from database.", userId);
+        return cacheService.getUserInbox(userId)
+            .filter(inbox -> !inbox.isEmpty())
+            .map(cachedInbox -> {
+                log.info("Cache HIT for user {} inbox.", userId);
+                return reconstructInboxFromCache(cachedInbox);
+            })
+            .orElseGet(() -> {
+                log.info("Cache MISS for user {} inbox. Fetching from database.", userId);
+                return Mono.fromCallable(() -> fetchAndAssembleInboxFromDb(userId))
+                           .subscribeOn(jdbcScheduler);
+            });
+    }
 
-        return Mono.fromCallable(() -> {
-            // Step 1: Fetch all relevant records and IDs from the database.
-            List<UserBroadcastMessage> targetedMessages = userBroadcastRepository.findUnreadPendingDeliveredByUserId(userId);
-            
-            // Identify PENDING messages and update their status to DELIVERED
-            List<UserBroadcastMessage> pendingMessagesToProcess = targetedMessages.stream()
-                .filter(msg -> Constants.DeliveryStatus.PENDING.name().equals(msg.getDeliveryStatus()))
-                .collect(Collectors.toList());
-            
-            Set<Long> readBroadcastIds = new HashSet<>(userBroadcastRepository.findReadBroadcastIdsByUserId(userId));
-            List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findByStatusAndTargetType(
-                Constants.BroadcastStatus.ACTIVE.name(), Constants.TargetType.ALL.name()
-            ).stream().filter(b -> !readBroadcastIds.contains(b.getId())).collect(Collectors.toList());
+    /**
+     * Orchestrates the process of fetching data from the database, assembling the inbox,
+     * and performing follow-up actions like caching and async updates.
+     */
+    private List<UserBroadcastResponse> fetchAndAssembleInboxFromDb(String userId) {
+        // Step 1: Encapsulate all database reads.
+        InboxDataFetchResult dbData = fetchInboxDataFromDb(userId);
 
-            // Step 2: Collect ALL necessary broadcast IDs from BOTH lists first.
-            Set<Long> allRequiredBroadcastIds = new HashSet<>();
-            targetedMessages.forEach(msg -> allRequiredBroadcastIds.add(msg.getBroadcastId()));
-            allTypeBroadcasts.forEach(msg -> allRequiredBroadcastIds.add(msg.getId()));
+        // Step 2: Assemble the final list of messages from the database results.
+        List<UserBroadcastResponse> finalInbox = assembleFinalInbox(
+            dbData.targetedMessages(), 
+            dbData.allTypeBroadcasts()
+        );
 
-            // Step 3: Fetch all required content in a single, unified call.
-            Map<Long, BroadcastMessage> contentMap = getBroadcastContent(allRequiredBroadcastIds);
+        // Step 3: Perform all side-effects (caching, async processing) after assembly.
+        performPostFetchActions(userId, finalInbox, dbData.pendingMessagesToProcess());
+        
+        log.info("Assembled and cached {} total messages for user {}", finalInbox.size(), userId);
+        return finalInbox;
+    }
 
-            // Step 4: Map targeted messages to the final response DTO.
-            List<UserBroadcastResponse> finalInbox = targetedMessages.stream()
-                    .map(msg -> {
-                        BroadcastMessage broadcast = contentMap.get(msg.getBroadcastId());
-                        return broadcast != null ? broadcastMapper.toUserBroadcastResponseFromEntity(msg, broadcast) : null;
-                    })
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
+    /**
+     * Fetches all necessary raw data from the database in a single logical step.
+     */
+    private InboxDataFetchResult fetchInboxDataFromDb(String userId) {
+        List<UserBroadcastMessage> targetedMessages = userBroadcastRepository.findUnreadPendingDeliveredByUserId(userId);
+        
+        List<UserBroadcastMessage> pendingMessagesToProcess = targetedMessages.stream()
+            .filter(msg -> Constants.DeliveryStatus.PENDING.name().equals(msg.getDeliveryStatus()))
+            .collect(Collectors.toList());
+        
+        Set<Long> readBroadcastIds = new HashSet<>(userBroadcastRepository.findReadBroadcastIdsByUserId(userId));
+        
+        List<BroadcastMessage> allTypeBroadcasts = broadcastRepository.findByStatusAndTargetType(
+            Constants.BroadcastStatus.ACTIVE.name(), Constants.TargetType.ALL.name()
+        ).stream().filter(b -> !readBroadcastIds.contains(b.getId())).collect(Collectors.toList());
 
-            // Step 5: Map 'ALL' broadcasts and add them to the list.
-            List<UserBroadcastResponse> allTypeResponses = allTypeBroadcasts.stream()
-                    .map(broadcast -> {
-                        BroadcastMessage content = contentMap.get(broadcast.getId());
-                        return content != null ? broadcastMapper.toUserBroadcastResponseFromEntity(null, content) : null;
-                    })
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-            finalInbox.addAll(allTypeResponses);
+        return new InboxDataFetchResult(targetedMessages, allTypeBroadcasts, pendingMessagesToProcess);
+    }
 
-            // (Optional) Add this log for debugging to confirm the order before returning
-            finalInbox.sort(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed());
-            // log.debug("Final sorted inbox order for user {}: {}", userId, finalInbox.stream().map(UserBroadcastResponse::getBroadcastId).collect(Collectors.toList()));
+    /**
+     * Assembles the final, sorted list of user-facing messages from the raw database data.
+     */
+    private List<UserBroadcastResponse> assembleFinalInbox(List<UserBroadcastMessage> targetedMessages, List<BroadcastMessage> allTypeBroadcasts) {
+        Set<Long> allRequiredBroadcastIds = new HashSet<>();
+        targetedMessages.forEach(msg -> allRequiredBroadcastIds.add(msg.getBroadcastId()));
+        allTypeBroadcasts.forEach(msg -> allRequiredBroadcastIds.add(msg.getId()));
 
-            // Step 7: Create a new, correct cache entry from the final, sorted list.
-            List<UserMessageInbox> inboxToCache = finalInbox.stream()
+        Map<Long, BroadcastMessage> contentMap = getBroadcastContent(allRequiredBroadcastIds);
+
+        Set<Long> targetedBroadcastIds = targetedMessages.stream()
+            .map(UserBroadcastMessage::getBroadcastId)
+            .collect(Collectors.toSet());
+
+        List<UserBroadcastResponse> finalInbox = targetedMessages.stream()
+            .map(msg -> {
+                BroadcastMessage broadcast = contentMap.get(msg.getBroadcastId());
+                return broadcast != null ? broadcastMapper.toUserBroadcastResponseFromEntity(msg, broadcast) : null;
+            })
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+
+        List<UserBroadcastResponse> allTypeResponses = allTypeBroadcasts.stream()
+            .filter(broadcast -> !targetedBroadcastIds.contains(broadcast.getId()))
+            .map(broadcast -> {
+                BroadcastMessage content = contentMap.get(broadcast.getId());
+                return content != null ? broadcastMapper.toUserBroadcastResponseFromEntity(null, content) : null;
+            })
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+
+        finalInbox.addAll(allTypeResponses);
+        finalInbox.sort(Comparator.comparing(UserBroadcastResponse::getBroadcastCreatedAt).reversed());
+
+        return finalInbox;
+    }
+
+    /**
+     * Handles all side-effects like caching and triggering asynchronous tasks.
+     */
+    private void performPostFetchActions(String userId, List<UserBroadcastResponse> finalInbox, List<UserBroadcastMessage> pendingMessagesToProcess) {
+        // Cache the newly assembled inbox.
+        List<UserMessageInbox> inboxToCache = finalInbox.stream()
             .map(response -> new UserMessageInbox(
-                    response.getUserMessageId(),
-                    response.getBroadcastId(),
-                    response.getDeliveryStatus(),
-                    response.getReadStatus(),
-                    response.getCreatedAt().toInstant().toEpochMilli()
-                ))
-                .collect(Collectors.toList());
-            cacheService.cacheUserInbox(userId, inboxToCache);
+                response.getUserMessageId(),
+                response.getBroadcastId(),
+                response.getDeliveryStatus(),
+                response.getReadStatus(),
+                response.getCreatedAt().toInstant().toEpochMilli()
+            ))
+            .collect(Collectors.toList());
+        cacheService.cacheUserInbox(userId, inboxToCache);
 
-            // Step 8: Asynchronously update stats for any newly delivered 'ALL' messages.
-            if (!allTypeResponses.isEmpty()) {
-                updateDeliveryStatsForOfflineUsers(allTypeResponses);
+        // Identify newly delivered "ALL" messages to create records for them.
+        Set<Long> targetedBroadcastIds = pendingMessagesToProcess.stream()
+            .map(UserBroadcastMessage::getBroadcastId)
+            .collect(Collectors.toSet());
+
+        List<UserBroadcastResponse> allTypeResponses = finalInbox.stream()
+            .filter(response -> !targetedBroadcastIds.contains(response.getBroadcastId()))
+            .collect(Collectors.toList());
+
+        if (!allTypeResponses.isEmpty()) {
+            log.info("Creating 'DELIVERED' records for {} missed 'ALL' broadcasts for reconnected user {}",
+                allTypeResponses.size(), userId);
+            for (UserBroadcastResponse response : allTypeResponses) {
+                recordDeliveryForFanOutOnRead(userId, response.getBroadcastId());
             }
-
-            if (!pendingMessagesToProcess.isEmpty()) {
-                processPendingMessagesAsynchronously(pendingMessagesToProcess);
-            }
-
-            log.info("Assembled and cached {} total messages for user {}", finalInbox.size(), userId);
-            return finalInbox;
-
-        }).subscribeOn(jdbcScheduler);
+        }
+        
+        // Process any messages that were in PENDING state.
+        if (!pendingMessagesToProcess.isEmpty()) {
+            processPendingMessagesAsynchronously(pendingMessagesToProcess);
+        }
     }
 
     /**
@@ -214,18 +273,6 @@ public class UserMessageService {
         return resultMap;
     }
 
-    @Async
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void updateDeliveryStatsForOfflineUsers(List<UserBroadcastResponse> newlyDeliveredBroadcasts) {
-        if (newlyDeliveredBroadcasts.isEmpty()) {
-            return;
-        }
-        log.info("Asynchronously updating delivery stats for {} broadcasts for a reconnected user.", newlyDeliveredBroadcasts.size());
-        for (UserBroadcastResponse broadcast : newlyDeliveredBroadcasts) {
-            broadcastStatisticsRepository.incrementDeliveredCount(broadcast.getBroadcastId(), 1);
-        }
-    }
-
     @Transactional
     public void markMessageAsRead(String userId, Long broadcastId) {
         log.info("Attempting to mark broadcast {} as read for user {}", broadcastId, userId);
@@ -280,13 +327,17 @@ public class UserMessageService {
                 return;
             }
 
+            OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+
             log.info("Creating 'DELIVERED' record for user {} for 'ALL' broadcast {}", userId, broadcastId);
             UserBroadcastMessage deliveredMessage = UserBroadcastMessage.builder()
                     .userId(userId)
                     .broadcastId(broadcastId)
                     .deliveryStatus(Constants.DeliveryStatus.DELIVERED.name())
                     .readStatus(Constants.ReadStatus.UNREAD.name())
-                    .deliveredAt(OffsetDateTime.now(ZoneOffset.UTC))
+                    .deliveredAt(now)
+                    .createdAt(now)
+                    .updatedAt(now)
                     .build();
 
             userBroadcastRepository.save(deliveredMessage);

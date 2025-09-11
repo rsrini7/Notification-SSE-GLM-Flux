@@ -34,10 +34,25 @@ public class AppProperties {
     @Data
     public static class Geode{
         private final Locator locator = new Locator();
+        private final Regions regions = new Regions();
         @Data
         public static class Locator{
             private String host = "localhost";
             private int port = 10334;
+        }
+
+        @Data
+        public static class Regions {
+            private final UserMessagesInbox userMessagesInbox = new UserMessagesInbox();
+
+            @Data
+            public static class UserMessagesInbox {
+                private boolean cleanupEnabled = false;
+                @Positive
+                private int cleanupThreshold = 100000;
+                @Positive
+                private long cleanupJobRateMs = 300000L;
+            }
         }
 
     }
@@ -49,6 +64,8 @@ public class AppProperties {
 
     @Data
     public static class Sse {
+        @Positive
+        private int maxConnectionsPerUser = 4;
         @Positive
         private long clientTimeoutThreshold = 60000L;
         @Positive

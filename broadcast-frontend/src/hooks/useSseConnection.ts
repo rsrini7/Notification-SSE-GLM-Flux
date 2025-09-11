@@ -20,7 +20,7 @@ interface SseConnection {
   reconnectAttempt: number;
 }
 
-const SSE_EVENT_TYPES = ['MESSAGE', 'READ_RECEIPT', 'MESSAGE_REMOVED', 'CONNECTED', 'HEARTBEAT'];
+const SSE_EVENT_TYPES = ['MESSAGE', 'READ_RECEIPT', 'MESSAGE_REMOVED', 'CONNECTED', 'HEARTBEAT', 'CONNECTION_LIMIT_REACHED'];
 
 export const useSseConnection = (options: UseSseConnectionOptions) => {
   const {
@@ -45,8 +45,6 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const BASE_RECONNECT_DELAY = 3000;
   const MAX_RECONNECT_DELAY = 300000;
 
-  // Use refs to hold the current state and callbacks to avoid stale closures
-  // and make dependency arrays stable.
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -68,6 +66,9 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
   const connectionIdRef = useRef<string | null>(null);
   const isForceDisconnectRef = useRef(false);
 
+  // STEP 1: Add a new ref to track if the limit was reached.
+  const isLimitReachedRef = useRef(false);
+
   const generateConnectionId = useCallback(() => {
     return `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }, []);
@@ -76,6 +77,12 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     try {
       const eventType = event.type.toUpperCase();
       const data = event.data ? JSON.parse(event.data) : {};
+
+      // STEP 2: Set the flag immediately when the event is received.
+      if (eventType === 'CONNECTION_LIMIT_REACHED') {
+        isLimitReachedRef.current = true;
+      }
+
       console.log(`[SSE - ${userId}] Received event:`, { type: eventType, data });
       onMessageRef.current?.({ type: eventType, data: data });
     } catch (error) {
@@ -93,26 +100,45 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
+
     if (connectionIdRef.current) {
       navigator.sendBeacon(`${baseUrl}/sse/disconnect?userId=${userId}&connectionId=${connectionIdRef.current}`);
     }
-    // Check the ref for the current connection state to avoid stale closures.
+
+    // if (connectionIdRef.current) {
+    //   const url = `${baseUrl}/sse/disconnect`;
+    //   const formData = new URLSearchParams();
+    //   formData.append("userId", userId);
+    //   formData.append("connectionId", connectionIdRef.current);
+      
+    //   // Use fetch with keepalive for a more reliable disconnect call
+    //   fetch(url, {
+    //       method: 'POST',
+    //       body: formData,
+    //       keepalive: true,
+    //   }).catch(err => console.error("Disconnect beacon failed:", err));
+    // }
+    
     if (stateRef.current.connected) {
       onDisconnectRef.current?.();
     }
     reconnectAttemptsRef.current = 0;
     connectionIdRef.current = null;
     setState({ connected: false, connecting: false, connectionId: null, error: null, reconnectAttempt: 0 });
-  }, [userId, baseUrl]); // Dependency array is now stable.
+  }, [userId, baseUrl]);
 
-  // The 'connect' function is now stable and does not depend on 'state'.
-  const connect = useCallback(() => {
-    // Use the ref to get the current state inside the function.
+  const connect = useCallback((isInitialConnect = false) => {
     if (eventSourceRef.current || stateRef.current.connecting) return;
 
-    reconnectAttemptsRef.current++;
+    isLimitReachedRef.current = false;
+    
+    // Only increment reconnect attempts if it's not the first call
+    if (!isInitialConnect) {
+        reconnectAttemptsRef.current++;
+    }
+
     console.log(`[SSE - ${userId}] Attempting to connect... (Attempt ${reconnectAttemptsRef.current})`);
-    setState(prev => ({ ...prev, connecting: true, error: prev.reconnectAttempt > 0 ? `Reconnecting...` : null, reconnectAttempt: reconnectAttemptsRef.current }));
+    setState(prev => ({ ...prev, connecting: true, error: reconnectAttemptsRef.current > 0 ? `Reconnecting...` : null, reconnectAttempt: reconnectAttemptsRef.current }));
 
     const newConnectionId = generateConnectionId();
     connectionIdRef.current = newConnectionId;
@@ -137,6 +163,14 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
       eventSourceRef.current = null;
       setState(prev => ({...prev, connected: false, connecting: false}));
       onErrorRef.current?.(new Error('SSE connection error'));
+
+      // STEP 4: Add a guard clause to the error handler.
+      // If the limit was reached, do not attempt to reconnect.
+      if (isLimitReachedRef.current) {
+        console.log(`[SSE - ${userId}] Connection closed due to connection limit. Reconnect disabled.`);
+        setState(prev => ({ ...prev, error: 'Connection limit reached.' }));
+        return;
+      }
       
       if (isForceDisconnectRef.current) {
         console.log(`[SSE - ${userId}] Force disconnect detected. Auto-reconnect disabled.`);
@@ -149,13 +183,13 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
         const jitter = Math.random() * 1000;
         const delay = backoff + jitter;
         console.log(`[SSE - ${userId}] Scheduling reconnect in ${delay.toFixed(0)}ms.`);
-        reconnectTimeoutRef.current = setTimeout(connect, delay);
+        reconnectTimeoutRef.current = setTimeout(() => connect(false), delay);
       } else {
         console.error(`[SSE - ${userId}] Max reconnection attempts reached. Giving up.`);
         setState(prev => ({ ...prev, error: 'Max reconnection attempts reached.' }));
       }
     };
-  }, [userId, baseUrl, generateConnectionId, handleSseMessage]); // 'disconnect' is removed as it's stable.
+  }, [userId, baseUrl, generateConnectionId, handleSseMessage, disconnect]);
 
   const markAsRead = useCallback(async (broadcastId: number) => {
     if (!connectionIdRef.current) {
@@ -182,17 +216,15 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     }
   }, [userId, baseUrl]);
 
-  // Main effect to manage the connection lifecycle.
   useEffect(() => {
     if (autoConnect && userId) {
-      connect();
+      connect(true); // Pass true for the initial connection attempt
     }
     
-    // The cleanup function will now call the stable version of disconnect.
     return () => {
       disconnect();
     };
-  }, [autoConnect, userId, connect, disconnect]); // Dependencies 'connect' and 'disconnect' are now stable.
+  }, [autoConnect, userId, connect, disconnect]);
 
   return { ...state, connect, disconnect, markAsRead };
 };

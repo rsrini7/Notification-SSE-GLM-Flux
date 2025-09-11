@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useSseConnection } from './useSseConnection';
 import { userService, type UserBroadcastMessage } from '../services/api';
@@ -18,6 +18,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
   } = options;
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isDegraded, setIsDegraded] = useState(false);
   const { toast } = useToast();
 
   const fetchMessages = useCallback(async () => {
@@ -36,6 +37,10 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
       setLoading(false);
     }
   }, [userId, toast]);
+
+  useEffect(() => {
+    fetchMessages();
+  }, [fetchMessages]);
 
   const handleSseEvent = (event: { type: string; data: any }) => {
     const payload = event.data;
@@ -97,6 +102,15 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         });
         sseConnection.disconnect(false);
         break;
+      case 'CONNECTION_LIMIT_REACHED': // NEW CASE
+        toast({
+          title: 'Connection Limit Reached',
+          description: `Real-time updates are disabled for this panel for ${userId}.`,
+          variant: 'destructive',
+        });
+        setIsDegraded(true); // Set degraded mode
+        sseConnection.disconnect(true); // Ensure connection is fully terminated
+        break;
       default:
         console.log('Unhandled SSE event type:', event.type);
     }
@@ -104,7 +118,6 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });
-    // When the SSE connection is established, fetch the historical inbox.
     fetchMessages();
   }, [toast, userId, fetchMessages]);
   
@@ -148,6 +161,7 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     loading,
     stats,
     sseConnection,
+    isDegraded,
     actions: { 
       markAsRead, 
       refresh: fetchMessages

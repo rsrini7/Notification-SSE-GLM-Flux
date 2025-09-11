@@ -1,18 +1,19 @@
 import React from 'react';
+import { Checkbox } from '../ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { UserPlus, Users, UserMinus } from 'lucide-react';
 import { Label } from '../ui/label';
 import UserConnectionPanel from './UserConnectionPanel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { useUserPanelManager } from '../../hooks/useUserPanelManager'; // Import the new hook
+import { useUserPanelManager } from '../../hooks/useUserPanelManager';
 
 // Main component to manage multiple user panels
 const BroadcastUserPanel: React.FC = () => {
   // All state and logic is now managed by the custom hook
   const { state, actions } = useUserPanelManager();
-  const { users, selectedUserId, availableUsers } = state;
-  const { addUser, addAllUsers, removeAllUsers, removeUser, setSelectedUserId } = actions;
+  const { userPanels, allowDuplicates, selectedUserId, availableUsers } = state;
+  const { addUser, addAllUsers, setAllowDuplicates, removeAllUsers, removeUser, setSelectedUserId } = actions;
 
   return (
     <div className="container mx-auto p-6 space-y-8">
@@ -51,17 +52,33 @@ const BroadcastUserPanel: React.FC = () => {
                   <Users className="h-4 w-4 mr-2" />
                   Add All
                 </Button>
-                <Button variant="destructive" onClick={removeAllUsers} disabled={users.length === 0}>
+                {/* CORRECTED: disabled prop now uses userPanels.length */}
+                <Button variant="destructive" onClick={removeAllUsers} disabled={userPanels.length === 0}>
                   <UserMinus className="h-4 w-4 mr-2" />
                   Remove All
                 </Button>
+            </div>
+            <div className="flex items-center space-x-2 mt-4">
+              <Checkbox
+                  id="allow-duplicates"
+                  checked={allowDuplicates}
+                  onCheckedChange={(checked) => setAllowDuplicates(Boolean(checked))}
+              />
+              <label htmlFor="allow-duplicates" className="text-sm font-medium">
+                  Allow Duplicate User Connections (for testing)
+              </label>
             </div>
         </CardContent>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {users.map(userId => (
-          <UserConnectionPanel key={userId} userId={userId} onRemove={removeUser} onForcedDisconnect={removeUser} />
+        {userPanels.map(panel => (
+          <UserConnectionPanel
+            key={panel.panelId} // Use the unique panelId as the key
+            userId={panel.userId} // Pass the userId as a prop
+            onRemove={() => removeUser(panel.panelId)}
+            onForcedDisconnect={() => removeUser(panel.panelId)}
+          />
         ))}
       </div>
     </div>

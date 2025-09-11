@@ -112,6 +112,7 @@ broadcast:
   simulation:
     user-fetch-delay-ms: 5000
   sse:
+    max-connections-per-user: 4
     clientTimeoutThreshold: 60000
     heartbeat-interval: 30000
   db:
@@ -131,6 +132,11 @@ broadcast:
     locator:
       host: ${BROADCAST_GEODE_LOCATOR_HOST:localhost}
       port: 10334
+    regions:
+      user-messages-inbox:
+        cleanup-enabled: false
+        cleanup-threshold: 100000        # The max desired entries
+        cleanup-job-rate-ms: 300000      # Run job every 5 minutes
 
 ---
 # PostgreSQL-specific profile shared by both services

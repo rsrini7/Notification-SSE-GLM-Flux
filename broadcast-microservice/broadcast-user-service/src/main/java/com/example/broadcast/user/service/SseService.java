@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
@@ -14,9 +15,10 @@ import com.example.broadcast.user.service.cache.CacheService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+
 import reactor.core.publisher.Flux;
 
 import java.util.Map;
@@ -38,19 +40,33 @@ public class SseService {
     private final SseEventFactory sseEventFactory;
     private final MessageStatusService messageStatusService;
     private final CacheService cacheService;
+    private final AppProperties appProperties;
 
-    @Transactional
-    public void registerConnection(String userId, String connectionId) {
-        sseConnectionManager.registerConnection(userId, connectionId);
+
+    public Flux<ServerSentEvent<String>> establishSseConnection(String userId, String connectionId) {
+        String podName = appProperties.getPodName();
+        String clusterName = appProperties.getClusterName();
+
+        // Directly call the synchronous, blocking method.
+        // This is acceptable here as the controller is the entry point, and the operation
+        // is expected to be fast under normal conditions.
+        boolean registrationSuccess = cacheService.registerUserConnection(userId, connectionId, podName, clusterName);
+
+        if (registrationSuccess) {
+            log.info("Registration successful for user '{}'. Establishing full SSE stream.", userId);
+            return sseConnectionManager.createEventStream(userId, connectionId);
+        } else {
+            // If registration fails (limit reached), return the degraded connection event.
+            log.warn("Registration failed for user '{}' (limit reached). Sending degraded connection event.", userId);
+            ServerSentEvent<String> limitEvent = sseEventFactory.createEvent(
+                Constants.SseEventType.CONNECTION_LIMIT_REACHED,
+                connectionId,
+                Map.of("message", "Connection limit per user reached.")
+            );
+            return Flux.just(limitEvent);
+        }
     }
 
-    public Flux<ServerSentEvent<String>> createEventStream(String userId, String connectionId) {
-        log.info("Establishing LIVE event stream for user: {}, connection: {}", userId, connectionId);
-        // It no longer fetches historical messages. It just returns the live connection sink.
-        return sseConnectionManager.createEventStream(userId, connectionId);
-    }
-
-    @Transactional
     public void removeEventStream(String userId, String connectionId) {
         sseConnectionManager.removeEventStream(userId, connectionId);
     }
@@ -178,9 +194,16 @@ public class SseService {
         if (sseEvent != null) {
             sseConnectionManager.broadcastEventToLocalConnections(sseEvent);
 
-            // --- THIS IS THE FIX ---
-            // Evict the inbox cache for all users connected to this pod
+             // Evict the inbox cache for all users connected to this pod
             Set<String> localUserIds = sseConnectionManager.getLocalUserIds();
+
+            log.info("Persisting 'DELIVERED' status for {} local users due to 'ALL' broadcast {}.", localUserIds.size(), event.getBroadcastId());
+            // For each user who just received the message, call the persistence method.
+            for (String userId : localUserIds) {
+                // This method is already async, so it won't block the event loop.
+                userMessageService.recordDeliveryForFanOutOnRead(userId, event.getBroadcastId());
+            }
+
             log.info("Evicting inbox cache for {} local users due to group-level event.", localUserIds.size());
             for (String userId : localUserIds) {
                 cacheService.evictUserInbox(userId);

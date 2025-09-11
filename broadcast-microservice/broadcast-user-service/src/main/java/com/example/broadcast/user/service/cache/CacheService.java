@@ -10,7 +10,7 @@ import java.util.Set;
 
 public interface CacheService {
 
-    void registerUserConnection(String userId, String connectionId, String podId, String clusterName);
+    boolean registerUserConnection(String userId, String connectionId, String podId, String clusterName);
     void unregisterUserConnection(String userId, String connectionId);
     Map<String, UserConnectionInfo> getConnectionsForUser(String userId);
     boolean isUserOnline(String userId);

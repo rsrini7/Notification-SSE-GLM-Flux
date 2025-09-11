@@ -1,6 +1,7 @@
 package com.example.broadcast.shared.dto.cache;
 
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 
@@ -9,6 +10,7 @@ import java.io.Serializable;
 @Getter
 @ToString
 @AllArgsConstructor
+@EqualsAndHashCode
 public class UserConnectionInfo implements Serializable{
     private final String userId;
     private final String connectionId;

@@ -10,12 +10,6 @@
     <region name="sse-user-messages" refid="REPLICATE"/>
     <region name="sse-group-messages" refid="REPLICATE"/>
 
-    <region name="user-messages-inbox">
-        <region-attributes refid="PARTITION_REDUNDANT">
-            <eviction-attributes>
-                <lru-entry-count action="local-destroy" maximum="100000"/>
-            </eviction-attributes>
-        </region-attributes>
-    </region>
+    <region name="user-messages-inbox" refid="PARTITION_REDUNDANT" />
 
 </cache>

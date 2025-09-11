@@ -16,8 +16,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -30,7 +28,6 @@ public class SseController {
     private final SseService sseService;
     private final CacheService cacheService;
     private final AppProperties appProperties;
-    private final Scheduler jdbcScheduler;
 
     @GetMapping(value = "/connect", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RateLimiter(name = "sseConnectLimiter", fallbackMethod = "connectFallback")
@@ -47,11 +44,7 @@ public class SseController {
                 userId, connectionId,
                 exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown");
 
-        return Mono.fromRunnable(() -> sseService.registerConnection(userId, connectionId))
-                .subscribeOn(jdbcScheduler)
-                .doOnSuccess(v -> log.info("[CONNECT_SUCCESS] SSE connection established for userId='{}', connection='{}'", userId, connectionId))
-                .then(Mono.defer(() -> Mono.just(sseService.createEventStream(userId, connectionId))))
-                .flatMapMany(flux -> flux);
+        return sseService.establishSseConnection(userId, connectionId);
     }
 
     public Flux<ServerSentEvent<String>> connectFallback(String userId, String connectionId, ServerWebExchange exchange, RequestNotPermitted ex) {

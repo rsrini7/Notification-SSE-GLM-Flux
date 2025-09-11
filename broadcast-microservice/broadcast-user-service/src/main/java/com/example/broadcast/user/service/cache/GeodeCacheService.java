@@ -3,8 +3,10 @@ package com.example.broadcast.user.service.cache;
 import com.example.broadcast.shared.dto.cache.ConnectionHeartbeat;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
+import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.BroadcastContent;
 import lombok.extern.slf4j.Slf4j;
+
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.client.ClientCache;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -20,46 +22,92 @@ import java.util.stream.Collectors;
 public class GeodeCacheService implements CacheService {
 
     private final ClientCache clientCache;
-    private final Region<String, UserConnectionInfo> userConnectionsRegion;
+    private final Region<String, Map<String, UserConnectionInfo>> userConnectionsRegion;
     private final Region<String, ConnectionHeartbeat> connectionHeartbeatRegion;
     private final Region<String, List<UserMessageInbox>> userMessagesInboxRegion;
     private final Region<Long, BroadcastContent> broadcastContentRegion;
+    private final AppProperties appProperties;
 
     public GeodeCacheService(ClientCache clientCache,
-                             @Qualifier("userConnectionsRegion") Region<String, UserConnectionInfo> userConnectionsRegion,
+                             @Qualifier("userConnectionsRegion") Region<String, Map<String, UserConnectionInfo>> userConnectionsRegion,
                              @Qualifier("connectionHeartbeatRegion") Region<String, ConnectionHeartbeat> connectionHeartbeatRegion,
                              @Qualifier("userMessagesInboxRegion") Region<String, List<UserMessageInbox>> userMessagesInboxRegion,
-                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastContent> broadcastContentRegion
+                             @Qualifier("broadcastContentRegion") Region<Long, BroadcastContent> broadcastContentRegion,
+                             AppProperties appProperties
     ) {
         this.clientCache = clientCache;
         this.userConnectionsRegion = userConnectionsRegion;
         this.connectionHeartbeatRegion = connectionHeartbeatRegion;
         this.userMessagesInboxRegion = userMessagesInboxRegion;
         this.broadcastContentRegion = broadcastContentRegion;
+        this.appProperties = appProperties;
     }
 
     @Override
-    public void registerUserConnection(String userId, String connectionId, String podName, String clusterName) {
-        long nowEpochMilli = OffsetDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli();
-        UserConnectionInfo userConnectionInfo = new UserConnectionInfo(userId, connectionId, podName, clusterName, nowEpochMilli, nowEpochMilli);
+    public boolean registerUserConnection(String userId, String connectionId, String podName, String clusterName) {
+        int maxRetries = 5; // Prevent an infinite loop in high-contention scenarios
+        for (int i = 0; i < maxRetries; i++) {
+            
+            // 1. GET: Read the current value from Geode.
+            Map<String, UserConnectionInfo> oldConnections = userConnectionsRegion.get(userId);
+            
+            int currentSize = (oldConnections == null) ? 0 : oldConnections.size();
+            if (currentSize >= appProperties.getSse().getMaxConnectionsPerUser()) {
+                log.warn("Connection limit reached for user '{}'. Registration failed.", userId);
+                return false; // Limit reached
+            }
 
-        userConnectionsRegion.put(userId, userConnectionInfo);
+            // 2. MODIFY: Create the new connection and add it to a new map.
+            long nowEpochMilli = OffsetDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli();
+            UserConnectionInfo newConnectionInfo = new UserConnectionInfo(userId, connectionId, podName, clusterName, nowEpochMilli, nowEpochMilli);
+            Map<String, UserConnectionInfo> newConnections = (oldConnections == null) ? new HashMap<>() : new HashMap<>(oldConnections);
+            newConnections.put(connectionId, newConnectionInfo);
 
-        ConnectionHeartbeat metadata = new ConnectionHeartbeat(userId, OffsetDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli());
-        connectionHeartbeatRegion.put(connectionId, metadata);
+            // 3. ATOMIC REPLACE (Compare-and-Set)
+            boolean success;
+            if (oldConnections == null) {
+                success = (userConnectionsRegion.putIfAbsent(userId, newConnections) == null);
+            } else {
+                success = userConnectionsRegion.replace(userId, oldConnections, newConnections);
+            }
+
+            if (success) {
+                log.info("Successfully registered connection {} for user '{}'", connectionId, userId);
+                ConnectionHeartbeat metadata = new ConnectionHeartbeat(userId, nowEpochMilli);
+                connectionHeartbeatRegion.put(connectionId, metadata);
+                return true; // Success! Exit the method.
+            }
+            
+            // If success is false, another thread updated the data. Loop to retry.
+            log.warn("Optimistic locking conflict for user '{}'. Retrying... (attempt {}/{})", userId, i + 1, maxRetries);
+        }
+        
+        // If the loop finishes, all retries have failed.
+        log.error("Failed to register connection for user {} after {} attempts.", userId, maxRetries);
+        return false;
     }
 
     @Override
     public void unregisterUserConnection(String userId, String connectionId) {
-       
-        // This method is now problematic as we don't know the clusterName here.
-        // The calling context should be more specific. We assume the info object provides it.
-        // Note: This highlights that clusterName needs to be available in most contexts.
-        getConnectionInfo(connectionId).ifPresent(info -> {
-            userConnectionsRegion.remove(userId);
-        });
-        
-        connectionHeartbeatRegion.remove(connectionId);
+        log.info("Synchronously unregistering connection {} for user {}", connectionId, userId);
+        try {
+            userConnectionsRegion.compute(userId, (key, existingConnections) -> {
+                if (existingConnections == null) {
+                    return null;
+                }
+
+                // Create a new map to avoid modifying the existing one directly
+                Map<String, UserConnectionInfo> updatedConnections = new HashMap<>(existingConnections);
+                updatedConnections.remove(connectionId);
+                return updatedConnections.isEmpty() ? null : updatedConnections;
+            });
+
+            connectionHeartbeatRegion.remove(connectionId);
+            log.info("Synchronously completed unregister for connection {}", connectionId);
+
+        } catch (Exception e) {
+            log.error("Error during synchronous unregister for connection {}: {}", connectionId, e.getMessage());
+        }
     }
     
     @Override
@@ -93,7 +141,24 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public Optional<UserConnectionInfo> getConnectionDetails(String connectionId) {
-        return getConnectionInfo(connectionId);
+        // Step 1: Find the userId from the heartbeat region (reverse lookup)
+        ConnectionHeartbeat heartbeat = connectionHeartbeatRegion.get(connectionId);
+        if (heartbeat == null) {
+            log.debug("No heartbeat found for connectionId: {}, cannot get connection details.", connectionId);
+            return Optional.empty();
+        }
+
+        String userId = heartbeat.getUserId();
+
+        // Step 2: Get the map of all connections for that user from the userConnectionsRegion
+        Map<String, UserConnectionInfo> userConnections = userConnectionsRegion.get(userId);
+        if (userConnections == null || userConnections.isEmpty()) {
+            log.warn("Heartbeat exists for connectionId {} (user {}), but no connection map found in userConnectionsRegion.", connectionId, userId);
+            return Optional.empty();
+        }
+
+        // Step 3: Get the specific connection info from the map using the original connectionId
+        return Optional.ofNullable(userConnections.get(connectionId));
     }
 
     @Override
@@ -105,16 +170,6 @@ public class GeodeCacheService implements CacheService {
                 unregisterUserConnection(metadata.getUserId(), connId);
             }
         });
-    }
-    
-    private Optional<UserConnectionInfo> getConnectionInfo(String connectionId) {
-        // NEW LOGIC: Get userId and clusterName from the metadata object
-        ConnectionHeartbeat metadata = connectionHeartbeatRegion.get(connectionId);
-        if (metadata == null) {
-            return Optional.empty();
-        }
-        
-        return Optional.ofNullable(userConnectionsRegion.get(metadata.getUserId()));
     }
 
     @Override
@@ -136,9 +191,9 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public Map<String, UserConnectionInfo> getConnectionsForUser(String userId) {
-        return Optional.ofNullable(userConnectionsRegion.get(userId))
-                .map(info -> Map.of(info.getConnectionId(), info))
-                .orElse(Collections.emptyMap());
+        // This method now correctly returns all connections for the user
+        Map<String, UserConnectionInfo> connections = userConnectionsRegion.get(userId);
+        return connections != null ? connections : Collections.emptyMap();
     }
     
     @Override
