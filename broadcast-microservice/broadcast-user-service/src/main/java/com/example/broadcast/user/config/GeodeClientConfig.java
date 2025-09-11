@@ -61,7 +61,7 @@ public class GeodeClientConfig {
     @Bean("userMessagesInboxRegion")
     public Region<String, List<UserMessageInbox>> userMessagesInboxRegion(ClientCache clientCache) {
         return clientCache.<String, List<UserMessageInbox>>createClientRegionFactory(ClientRegionShortcut.PROXY)
-                .create("user-messages-inbox");
+                .create(GeodeRegionNames.USER_MESSAGES_INBOX);
     }
 
     @Bean("broadcastContentRegion")
