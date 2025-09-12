@@ -35,7 +35,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
-
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -72,6 +71,7 @@
                     <target>21</target>
                     <compilerArgs>
                         <arg>-parameters</arg>
+                        <arg>-Amapstruct.verbose=true</arg>
                     </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
