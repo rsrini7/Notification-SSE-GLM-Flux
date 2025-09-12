@@ -31,11 +31,8 @@ public class GeodeStaleConnectionCleanupService {
             long nowEpochMillis = OffsetDateTime.now().toInstant().toEpochMilli();
             long staleThreshold = nowEpochMillis - appProperties.getSse().getClientTimeoutThreshold();
 
-            log.info("staleThreshold : {}", staleThreshold);
             // 1. Get ALL stale connection IDs from across the cluster
             Set<String> staleConnectionIds = cacheService.getStaleConnectionIds(staleThreshold);
-
-            log.info("staleConnectionIds : {}", staleConnectionIds);
 
             if (staleConnectionIds.isEmpty()) {
                 log.trace("No stale connections found.");

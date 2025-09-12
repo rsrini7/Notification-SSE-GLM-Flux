@@ -144,7 +144,7 @@ export const useSseConnection = (options: UseSseConnectionOptions) => {
     connectionIdRef.current = newConnectionId;
     const sseUrl = `${baseUrl}/sse/connect?userId=${userId}&connectionId=${newConnectionId}`;
     
-    eventSourceRef.current = new EventSource(sseUrl);
+    eventSourceRef.current = new EventSource(sseUrl, { withCredentials: true });
 
     eventSourceRef.current.onopen = () => {
       console.log(`[SSE - ${userId}] Connection successful. Connection ID: ${newConnectionId}`);
