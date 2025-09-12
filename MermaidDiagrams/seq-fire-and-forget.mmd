@@ -6,7 +6,7 @@ sequenceDiagram
     participant UserUI as Target User's UI
     participant SseClient as User's SSE Client-Side Logic
 
-    AdminUI->>+AdminSvc: 1- POST /broadcasts (isFireAndForget=true, category="Force Logoff")
+    AdminUI->>+AdminSvc: 1- POST /broadcasts (fireAndForget=true, category="Force Logoff")
     Note right of AdminSvc: Treated as immediate, <br/> sets a short 30s expiry.
     AdminSvc-->>-AdminUI: 2- Returns 202 Accepted
 

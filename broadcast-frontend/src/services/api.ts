@@ -77,7 +77,7 @@ export interface BroadcastRequest {
   scheduledAt?: string;
   expiresAt?: string;
   isImmediate: boolean;
-  isFireAndForget?: boolean;
+  fireAndForget?: boolean;
 }
 export interface RedriveAllResult {
   totalMessages: number;

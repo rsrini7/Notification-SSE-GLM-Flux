@@ -3,14 +3,14 @@ package com.example.broadcast.user.service;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
-import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
-import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.Constants.SseEventType;
+import com.example.broadcast.user.dto.UserBroadcastResponse;
+import com.example.broadcast.user.mapper.UserBroadcastMapper;
 import com.example.broadcast.user.service.cache.CacheService;
 
 import lombok.RequiredArgsConstructor;
@@ -35,7 +35,7 @@ public class SseService {
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastRepository userBroadcastRepository; 
     private final UserMessageService userMessageService;
-    private final BroadcastMapper broadcastMapper;
+    private final UserBroadcastMapper userBroadcastMapper;
     private final SseConnectionManager sseConnectionManager;
     private final SseEventFactory sseEventFactory;
     private final MessageStatusService messageStatusService;
@@ -104,7 +104,7 @@ public class SseService {
         userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcast.getId()).ifPresentOrElse(
             userMessage -> {
                 log.info("Delivering targeted broadcast {} to user {}", broadcast.getId(), userId);
-                UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(userMessage, broadcast);
+                UserBroadcastResponse response = userBroadcastMapper.toUserBroadcastResponseFromEntity(userMessage, broadcast);
                 String eventId = response.getUserMessageId() != null
                     ? response.getBroadcastId() + ":" + response.getUserMessageId()
                     : String.valueOf(response.getBroadcastId());
@@ -132,7 +132,7 @@ public class SseService {
                 .createdAt(broadcast.getCreatedAt())
                 .build();
         
-        UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(transientMessage, broadcast);
+        UserBroadcastResponse response = userBroadcastMapper.toUserBroadcastResponseFromEntity(transientMessage, broadcast);
         String eventId = response.getUserMessageId() != null
             ? response.getBroadcastId() + ":" + response.getUserMessageId()
             : String.valueOf(response.getBroadcastId());
@@ -177,7 +177,7 @@ public class SseService {
                 if (broadcastOpt.isPresent()) {
                     BroadcastMessage broadcast = broadcastOpt.get();
                     log.info("Delivering generic 'ALL' broadcast {} to all local clients.", broadcast.getId());
-                    UserBroadcastResponse response = broadcastMapper.toUserBroadcastResponseFromEntity(null, broadcast);
+                    UserBroadcastResponse response = userBroadcastMapper.toUserBroadcastResponseFromEntity(null, broadcast);
                     sseEvent = sseEventFactory.createEvent(SseEventType.MESSAGE, response.getBroadcastId().toString(), response);
                 }
                 break;

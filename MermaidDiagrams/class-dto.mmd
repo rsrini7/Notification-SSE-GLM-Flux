@@ -10,7 +10,7 @@ classDiagram
             String priority
             String category
             long expiresAtEpochMilli
-            boolean isFireAndForget
+            boolean fireAndForget
         }
         class ConnectionHeartbeat {
             <<DTO>>
@@ -50,7 +50,7 @@ classDiagram
             long timestampEpochMilli
             String message
             String errorDetails
-            boolean isFireAndForget
+            boolean fireAndForget
         }
         class ErrorResponse {
             <<DTO>>
@@ -75,7 +75,7 @@ classDiagram
             OffsetDateTime scheduledAt
             OffsetDateTime expiresAt
             boolean isImmediate
-            boolean isFireAndForget
+            boolean fireAndForget
         }
         class BroadcastResponse {
             <<DTO>>

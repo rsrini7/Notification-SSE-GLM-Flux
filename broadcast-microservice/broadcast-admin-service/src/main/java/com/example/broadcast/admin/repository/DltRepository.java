@@ -1,8 +1,9 @@
 package com.example.broadcast.admin.repository;
 
-import com.example.broadcast.shared.dto.admin.DltMessage;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
+
+import com.example.broadcast.admin.dto.DltMessage;
 
 import java.util.List;
 

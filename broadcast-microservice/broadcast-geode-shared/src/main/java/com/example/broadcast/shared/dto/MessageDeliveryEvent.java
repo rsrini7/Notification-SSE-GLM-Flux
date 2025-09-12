@@ -19,5 +19,5 @@ public class MessageDeliveryEvent implements Serializable {
     private String message;
     private String errorDetails;
     @Builder.Default
-    private boolean isFireAndForget = false;
+    private boolean fireAndForget = false;
 }

@@ -2,8 +2,7 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.BroadcastContent;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
-import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
-import com.example.broadcast.shared.mapper.BroadcastMapper;
+import com.example.broadcast.shared.mapper.SharedEventMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
@@ -11,6 +10,8 @@ import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.util.Constants;
+import com.example.broadcast.user.dto.UserBroadcastResponse;
+import com.example.broadcast.user.mapper.UserBroadcastMapper;
 import com.example.broadcast.user.service.cache.CacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,7 +40,8 @@ public class UserMessageService {
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final MessageStatusService messageStatusService;
     private final CacheService cacheService;
-    private final BroadcastMapper broadcastMapper;
+    private final UserBroadcastMapper userBroadcastMapper;
+    private final SharedEventMapper sharedEventMapper;
     private final Scheduler jdbcScheduler;
 
     /**
@@ -125,7 +127,7 @@ public class UserMessageService {
         List<UserBroadcastResponse> finalInbox = targetedMessages.stream()
             .map(msg -> {
                 BroadcastMessage broadcast = contentMap.get(msg.getBroadcastId());
-                return broadcast != null ? broadcastMapper.toUserBroadcastResponseFromEntity(msg, broadcast) : null;
+                return broadcast != null ? userBroadcastMapper.toUserBroadcastResponseFromEntity(msg, broadcast) : null;
             })
             .filter(Objects::nonNull)
             .collect(Collectors.toList());
@@ -134,7 +136,7 @@ public class UserMessageService {
             .filter(broadcast -> !targetedBroadcastIds.contains(broadcast.getId()))
             .map(broadcast -> {
                 BroadcastMessage content = contentMap.get(broadcast.getId());
-                return content != null ? broadcastMapper.toUserBroadcastResponseFromEntity(null, content) : null;
+                return content != null ? userBroadcastMapper.toUserBroadcastResponseFromEntity(null, content) : null;
             })
             .filter(Objects::nonNull)
             .collect(Collectors.toList());
@@ -217,7 +219,7 @@ public class UserMessageService {
                         // If the broadcast is no longer active (i.e., it was cancelled/expired),
                         // treat it as if the content was not found.
                         if (content != null && Constants.BroadcastStatus.ACTIVE.name().equals(content.getStatus())) {
-                            return broadcastMapper.toUserBroadcastResponseFromCache(inboxItem, content);
+                            return userBroadcastMapper.toUserBroadcastResponseFromCache(inboxItem, content);
                         }
                         return null; // Discard if content is null OR not ACTIVE
                     })
@@ -251,7 +253,7 @@ public class UserMessageService {
         for (Long id : broadcastIds) {
             Optional<BroadcastContent> cachedDtoOpt = cacheService.getBroadcastContent(id);
             if (cachedDtoOpt.isPresent()) {
-                resultMap.put(id, broadcastMapper.toBroadcastMessage(cachedDtoOpt.get()));
+                resultMap.put(id, sharedEventMapper.toBroadcastMessage(cachedDtoOpt.get()));
             } else {
                 cacheMissIds.add(id);
             }
@@ -267,7 +269,7 @@ public class UserMessageService {
             for (BroadcastMessage messageFromDb : messagesFromDb) {
                 resultMap.put(messageFromDb.getId(), messageFromDb);
                 // Prime the cache so the next request for this ID is a hit.
-                cacheService.cacheBroadcastContent(broadcastMapper.toBroadcastContentDTO(messageFromDb));
+                cacheService.cacheBroadcastContent(sharedEventMapper.toBroadcastContentDTO(messageFromDb));
             }
         }
         return resultMap;

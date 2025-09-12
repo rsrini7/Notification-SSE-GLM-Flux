@@ -1,4 +1,4 @@
-package com.example.broadcast.shared.dto.admin;
+package com.example.broadcast.admin.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -45,7 +45,7 @@ public class BroadcastRequest {
     private boolean isImmediate = true;
     
     @Builder.Default
-    private boolean isFireAndForget = false;
+    private boolean fireAndForget = false;
 
     @Builder.Default
     private boolean isFailureTest = false;

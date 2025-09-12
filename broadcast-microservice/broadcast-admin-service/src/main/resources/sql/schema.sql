@@ -49,7 +49,7 @@ CREATE TABLE broadcast_messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'SCHEDULED', 'PREPARING', 'READY', 'EXPIRED', 'CANCELLED', 'FAILED')),
-    is_fire_and_forget BOOLEAN DEFAULT false
+    fire_and_forget BOOLEAN DEFAULT false
 );
 
 -- User Broadcast Messages Table (User-side records)

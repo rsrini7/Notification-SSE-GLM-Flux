@@ -2,11 +2,9 @@ package com.example.broadcast.admin.service;
 
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
-import com.example.broadcast.shared.dto.admin.BroadcastRequest;
-import com.example.broadcast.shared.dto.admin.BroadcastResponse;
 import com.example.broadcast.shared.exception.ResourceNotFoundException;
 import com.example.broadcast.shared.exception.UserServiceUnavailableException;
-import com.example.broadcast.shared.mapper.BroadcastMapper;
+import com.example.broadcast.shared.mapper.SharedEventMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.BroadcastStatistics;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
@@ -16,7 +14,11 @@ import com.example.broadcast.shared.repository.*;
 import com.example.broadcast.shared.service.OutboxEventPublisher;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.shared.util.JsonUtils;
+import com.example.broadcast.admin.dto.BroadcastRequest;
+import com.example.broadcast.admin.dto.BroadcastResponse;
 import com.example.broadcast.admin.event.BroadcastCreatedEvent;
+import com.example.broadcast.admin.mapper.AdminBroadcastMapper;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -42,21 +44,22 @@ public class BroadcastLifecycleService {
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
     private final UserService userService;
     private final OutboxEventPublisher outboxEventPublisher;
-    private final BroadcastMapper broadcastMapper;
+    private final AdminBroadcastMapper adminBroadcastMapper;
+    private final SharedEventMapper sharedEventMapper;
     private final AppProperties appProperties;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(noRollbackFor = UserServiceUnavailableException.class)
     public BroadcastResponse createBroadcast(BroadcastRequest request) {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
-        BroadcastMessage broadcast = broadcastMapper.toBroadcastMessage(request);
+        BroadcastMessage broadcast = adminBroadcastMapper.toBroadcastMessage(request);
 
         // 1. Handle edge case for already expired messages
         if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(OffsetDateTime.now(ZoneOffset.UTC))) {
             log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());
             broadcast.setStatus(Constants.BroadcastStatus.EXPIRED.name());
             broadcast = broadcastRepository.save(broadcast);
-            return broadcastMapper.toBroadcastResponse(broadcast, 0);
+            return adminBroadcastMapper.toBroadcastResponse(broadcast, 0);
         }
 
         // 2. Delegate to the appropriate handler based on scheduling
@@ -83,7 +86,7 @@ public class BroadcastLifecycleService {
             default:
                 log.warn("Unhandled immediate broadcast target type: {}. Saving as is.", targetType);
                 broadcast = broadcastRepository.save(broadcast);
-                return broadcastMapper.toBroadcastResponse(broadcast, 0);
+                return adminBroadcastMapper.toBroadcastResponse(broadcast, 0);
         }
     }
 
@@ -94,7 +97,7 @@ public class BroadcastLifecycleService {
         broadcast.setStatus(Constants.BroadcastStatus.SCHEDULED.name());
         broadcast = broadcastRepository.save(broadcast);
         log.info("Broadcast ID {} has been scheduled for {}. No fan-out will occur yet.", broadcast.getId(), broadcast.getScheduledAt());
-        return broadcastMapper.toBroadcastResponse(broadcast, 0);
+        return adminBroadcastMapper.toBroadcastResponse(broadcast, 0);
     }
 
     /**
@@ -105,7 +108,7 @@ public class BroadcastLifecycleService {
         broadcast.setStatus(Constants.BroadcastStatus.PREPARING.name());
         broadcast = broadcastRepository.save(broadcast);
         eventPublisher.publishEvent(new BroadcastCreatedEvent(broadcast.getId()));
-        return broadcastMapper.toBroadcastResponse(broadcast, 0);
+        return adminBroadcastMapper.toBroadcastResponse(broadcast, 0);
     }
 
     /**
@@ -117,7 +120,7 @@ public class BroadcastLifecycleService {
         broadcast = broadcastRepository.save(broadcast);
         initializeStatistics(broadcast.getId(), 0);
         publishSingleOrchestrationEvent(broadcast, Constants.EventType.CREATED, broadcast.getContent());
-        return broadcastMapper.toBroadcastResponse(broadcast, 0);
+        return adminBroadcastMapper.toBroadcastResponse(broadcast, 0);
     }
 
     /**
@@ -134,7 +137,7 @@ public class BroadcastLifecycleService {
             publishBatchUserEvents(broadcast, targetUserIds);
         }
 
-        return broadcastMapper.toBroadcastResponse(broadcast, targetUserIds.size());
+        return adminBroadcastMapper.toBroadcastResponse(broadcast, targetUserIds.size());
     }
 
     /**
@@ -144,11 +147,11 @@ public class BroadcastLifecycleService {
         log.info("Creating a batch of {} outbox events for broadcast ID: {}", userIds.size(), broadcast.getId());
         List<OutboxEvent> outboxEvents = new ArrayList<>();
         for (String userId : userIds) {
-            MessageDeliveryEvent eventPayload = broadcastMapper.toMessageDeliveryEvent(broadcast, Constants.EventType.CREATED.name(), broadcast.getContent())
+            MessageDeliveryEvent eventPayload = sharedEventMapper.toMessageDeliveryEvent(broadcast, Constants.EventType.CREATED.name(), broadcast.getContent())
                     .toBuilder()
                     .userId(userId)
                     .build();
-            outboxEvents.add(broadcastMapper.toOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
+            outboxEvents.add(sharedEventMapper.toOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
         }
         outboxEventPublisher.publishBatch(outboxEvents);
         log.info("Successfully published batch of {} events to outbox.", outboxEvents.size());
@@ -223,12 +226,12 @@ public class BroadcastLifecycleService {
             log.info("Activating PRODUCT broadcast {}. Creating a batch of {} outbox events.", broadcastId, targetUserIds.size());
             List<OutboxEvent> outboxEvents = new ArrayList<>();
             for (String userId : targetUserIds) {
-                MessageDeliveryEvent eventPayload = broadcastMapper.toMessageDeliveryEvent(broadcast, Constants.EventType.CREATED.name(), broadcast.getContent())
+                MessageDeliveryEvent eventPayload = sharedEventMapper.toMessageDeliveryEvent(broadcast, Constants.EventType.CREATED.name(), broadcast.getContent())
                         .toBuilder()
                         .userId(userId) // Set the specific user ID
                         .build();
                 // Partition Kafka messages by userId for better distribution
-                outboxEvents.add(broadcastMapper.toOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
+                outboxEvents.add(sharedEventMapper.toOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
             }
             outboxEventPublisher.publishBatch(outboxEvents);
             log.info("Successfully published batch of {} events to outbox for broadcast {}.", outboxEvents.size(), broadcastId);
@@ -276,8 +279,8 @@ public class BroadcastLifecycleService {
     
     private void publishSingleOrchestrationEvent(BroadcastMessage broadcast, Constants.EventType eventType, String message) {
         String topicName = appProperties.getKafka().getTopic().getNameOrchestration();
-        MessageDeliveryEvent eventPayload = broadcastMapper.toMessageDeliveryEvent(broadcast, eventType.name(), message);
-        outboxEventPublisher.publish(broadcastMapper.toOutboxEvent(eventPayload, topicName, broadcast.getId().toString()));
+        MessageDeliveryEvent eventPayload = sharedEventMapper.toMessageDeliveryEvent(broadcast, eventType.name(), message);
+        outboxEventPublisher.publish(sharedEventMapper.toOutboxEvent(eventPayload, topicName, broadcast.getId().toString()));
     }
 
     public void initializeStatistics(Long broadcastId, int totalTargeted) {
@@ -342,12 +345,12 @@ public class BroadcastLifecycleService {
         log.info("Activating broadcast {}. Creating a batch of {} outbox events for early fan-out.", broadcast.getId(), targetUserIds.size());
         List<OutboxEvent> outboxEvents = new ArrayList<>();
         for (String userId : targetUserIds) {
-            MessageDeliveryEvent eventPayload = broadcastMapper.toMessageDeliveryEvent(broadcast, Constants.EventType.CREATED.name(), broadcast.getContent())
+            MessageDeliveryEvent eventPayload = sharedEventMapper.toMessageDeliveryEvent(broadcast, Constants.EventType.CREATED.name(), broadcast.getContent())
                     .toBuilder()
                     .userId(userId)
                     .build();
             // Use userId as the Kafka key for partitioning
-            outboxEvents.add(broadcastMapper.toOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
+            outboxEvents.add(sharedEventMapper.toOutboxEvent(eventPayload, appProperties.getKafka().getTopic().getNameOrchestration(), userId));
         }
         
         // 4. Publish the entire batch to the outbox in one go.
@@ -361,7 +364,7 @@ public class BroadcastLifecycleService {
         broadcastRepository.updateStatus(deliveryEvent.getBroadcastId(), Constants.BroadcastStatus.FAILED.name());
         String topicName = appProperties.getKafka().getTopic().getNameOrchestration();
         MessageDeliveryEvent eventPayload = createOrchestrationEvent(deliveryEvent, Constants.EventType.FAILED, "Broadcast FAILED");
-        outboxEventPublisher.publish(broadcastMapper.toOutboxEvent(eventPayload, topicName, deliveryEvent.getBroadcastId().toString()));
+        outboxEventPublisher.publish(sharedEventMapper.toOutboxEvent(eventPayload, topicName, deliveryEvent.getBroadcastId().toString()));
         log.warn("Marked entire BroadcastMessage {} as FAILED in a new transaction and evicted cache.", deliveryEvent.getBroadcastId());
     }
 

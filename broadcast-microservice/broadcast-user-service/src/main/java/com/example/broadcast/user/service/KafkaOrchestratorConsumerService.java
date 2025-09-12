@@ -2,7 +2,7 @@ package com.example.broadcast.user.service;
 
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.dto.cache.UserConnectionInfo;
-import com.example.broadcast.shared.mapper.BroadcastMapper;
+import com.example.broadcast.shared.mapper.SharedEventMapper;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
@@ -38,7 +38,7 @@ public class KafkaOrchestratorConsumerService {
     private final BroadcastRepository broadcastRepository;
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;
-    private final BroadcastMapper broadcastMapper;
+    private final SharedEventMapper sharedEventMapper;
     
     @Qualifier("sseUserMessagesRegion")
     private final Region<String, Object> sseUserMessagesRegion;
@@ -60,7 +60,7 @@ public class KafkaOrchestratorConsumerService {
 
         cacheService.getBroadcastContent(event.getBroadcastId()).or(() ->
             broadcastRepository.findById(event.getBroadcastId())
-                .map(broadcastMapper::toBroadcastContentDTO)
+                .map(sharedEventMapper::toBroadcastContentDTO)
                 .map(content -> {
                     cacheService.cacheBroadcastContent(content);
                     log.info("Proactively cached content for broadcast {}", event.getBroadcastId());
@@ -108,7 +108,7 @@ public class KafkaOrchestratorConsumerService {
         
         switch (Constants.EventType.valueOf(event.getEventType())) {
             case CREATED:
-                cacheService.cacheBroadcastContent(broadcastMapper.toBroadcastContentDTO(broadcast));
+                cacheService.cacheBroadcastContent(sharedEventMapper.toBroadcastContentDTO(broadcast));
                 List<String> onlineUsers = cacheService.getOnlineUsers();
                 if (!onlineUsers.isEmpty()) {
                     log.info("Updating statistics for 'ALL' broadcast {}: targeting and delivering to {} online users.", broadcast.getId(), onlineUsers.size());

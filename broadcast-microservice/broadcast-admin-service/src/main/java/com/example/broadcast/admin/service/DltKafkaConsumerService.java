@@ -1,9 +1,9 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.admin.dto.DltMessage;
+import com.example.broadcast.admin.mapper.AdminBroadcastMapper;
 import com.example.broadcast.admin.repository.DltRepository;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
-import com.example.broadcast.shared.dto.admin.DltMessage;
-import com.example.broadcast.shared.mapper.BroadcastMapper;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.util.Constants;
@@ -31,7 +31,7 @@ public class DltKafkaConsumerService {
     private final DltRepository dltRepository;
     private final UserBroadcastRepository userBroadcastRepository;
     private final BroadcastLifecycleService broadcastLifecycleService;
-    private final BroadcastMapper broadcastMapper;
+    private final AdminBroadcastMapper adminBroadcastMapper;
 
     @KafkaListener(
             topics = {
@@ -105,7 +105,7 @@ public class DltKafkaConsumerService {
         }
 
         log.error("DLT Received Message. Key: {}, Topic: {}, DisplayTitle: {}.", key, originalTopic, displayTitle);
-        DltMessage dltMessage = broadcastMapper.toDltMessage(
+        DltMessage dltMessage = adminBroadcastMapper.toDltMessage(
                 failedEvent, key, originalTopic, originalPartition, originalOffset,
                 displayTitle, exceptionStacktrace, payloadJson
             );

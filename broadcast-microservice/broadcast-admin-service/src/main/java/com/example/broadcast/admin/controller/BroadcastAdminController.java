@@ -1,13 +1,13 @@
 package com.example.broadcast.admin.controller;
 
-import com.example.broadcast.shared.dto.admin.BroadcastRequest;
-import com.example.broadcast.shared.dto.admin.BroadcastResponse;
-import com.example.broadcast.shared.dto.admin.BroadcastStatsResponse;
+import com.example.broadcast.admin.dto.BroadcastRequest;
+import com.example.broadcast.admin.dto.BroadcastResponse;
+import com.example.broadcast.admin.dto.BroadcastStatsResponse;
+import com.example.broadcast.admin.mapper.AdminBroadcastMapper;
 import com.example.broadcast.admin.service.BroadcastLifecycleService;
 import com.example.broadcast.admin.service.BroadcastQueryService;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.service.UserService;
-import com.example.broadcast.shared.mapper.BroadcastMapper;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ public class BroadcastAdminController {
     private final BroadcastLifecycleService broadcastLifecycleService;
     private final BroadcastQueryService broadcastQueryService;
     private final UserService userService;
-    private final BroadcastMapper broadcastMapper;
+    private final AdminBroadcastMapper adminBroadcastMapper;
 
     @PostMapping
     @RateLimiter(name = "createBroadcastLimiter")
@@ -76,7 +76,7 @@ public class BroadcastAdminController {
     public ResponseEntity<BroadcastStatsResponse> getBroadcastStats(@PathVariable Long id) {
         log.info("Admin retrieving statistics for broadcast ID: {}", id);
         BroadcastResponse response = broadcastQueryService.getBroadcast(id);
-        BroadcastStatsResponse stats = broadcastMapper.toBroadcastStatsResponse(response);
+        BroadcastStatsResponse stats = adminBroadcastMapper.toBroadcastStatsResponse(response);
 
         return ResponseEntity.ok(stats);
     }

@@ -27,5 +27,5 @@ public class BroadcastContent implements Serializable {
     private long createdAtEpochMilli;
     private long updatedAtEpochMilli;
     private String status; // ACTIVE, EXPIRED, CANCELLED
-    private boolean isFireAndForget;
+    private boolean fireAndForget;
 }

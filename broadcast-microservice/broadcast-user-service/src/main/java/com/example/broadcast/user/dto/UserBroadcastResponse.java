@@ -1,4 +1,4 @@
-package com.example.broadcast.shared.dto.user;
+package com.example.broadcast.user.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

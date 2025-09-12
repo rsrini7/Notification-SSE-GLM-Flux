@@ -37,5 +37,5 @@ public class BroadcastMessage {
     private OffsetDateTime updatedAt;
     private String status;
     @Builder.Default
-    private boolean isFireAndForget = false;
+    private boolean fireAndForget = false;
 }

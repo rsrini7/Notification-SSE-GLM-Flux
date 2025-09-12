@@ -1,4 +1,4 @@
-package com.example.broadcast.shared.dto.admin;
+package com.example.broadcast.admin.dto;
 
 import lombok.Builder;
 import lombok.Data;

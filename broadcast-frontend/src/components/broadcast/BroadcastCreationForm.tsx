@@ -77,7 +77,7 @@ const BroadcastCreationForm: React.FC<BroadcastCreationFormProps> = ({ loading, 
             scheduledAt: formData.scheduleType === 'scheduled' ? new Date(formData.scheduledAt).toISOString() : undefined,
             expiresAt: finalExpiresAt,
             isImmediate: formData.scheduleType !== 'scheduled',
-            isFireAndForget: formData.scheduleType === 'fireAndForget',
+            fireAndForget: formData.scheduleType === 'fireAndForget',
         };
         onCreateBroadcast(payload);
         setFormData({

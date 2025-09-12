@@ -1,7 +1,7 @@
 package com.example.broadcast.user.controller;
 
-import com.example.broadcast.shared.dto.user.MessageReadRequest;
-import com.example.broadcast.shared.dto.user.UserBroadcastResponse;
+import com.example.broadcast.user.dto.MessageReadRequest;
+import com.example.broadcast.user.dto.UserBroadcastResponse;
 import com.example.broadcast.user.service.UserMessageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
