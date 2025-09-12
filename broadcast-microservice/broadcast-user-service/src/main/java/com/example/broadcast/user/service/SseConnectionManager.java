@@ -17,7 +17,6 @@ import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
@@ -138,27 +137,6 @@ public class SseConnectionManager {
                     if (connectionIdsOnThisPod.isEmpty()) return;
 
                     cacheService.updateHeartbeats(connectionIdsOnThisPod);
-
-                    /*// Detect and cleanup stale connections
-                    // NOTE: Assumes `getClientTimeoutThreshold()` exists in AppProperties.Sse
-                    long now = OffsetDateTime.now().toEpochSecond();
-                    long staleThreshold = now - (appProperties.getSse().getClientTimeoutThreshold() / 1000);
-                    Set<String> staleConnections = cacheService.getStaleConnectionIds(staleThreshold);
-
-                    // Only check connections on this pod
-                    staleConnections.retainAll(connectionIdsOnThisPod);
-
-                    if (!staleConnections.isEmpty()) {
-                        log.warn("Detected {} stale connections. Cleaning up.", staleConnections.size());
-                        for (String staleConnectionId : staleConnections) {
-                            String userId = connectionIdToUserIdMap.get(staleConnectionId);
-                            if (userId != null) {
-                                log.warn("Connection {} for user {} appears stale - no activity for more than {}ms",
-                                    staleConnectionId, userId, appProperties.getSse().getClientTimeoutThreshold());
-                                cleanupFailedConnectionAsync(userId, staleConnectionId);
-                            }
-                        }
-                    }*/
 
                     // Send heartbeat to active connections
                     ServerSentEvent<String> heartbeatEvent = sseEventFactory.createHeartbeatEvent();
