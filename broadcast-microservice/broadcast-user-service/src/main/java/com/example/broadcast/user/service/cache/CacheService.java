@@ -15,6 +15,7 @@ public interface CacheService {
     Map<String, UserConnectionInfo> getConnectionsForUser(String userId);
     boolean isUserOnline(String userId);
     void updateHeartbeats(Set<String> connectionIds);
+    Optional<ConnectionHeartbeat> getHeartbeatEntry(String connectionId);
 
     Set<String> getStaleConnectionIds(long thresholdTimestamp);
     Optional<UserConnectionInfo> getConnectionDetails(String connectionId);

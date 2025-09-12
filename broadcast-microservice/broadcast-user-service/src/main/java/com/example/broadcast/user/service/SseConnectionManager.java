@@ -139,7 +139,7 @@ public class SseConnectionManager {
 
                     cacheService.updateHeartbeats(connectionIdsOnThisPod);
 
-                    // Detect and cleanup stale connections
+                    /*// Detect and cleanup stale connections
                     // NOTE: Assumes `getClientTimeoutThreshold()` exists in AppProperties.Sse
                     long now = OffsetDateTime.now().toEpochSecond();
                     long staleThreshold = now - (appProperties.getSse().getClientTimeoutThreshold() / 1000);
@@ -158,7 +158,7 @@ public class SseConnectionManager {
                                 cleanupFailedConnectionAsync(userId, staleConnectionId);
                             }
                         }
-                    }
+                    }*/
 
                     // Send heartbeat to active connections
                     ServerSentEvent<String> heartbeatEvent = sseEventFactory.createHeartbeatEvent();

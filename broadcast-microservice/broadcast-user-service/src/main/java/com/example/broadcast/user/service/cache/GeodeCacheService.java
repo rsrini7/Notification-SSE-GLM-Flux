@@ -117,7 +117,7 @@ public class GeodeCacheService implements CacheService {
 
     @Override
     public void updateHeartbeats(Set<String> connectionIds) {
-        long now = OffsetDateTime.now(ZoneOffset.UTC).toEpochSecond();
+        long now = OffsetDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli();
         Map<String, ConnectionHeartbeat> updates = new HashMap<>();
         for (String connId : connectionIds) {
             ConnectionHeartbeat currentMeta = connectionHeartbeatRegion.get(connId);
@@ -132,10 +132,23 @@ public class GeodeCacheService implements CacheService {
     }
 
     @Override
+    public Optional<ConnectionHeartbeat> getHeartbeatEntry(String connectionId) {
+        return Optional.ofNullable(connectionHeartbeatRegion.get(connectionId));
+    }
+
+    @Override
     public Set<String> getStaleConnectionIds(long thresholdTimestamp) {
-        return connectionHeartbeatRegion.entrySet().stream()
-                .filter(entry -> entry.getValue().getLastHeartbeatTimestamp() < thresholdTimestamp)
-                .map(Map.Entry::getKey)
+        // 1. Get the complete list of keys directly from the server. This is reliable.
+        Set<String> allKeysOnServer = connectionHeartbeatRegion.keySetOnServer();
+        
+        // 2. Stream over the definitive key set.
+        return allKeysOnServer.stream()
+                .filter(key -> {
+                    // 3. For each key, get its value.
+                    ConnectionHeartbeat heartbeat = connectionHeartbeatRegion.get(key);
+                    // 4. Perform the stale check on the value.
+                    return heartbeat != null && heartbeat.getLastHeartbeatTimestamp() < thresholdTimestamp;
+                })
                 .collect(Collectors.toSet());
     }
 
