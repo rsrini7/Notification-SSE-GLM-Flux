@@ -143,7 +143,9 @@ services:
     environment:
       - JAVA_OPTS=-javaagent:/app/opentelemetry-javaagent.jar -Duser.timezone=UTC -Xms512m -Xmx1g
       - OTEL_SERVICE_NAME=broadcast-admin-service
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_METRICS_EXPORTER=none      
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - BROADCAST_GEODE_LOCATOR_HOST=geode-locator
@@ -174,7 +176,9 @@ services:
     environment:
       - JAVA_OPTS=-javaagent:/app/opentelemetry-javaagent.jar -Duser.timezone=UTC -Xms512m -Xmx1g
       - OTEL_SERVICE_NAME=broadcast-user-service
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_METRICS_EXPORTER=none
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - BROADCAST_GEODE_LOCATOR_HOST=geode-locator

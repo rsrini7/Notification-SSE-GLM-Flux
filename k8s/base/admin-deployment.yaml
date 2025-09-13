@@ -53,6 +53,10 @@ spec:
           value: "broadcast-admin-service"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "http://jaeger-service:4318"
+        - name: OTEL_LOGS_EXPORTER
+          value: none
+        - name: OTEL_METRICS_EXPORTER
+          value: none          
         - name: JAVA_OPTS
           value: "-javaagent:/app/opentelemetry-javaagent.jar -Xms512m -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2"
         - name: SPRING_PROFILES_ACTIVE
