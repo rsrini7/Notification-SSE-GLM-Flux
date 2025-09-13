@@ -14,6 +14,7 @@ import java.util.List;
 @AllArgsConstructor
 public class BroadcastResponse {
     private Long id;
+    private String correlationId;
     private String senderId;
     private String senderName;
     private String content;

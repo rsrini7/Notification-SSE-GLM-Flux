@@ -9,6 +9,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
+import com.example.broadcast.shared.dto.CorrelatedRequest;
+
 /**
  * DTO for broadcast message creation requests
  * Used by administrators to create new broadcasts
@@ -17,7 +19,10 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class BroadcastRequest {
+public class BroadcastRequest  implements CorrelatedRequest {
+    
+    private String correlationId;
+
     @NotBlank(message = "Sender ID is required")
     private String senderId;
     

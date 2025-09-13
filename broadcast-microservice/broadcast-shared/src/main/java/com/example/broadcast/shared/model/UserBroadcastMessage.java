@@ -28,6 +28,7 @@ public class UserBroadcastMessage{
     private String readStatus; // UNREAD, READ
     private OffsetDateTime deliveredAt;
     private OffsetDateTime readAt;
+    private OffsetDateTime clientRenderedAt;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

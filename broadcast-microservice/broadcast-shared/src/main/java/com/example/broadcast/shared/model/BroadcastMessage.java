@@ -24,6 +24,7 @@ import org.springframework.data.relational.core.mapping.Table;
 public class BroadcastMessage {
     @Id
     private Long id;
+    private String correlationId;
     private String senderId;
     private String senderName;
     private String content;

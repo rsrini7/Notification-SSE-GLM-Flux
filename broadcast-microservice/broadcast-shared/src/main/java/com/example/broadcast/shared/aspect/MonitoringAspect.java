@@ -1,12 +1,14 @@
 package com.example.broadcast.shared.aspect;
 
 import com.example.broadcast.shared.config.MonitoringConfig;
+import com.example.broadcast.shared.dto.CorrelatedRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
+import io.opentelemetry.api.trace.Span;
 
 @Aspect
 @Component
@@ -117,6 +119,23 @@ public class MonitoringAspect {
         String methodName = joinPoint.getSignature().getName();
         long startTime = System.currentTimeMillis();
         
+        // Get the currently active span (created automatically by the OTel Agent)
+        Span currentSpan = Span.current();
+        
+        // Find and add the correlation_id from request DTOs to the span
+        if (currentSpan.getSpanContext().isValid()) {
+            for (Object arg : joinPoint.getArgs()) {
+                if (arg instanceof CorrelatedRequest request) {
+                    if (request.getCorrelationId() != null) {
+                        currentSpan.setAttribute("app.correlation_id", request.getCorrelationId());
+                        // Once found, we can break the loop
+                        break;
+                    }
+                }
+                // Add other 'if instanceof' checks here for other DTOs if needed
+            }
+        }
+
         try {
             Object result = joinPoint.proceed();
             long duration = System.currentTimeMillis() - startTime;
@@ -129,6 +148,12 @@ public class MonitoringAspect {
             metricsCollector.recordTimer("broadcast.controller.latency", duration, "class", className, "method", methodName, "status", "error");
             metricsCollector.incrementCounter("broadcast.controller.calls", "class", className, "method", methodName, "status", "error");
             metricsCollector.incrementCounter("broadcast.errors", "type", "controller", "class", className, "method", methodName);
+            
+            // Add error details to the span
+            if (currentSpan.getSpanContext().isValid()) {
+                currentSpan.recordException(e);
+            }
+
             log.error("{}.{} failed after {}ms: {}", className, methodName, duration, e.getMessage());
             throw e;
         }
@@ -155,4 +180,7 @@ public class MonitoringAspect {
             throw e;
         }
     }
+
+
+
 }

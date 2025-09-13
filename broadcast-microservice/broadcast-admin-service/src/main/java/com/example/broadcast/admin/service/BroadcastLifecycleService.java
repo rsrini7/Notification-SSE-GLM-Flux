@@ -54,6 +54,8 @@ public class BroadcastLifecycleService {
         log.info("Creating broadcast from sender: {}, target: {}", request.getSenderId(), request.getTargetType());
         BroadcastMessage broadcast = adminBroadcastMapper.toBroadcastMessage(request);
 
+        broadcast.setCorrelationId(UUID.randomUUID().toString());
+
         // 1. Handle edge case for already expired messages
         if (broadcast.getExpiresAt() != null && broadcast.getExpiresAt().isBefore(OffsetDateTime.now(ZoneOffset.UTC))) {
             log.warn("Broadcast creation request for an already expired message. Expiration: {}", broadcast.getExpiresAt());

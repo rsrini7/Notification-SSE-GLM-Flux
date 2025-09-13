@@ -15,6 +15,7 @@ import java.time.OffsetDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserBroadcastResponse {
+    private String correlationId;
     private Long userMessageId;
     private Long broadcastId;
     private String userId;

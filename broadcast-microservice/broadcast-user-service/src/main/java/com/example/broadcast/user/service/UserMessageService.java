@@ -11,9 +11,18 @@ import com.example.broadcast.shared.repository.UserBroadcastRepository;
 import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.user.dto.UserBroadcastResponse;
+import com.example.broadcast.user.dto.VisibilityAckRequest;
 import com.example.broadcast.user.mapper.UserBroadcastMapper;
 import com.example.broadcast.user.service.cache.CacheService;
-import lombok.RequiredArgsConstructor;
+
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanKind;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.TextMapGetter;
+import jakarta.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -31,7 +40,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class UserMessageService {
 
@@ -43,7 +51,28 @@ public class UserMessageService {
     private final UserBroadcastMapper userBroadcastMapper;
     private final SharedEventMapper sharedEventMapper;
     private final Scheduler jdbcScheduler;
+    private final Tracer tracer;
 
+    public UserMessageService(UserBroadcastRepository userBroadcastRepository,
+                              BroadcastRepository broadcastRepository,
+                              BroadcastStatisticsRepository broadcastStatisticsRepository,
+                              MessageStatusService messageStatusService,
+                              CacheService cacheService,
+                              UserBroadcastMapper userBroadcastMapper,
+                              SharedEventMapper sharedEventMapper,
+                              Scheduler jdbcScheduler,
+                              OpenTelemetry openTelemetry) {
+        this.userBroadcastRepository = userBroadcastRepository;
+        this.broadcastRepository = broadcastRepository;
+        this.broadcastStatisticsRepository = broadcastStatisticsRepository;
+        this.messageStatusService = messageStatusService;
+        this.cacheService = cacheService;
+        this.userBroadcastMapper = userBroadcastMapper;
+        this.sharedEventMapper = sharedEventMapper;
+        this.jdbcScheduler = jdbcScheduler;
+        this.tracer = openTelemetry.getTracer(UserMessageService.class.getName(), "1.0.0");
+    }
+    
     /**
      * A private record to act as a data holder for results from the database fetch.
      */
@@ -353,6 +382,68 @@ public class UserMessageService {
             log.warn("Caught race condition when creating delivered record for user {} and broadcast {}. Ignoring.", userId, broadcastId);
         } catch (Exception e) {
             log.error("Failed to record 'DELIVERED' status for user {} and broadcast {}", userId, broadcastId, e);
+        }
+    }
+
+     /**
+     * Handles the "visibility ack" from the client, closing the end-to-end trace.
+     * @param request The request DTO from the client.
+     */
+    @Transactional
+    public void acknowledgeVisibility(VisibilityAckRequest request) {
+        // 1. Define a getter to extract the traceparent header from our DTO.
+        TextMapGetter<VisibilityAckRequest> getter = new TextMapGetter<>() {
+            @Override
+            public Iterable<String> keys(VisibilityAckRequest carrier) {
+                return Collections.singletonList("traceparent");
+            }
+
+            @Nullable
+            @Override
+            public String get(@Nullable VisibilityAckRequest carrier, String key) {
+                if (carrier != null && "traceparent".equalsIgnoreCase(key)) {
+                    return carrier.getTraceparent();
+                }
+                return null;
+            }
+        };
+
+        // 2. Extract the parent context from the incoming request's traceparent.
+        Context parentContext = Context.current();
+        if (request.getTraceparent() != null) {
+            parentContext = GlobalOpenTelemetry.getPropagators().getTextMapPropagator()
+                    .extract(parentContext, request, getter);
+        }
+
+        // 3. Start a new span, explicitly setting its parent to the client's context.
+        Span span = tracer.spanBuilder("client-render-ack")
+                .setParent(parentContext)
+                .setSpanKind(SpanKind.SERVER)
+                .startSpan();
+
+        // 4. Use a try-with-resources block to ensure the span is always ended.
+        try (var scope = span.makeCurrent()) {
+            log.info("Received visibility ack for user: {}, broadcast: {}, correlation_id: {}",
+                    request.getUserId(), request.getBroadcastId(), request.getCorrelationId());
+
+            // 5. Add key attributes to the span for analysis.
+            span.setAttribute("app.correlation_id", request.getCorrelationId());
+            span.setAttribute("app.broadcast_id", request.getBroadcastId());
+            span.setAttribute("app.user_id", request.getUserId());
+
+            // 6. Perform the business logic to update the database.
+            userBroadcastRepository.updateClientRenderedAt(
+                    request.getUserId(), 
+                    request.getBroadcastId(), 
+                    OffsetDateTime.now(ZoneOffset.UTC)
+            );
+
+        } catch (Exception e) {
+            span.recordException(e);
+            throw e;
+        } finally {
+            // 7. End the span, marking its completion.
+            span.end();
         }
     }
 }
