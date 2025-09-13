@@ -5,9 +5,10 @@ A high-performance Java microservice for the Broadcast Messaging System, built w
 ## Features
 
 - **Real-time SSE Delivery**: Sub-second latency for online users
-- **Persistent Storage**: h2 Database with admin and user-side tracking
+- **Persistent Storage**: h2/postgres Database with admin and user-side tracking
 - **Event Streaming**: Kafka-based fan-out with at-least-once semantics
 - **High-Performance Caching**: Geode for low-latency operations
+- **End-to-End Observability**: The entire message lifecycle is instrumented with OpenTelemetry, providing distributed traces, metrics, and structured logs.
 - **Scalable Architecture**: Kubernetes-ready with HPA and PDB
 
 ## Tech Stack
@@ -69,6 +70,15 @@ A high-performance Java microservice for the Broadcast Messaging System, built w
 - **Partitions**: 10 partitions for parallel processing
 - **Replication**: 3 replicas for fault tolerance
 - **Consumer Groups**: Multiple consumers for load distribution
+
+### End-to-End Observability
+
+The system is deeply instrumented using the OpenTelemetry framework to provide a complete view of the application's performance and behavior.
+
+-   **Distributed Tracing**: Every message is assigned a unique `correlation_id` upon creation. This ID is propagated through all system components—from the initial API call in the Admin Service, through the Kafka event, to the User Service, and finally back from the client UI in a "visibility ack". This allows for a complete, end-to-end trace of a message's lifecycle, visualized in **Jaeger**.
+-   **Cardinality-Safe Metrics**: Key performance indicators (KPIs) like end-to-end delivery latency (p99), Geode CQ queue depth, and the number of active SSE connections are exported as metrics. This data can be collected by **Prometheus** and visualized in **Grafana** to monitor SLOs.
+-   **Structured Logging**: All logs are produced in a structured (JSON) format. Every log entry related to a specific message is tagged with the `correlation_id`, allowing for easy filtering and debugging of a specific transaction across all microservices.
+
 
 ## H2 Console
 

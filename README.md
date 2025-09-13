@@ -18,6 +18,7 @@ The overall system architecture is designed for scalability and real-time perfor
 -   **Real-time SSE Delivery**: For instant message delivery to online users.
 -   **Event-Driven Architecture**: Using Kafka for asynchronous communication.
 -   **High-Performance Caching**: With Geode / Gemfire for low-latency operations.
+-   **End-to-End Observability**: The entire message lifecycle is instrumented with OpenTelemetry, providing distributed traces, metrics, and structured logs.
 -   **Scalable Deployment**: Ready for Kubernetes with Horizontal Pod Autoscaling (HPA).
 
 ### System Design Diagram
@@ -37,7 +38,6 @@ graph TD
         PrecomputationScheduler["Precomputation Scheduler<br/>(Every 1 min)"]
         AsyncPrecomputation["Async TargetingService<br/>(Fan-out on Write)"]
     end
-    
 
     subgraph "3. Activation (Admin Service)"
         ActivationScheduler["Activation Scheduler<br/>(Every 1 min)"]
