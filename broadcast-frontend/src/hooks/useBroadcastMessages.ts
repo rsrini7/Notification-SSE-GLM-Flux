@@ -1,5 +1,6 @@
 'use client';
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { trace, context } from '@opentelemetry/api';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useSseConnection } from './useSseConnection';
 import { userService, type UserBroadcastMessage } from '../services/api';
@@ -16,10 +17,13 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
     autoConnect = true,
     onForcedDisconnect
   } = options;
+
   const [messages, setMessages] = useState<UserBroadcastMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [isDegraded, setIsDegraded] = useState(false);
   const { toast } = useToast();
+
+  const acknowledgedIds = useRef(new Set<number>());
 
   const fetchMessages = useCallback(async () => {
     setLoading(true);
@@ -115,6 +119,42 @@ export const useBroadcastMessages = (options: UseBroadcastMessagesOptions) => {
         console.log('Unhandled SSE event type:', event.type);
     }
   };
+
+  // This new useEffect hook runs whenever the 'messages' array changes.
+  // Its job is to send the visibility acknowledgment for any new messages.
+  useEffect(() => {
+    messages.forEach(message => {
+      // Check if the message has a correlationId and has NOT been acknowledged yet.
+      if (message.correlationId && !acknowledgedIds.current.has(message.broadcastId)) {
+        
+        // --- OpenTelemetry Logic ---
+        // Get the current active span from the browser's context.
+        // This requires the OTel Web SDK to be properly initialized.
+        const currentSpan = trace.getSpan(context.active());
+        let traceparent: string | undefined;
+
+        if (currentSpan) {
+            const spanContext = currentSpan.spanContext();
+            // Construct the W3C traceparent header string to link the trace.
+            traceparent = `00-${spanContext.traceId}-${spanContext.spanId}-01`;
+        }
+        // --- End OpenTelemetry Logic ---
+
+        console.log(`Sending visibility ack for broadcast ${message.broadcastId} with correlation_id ${message.correlationId}`);
+        
+        // Call the new function in our API service.
+        userService.sendVisibilityAck({
+            userId: userId,
+            broadcastId: message.broadcastId,
+            correlationId: message.correlationId,
+            traceparent: traceparent,
+        });
+
+        // Add the ID to our set to prevent sending the ack again.
+        acknowledgedIds.current.add(message.broadcastId);
+      }
+    });
+  }, [messages, userId]); 
 
   const onConnect = useCallback(() => {
     toast({ title: 'Connected', description: `Real-time updates enabled for ${userId}` });

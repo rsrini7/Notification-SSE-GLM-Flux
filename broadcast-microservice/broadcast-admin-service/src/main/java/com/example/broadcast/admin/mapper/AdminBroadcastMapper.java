@@ -1,6 +1,5 @@
 package com.example.broadcast.admin.mapper;
 
-// Import your admin DTOs after moving them
 import com.example.broadcast.admin.dto.*;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
@@ -20,9 +19,13 @@ public interface AdminBroadcastMapper {
     @Mapping(target = "updatedAt", expression = "java(OffsetDateTime.now(ZoneOffset.UTC))")
     @Mapping(source = "fireAndForget", target = "fireAndForget")
     @Mapping(target = "targetIds", expression = "java(JsonUtils.toJsonArray(request.getTargetIds()))")
+    @Mapping(source = "correlationId", target = "correlationId")
     BroadcastMessage toBroadcastMessage(BroadcastRequest request);
 
     @Mapping(target = "targetIds", expression = "java(JsonUtils.parseJsonArray(broadcast.getTargetIds()))")
+    @Mapping(source = "broadcast.correlationId", target = "correlationId")
+    @Mapping(target = "totalDelivered", ignore = true)
+    @Mapping(target = "totalRead", ignore = true)
     BroadcastResponse toBroadcastResponse(BroadcastMessage broadcast, int totalTargeted);
     
     @Mapping(source = "id", target = "broadcastId")
@@ -44,6 +47,7 @@ public interface AdminBroadcastMapper {
     @Mapping(source = "displayTitle", target = "exceptionMessage")
     @Mapping(target = "id", expression = "java(UUID.randomUUID().toString())")
     @Mapping(target = "failedAt", expression = "java(OffsetDateTime.now(ZoneOffset.UTC))")
+    @Mapping(source = "failedEvent.correlationId", target = "correlationId")
     DltMessage toDltMessage(MessageDeliveryEvent failedEvent, String key, String originalTopic,
                             Integer originalPartition, Long originalOffset,
                             String displayTitle, String exceptionStackTrace, String payloadJson);

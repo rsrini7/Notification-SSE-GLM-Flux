@@ -37,14 +37,13 @@ public abstract class SharedEventMapper {
         return OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMilli), ZoneOffset.UTC);
     }
 
-    // --- Mappings ---
-
     @Mapping(source = "broadcast.id", target = "broadcastId")
     @Mapping(target = "eventId", expression = "java(UUID.randomUUID().toString())")
     @Mapping(target = "timestampEpochMilli", expression = "java(System.currentTimeMillis())")
     @Mapping(source = "broadcast.fireAndForget", target = "fireAndForget")
     @Mapping(target = "userId", ignore = true)
     @Mapping(target = "errorDetails", ignore = true)
+    @Mapping(source = "broadcast.correlationId", target = "correlationId")
     public abstract MessageDeliveryEvent toMessageDeliveryEvent(BroadcastMessage broadcast, String eventType, String message);
 
     @Mapping(source = "eventPayload.eventId", target = "id")
@@ -72,6 +71,7 @@ public abstract class SharedEventMapper {
     @Mapping(source = "expiresAt", target = "expiresAtEpochMilli")
     @Mapping(source = "createdAt", target = "createdAtEpochMilli")
     @Mapping(source = "updatedAt", target = "updatedAtEpochMilli")
+    @Mapping(source = "correlationId", target = "correlationId")
     public abstract BroadcastContent toBroadcastContentDTO(BroadcastMessage entity);
     
     @Mapping(source = "fireAndForget", target = "fireAndForget")

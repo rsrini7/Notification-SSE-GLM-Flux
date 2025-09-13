@@ -21,6 +21,7 @@ public class DltMessage implements Persistable<String> {
     @Id
     private String id;
     private Long broadcastId;
+    private String correlationId;
     private String originalKey; // ADD THIS FIELD
     private String originalTopic;
     private int originalPartition;

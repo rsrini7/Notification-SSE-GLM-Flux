@@ -42,6 +42,13 @@
         </dependency>
         
         <dependency>
+            <groupId>io.opentelemetry.javaagent</groupId>
+            <artifactId>opentelemetry-javaagent</artifactId>
+            <version>${opentelemetry-javaagent.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
@@ -54,6 +61,12 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <image>
+                        <env>
+                            <OTEL_SERVICE_NAME>broadcast-admin-service</OTEL_SERVICE_NAME>
+                            <OTEL_EXPORTER_OTLP_ENDPOINT>http://jaeger-service:4318</OTEL_EXPORTER_OTLP_ENDPOINT>
+                        </env>
+                    </image>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>

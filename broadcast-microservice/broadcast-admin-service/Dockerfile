@@ -23,6 +23,11 @@ FROM eclipse-temurin:21-jre-alpine
 # Set the working directory for the runtime image
 WORKDIR /app
 
+# Download the OpenTelemetry Java Agent
+ARG OTEL_AGENT_VERSION=2.19.0
+RUN curl -L -o opentelemetry-javaagent.jar \
+    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_AGENT_VERSION}/opentelemetry-javaagent.jar
+
 # Copy the executable JAR file from the 'builder' stage
 COPY --from=builder /app/target/*.jar app.jar
 
@@ -31,4 +36,4 @@ COPY --from=builder /app/target/*.jar app.jar
 EXPOSE 8081
 
 # The command to run the application when the container starts
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]

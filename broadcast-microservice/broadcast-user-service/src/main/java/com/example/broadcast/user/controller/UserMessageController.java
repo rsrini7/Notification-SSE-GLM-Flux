@@ -2,6 +2,7 @@ package com.example.broadcast.user.controller;
 
 import com.example.broadcast.user.dto.MessageReadRequest;
 import com.example.broadcast.user.dto.UserBroadcastResponse;
+import com.example.broadcast.user.dto.VisibilityAckRequest;
 import com.example.broadcast.user.service.UserMessageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,4 +37,11 @@ public class UserMessageController {
         userMessageService.markMessageAsRead(request.getUserId(), request.getBroadcastId());
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/ack-visibility")
+    public ResponseEntity<Void> acknowledgeVisibility(@Valid @RequestBody VisibilityAckRequest request) {
+       userMessageService.acknowledgeVisibility(request);
+       return ResponseEntity.ok().build();
+    }
+
 }

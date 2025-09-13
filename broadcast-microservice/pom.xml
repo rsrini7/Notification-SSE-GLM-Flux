@@ -32,6 +32,8 @@
         <lombok.version>1.18.38</lombok.version>
         <shedlock.version>5.13.0</shedlock.version>
         <mapstruct.version>1.6.3</mapstruct.version>
+        <opentelemetry.version>1.54.0</opentelemetry.version>
+        <opentelemetry-javaagent.version>2.19.0</opentelemetry-javaagent.version>
     </properties>
 
     <dependencyManagement>
@@ -49,10 +51,19 @@
                 <artifactId>shedlock-spring</artifactId>
                 <version>${shedlock.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>net.javacrumbs.shedlock</groupId>
                 <artifactId>shedlock-provider-jdbc-template</artifactId>
                 <version>${shedlock.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-bom</artifactId>
+                <version>${opentelemetry.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <dependency>

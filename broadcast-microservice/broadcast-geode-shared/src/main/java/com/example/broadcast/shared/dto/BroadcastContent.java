@@ -15,6 +15,7 @@ import java.util.List;
 @AllArgsConstructor
 public class BroadcastContent implements Serializable {
     private Long id;
+    private String correlationId;
     private String senderId;
     private String senderName;
     private String content;

@@ -45,6 +45,11 @@ public interface UserBroadcastRepository extends CrudRepository<UserBroadcastMes
     @Query("UPDATE user_broadcast_messages SET delivery_status = :newStatus, updated_at = CURRENT_TIMESTAMP WHERE broadcast_id = :broadcastId AND delivery_status IN ('PENDING', 'DELIVERED')")
     int updateNonFinalStatusesByBroadcastId(@Param("broadcastId") Long broadcastId, @Param("newStatus") String newStatus);
 
+   @Modifying
+   @Query("UPDATE user_broadcast_messages SET client_rendered_at = :renderedAt, updated_at = CURRENT_TIMESTAMP WHERE user_id = :userId AND broadcast_id = :broadcastId AND client_rendered_at IS NULL")
+   int updateClientRenderedAt(@Param("userId") String userId, @Param("broadcastId") Long broadcastId, @Param("renderedAt") OffsetDateTime renderedAt);
+
+
     @Modifying
     @Query("DELETE FROM user_broadcast_messages WHERE broadcast_id = :broadcastId AND read_status <> 'READ'")
     int deleteUnreadMessagesByBroadcastId(@Param("broadcastId") Long broadcastId);

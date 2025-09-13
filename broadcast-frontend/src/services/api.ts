@@ -53,6 +53,7 @@ export interface BroadcastStats {
 export interface UserBroadcastMessage {
   userMessageId: number | null;
   broadcastId: number;
+  correlationId: string;
   userId: string;
   deliveryStatus: string;
   readStatus: string;
@@ -84,6 +85,13 @@ export interface RedriveAllResult {
   successCount: number;
   failureCount: number;
   failures: { dltMessageId: string; reason: string }[];
+}
+
+export interface VisibilityAckRequest {
+  userId: string;
+  broadcastId: number;
+  correlationId: string;
+  traceparent?: string; // Add this optional field
 }
 
 
@@ -139,5 +147,8 @@ export const userService = {
   getAllUsers: async (): Promise<string[]> => {
     const response = await adminApi.get('/broadcasts/users/all-ids');
     return response.data;
+  },
+  sendVisibilityAck: async (request: VisibilityAckRequest): Promise<void> => {
+   await userApi.post('/messages/ack-visibility', request);
   },
 };

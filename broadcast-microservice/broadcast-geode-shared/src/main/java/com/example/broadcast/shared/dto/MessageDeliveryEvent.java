@@ -14,6 +14,7 @@ public class MessageDeliveryEvent implements Serializable {
     private String eventId;
     private Long broadcastId;
     private String userId;
+    private String correlationId;
     private String eventType; // CREATED, DELIVERED, READ, FAILED
     private long timestampEpochMilli;
     private String message;
