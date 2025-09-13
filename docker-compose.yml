@@ -141,7 +141,9 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g
+      - JAVA_OPTS=-javaagent:/app/opentelemetry-javaagent.jar -Duser.timezone=UTC -Xms512m -Xmx1g
+      - OTEL_SERVICE_NAME=broadcast-admin-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - BROADCAST_GEODE_LOCATOR_HOST=geode-locator
@@ -170,7 +172,9 @@ services:
     deploy:
       replicas: 1
     environment:
-      - JAVA_OPTS=-Duser.timezone=UTC -Xms512m -Xmx1g    
+      - JAVA_OPTS=-javaagent:/app/opentelemetry-javaagent.jar -Duser.timezone=UTC -Xms512m -Xmx1g
+      - OTEL_SERVICE_NAME=broadcast-user-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - SPRING_PROFILES_ACTIVE=dev-pg
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/broadcastdb
       - BROADCAST_GEODE_LOCATOR_HOST=geode-locator
@@ -286,6 +290,16 @@ services:
         condition: service_started
     networks:
     - broadcastnet
+
+  jaeger:
+      image: jaegertracing/all-in-one:1.73.0
+      container_name: jaeger
+      ports:
+        - "16686:16686" # Jaeger UI
+        - "4317:4317"   # OTLP gRPC endpoint
+        - "4318:4318"   # OTLP HTTP endpoint
+      networks:
+        - broadcastnet    
 
 volumes:
   postgres_data:

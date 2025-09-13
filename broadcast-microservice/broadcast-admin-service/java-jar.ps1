@@ -6,15 +6,17 @@ Remove-Item -Path "logs\*" -Recurse -Force -ErrorAction SilentlyContinue
 mvn clean package
 
 try {
-    # --- MODIFICATION START ---
     # Generate a random suffix to create a dynamic pod name
     $randomSuffix = -join ((65..90) + (97..122) | Get-Random -Count 5 | ForEach-Object { [char]$_ })
     $podName = "broadcast-admin-service-$randomSuffix"
-    # --- MODIFICATION END ---
+
+    # Set OpenTelemetry Environment Variables for the agent
+    $env:OTEL_SERVICE_NAME = "broadcast-admin-service"
+    $env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4317"
 
     Write-Host "Starting admin-service with DYNAMIC pod name: $podName... Press Ctrl+C to stop." -ForegroundColor Green
     
-    java "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" "-Dpod.name=$podName" "-Dcluster.name=cluster-a" -jar target/broadcast-admin-service-1.0.0.jar
+    java -javaagent:../../opentelemetry-javaagent.jar "-Duser.timezone=UTC" "-Dspring.profiles.active=dev-pg" "-Dpod.name=$podName" "-Dcluster.name=cluster-a" -jar target/broadcast-admin-service-1.0.0.jar
 }
 catch [System.Management.Automation.PipelineStoppedException] {
     # This block specifically catches the Ctrl+C interrupt.

@@ -47,8 +47,12 @@ spec:
                 configMapKeyRef:
                   name: cluster-info
                   key: cluster.name
+        - name: OTEL_SERVICE_NAME
+          value: "broadcast-user-service"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://jaeger-service:4317"                  
         - name: JAVA_OPTS
-          value: "-Xms512m -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2"
+          value: "-javaagent:/app/opentelemetry-javaagent.jar -Xms512m -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=4 -XX:ConcGCThreads=2"
         - name: SPRING_PROFILES_ACTIVE
           value: "dev-pg"
         resources:

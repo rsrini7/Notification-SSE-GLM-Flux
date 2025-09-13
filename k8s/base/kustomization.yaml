@@ -26,6 +26,9 @@ resources:
   - pod-disruption-budget.yaml
 
   # Dependencies
+
+  - jaeger/jaeger-deployment.yaml
+  - jaeger/jaeger-service.yaml
   - postgres/postgres-pvc.yaml
   - postgres/postgres-secret.yaml
   - postgres/postgres-deployment.yaml
