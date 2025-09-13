@@ -21,6 +21,9 @@ server:
 logging:
   file:
     name: logs/broadcast-user-service.log
+  level:
+    '[org.apache.geode]': WARN
+  
 
 # Resilience4j Rate Limiter is specific to the user service's SSE connect endpoint
 resilience4j:

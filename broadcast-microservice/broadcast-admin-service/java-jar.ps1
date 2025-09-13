@@ -13,6 +13,8 @@ try {
     # Set OpenTelemetry Environment Variables for the agent
     $env:OTEL_SERVICE_NAME = "broadcast-admin-service"
     $env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
+    $env:OTEL_LOGS_EXPORTER = "none"
+    $env:OTEL_METRICS_EXPORTER = "none"
 
     Write-Host "Starting admin-service with DYNAMIC pod name: $podName... Press Ctrl+C to stop." -ForegroundColor Green
     

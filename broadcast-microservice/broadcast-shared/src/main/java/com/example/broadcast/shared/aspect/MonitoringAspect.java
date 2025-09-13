@@ -7,7 +7,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
+
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 
 @Aspect
@@ -17,6 +21,11 @@ import io.opentelemetry.api.trace.Span;
 public class MonitoringAspect {
 
     private final MonitoringConfig.BroadcastMetricsCollector metricsCollector;
+
+    @Bean
+    public OpenTelemetry openTelemetry() {
+       return GlobalOpenTelemetry.get();
+    }
 
     @Around("execution(* com.example.broadcast.admin.service.BroadcastLifecycleService.*(..))")
     public Object monitorBroadcastAdminService(ProceedingJoinPoint joinPoint) throws Throwable {
