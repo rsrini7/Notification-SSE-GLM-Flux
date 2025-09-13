@@ -11,6 +11,9 @@ spec:
     - name: otlp-grpc
       port: 4317
       targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
     - name: ui-http
       port: 16686
       targetPort: 16686

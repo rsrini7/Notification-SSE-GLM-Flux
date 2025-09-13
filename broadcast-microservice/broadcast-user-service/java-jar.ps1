@@ -7,7 +7,7 @@ mvn clean package
 
 # Set OpenTelemetry Environment Variables for the agent
 $env:OTEL_SERVICE_NAME = "broadcast-user-service"
-$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4317"
+$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
 
 # Generate a random suffix to create a dynamic pod name for testing cleanup
 $randomSuffix = -join ((65..90) + (97..122) | Get-Random -Count 5 | ForEach-Object { [char]$_ })

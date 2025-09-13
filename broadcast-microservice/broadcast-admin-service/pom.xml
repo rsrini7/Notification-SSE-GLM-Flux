@@ -64,7 +64,7 @@
                     <image>
                         <env>
                             <OTEL_SERVICE_NAME>broadcast-admin-service</OTEL_SERVICE_NAME>
-                            <OTEL_EXPORTER_OTLP_ENDPOINT>http://jaeger-service:4317</OTEL_EXPORTER_OTLP_ENDPOINT>
+                            <OTEL_EXPORTER_OTLP_ENDPOINT>http://jaeger-service:4318</OTEL_EXPORTER_OTLP_ENDPOINT>
                         </env>
                     </image>
                     <excludes>

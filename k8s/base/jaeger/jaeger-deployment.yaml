@@ -19,5 +19,7 @@ spec:
           ports:
             - name: otlp-grpc
               containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
             - name: ui-http
               containerPort: 16686
