@@ -1,4 +1,4 @@
-package com.example.broadcast.user.service.cache;
+package com.example.broadcast.user.scheduler;
 
 import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.config.AppProperties;

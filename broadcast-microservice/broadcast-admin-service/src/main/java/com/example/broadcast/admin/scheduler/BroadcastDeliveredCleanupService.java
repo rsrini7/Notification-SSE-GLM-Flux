@@ -1,4 +1,4 @@
-package com.example.broadcast.admin.service;
+package com.example.broadcast.admin.scheduler;
 
 import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.model.BroadcastMessage;
