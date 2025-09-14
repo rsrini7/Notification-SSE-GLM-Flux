@@ -85,8 +85,8 @@ logging:
     '[org.apache.kafka.clients.producer.ProducerConfig]': WARN
     '[org.apache.kafka.common.metrics]': WARN
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlation_id=%X{correlation_id}] - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlation_id=%X{correlation_id}] - %msg%n"
 
 # Resilience4j Configuration for fault tolerance
 resilience4j:
