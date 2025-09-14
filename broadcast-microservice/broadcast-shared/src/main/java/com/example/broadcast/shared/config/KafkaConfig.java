@@ -1,6 +1,6 @@
 package com.example.broadcast.shared.config;
 
-import com.example.broadcast.shared.service.KafkaListnerHelper;
+import com.example.broadcast.shared.helper.KafkaListnerHelper;
 import com.example.broadcast.shared.util.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

@@ -1,8 +1,9 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
+import com.example.broadcast.shared.helper.KafkaListnerHelper;
 import com.example.broadcast.shared.model.BroadcastMessage;
-import com.example.broadcast.shared.service.KafkaListnerHelper;
 import com.example.broadcast.shared.service.MessageStatusService;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
@@ -15,9 +16,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.broadcast.admin.dto.DltMessage;
 import com.example.broadcast.admin.dto.RedriveAllResult;
 import com.example.broadcast.admin.dto.RedriveFailureDetail;
+import com.example.broadcast.admin.model.DltMessage;
 import com.example.broadcast.admin.repository.DltRepository;
 
 import java.util.Collection;
@@ -28,6 +29,7 @@ import java.util.concurrent.ExecutionException;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@Monitored("service")
 public class DltService {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;

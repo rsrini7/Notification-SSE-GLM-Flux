@@ -1,5 +1,6 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.repository.OutboxRepository;
@@ -38,6 +39,7 @@ public class OutboxPollingService {
         this.pollRunsCounter = meterRegistry.counter("broadcast.outbox.poll.runs.total");
     }
 
+    @Monitored("outbox-poller-scheduler")
     @Scheduled(fixedDelay = 2000) // Poll every 2 seconds
     @Transactional
     public void pollAndPublishEvents() {

@@ -1,5 +1,6 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class BroadcastExpirationService {
      * Runs every minute.
      * The SchedulerLock ensures that this method is executed by only one pod at a time in a multi-node setup.
      */
+    @Monitored("scheduler")
     @Scheduled(fixedRate = 60000)
     @Transactional
     @SchedulerLock(name = "processExpiredBroadcasts", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")

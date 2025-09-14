@@ -8,6 +8,7 @@ import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.user.service.cache.CacheService;
@@ -46,6 +47,7 @@ public class KafkaOrchestratorConsumerService {
     @Qualifier("sseGroupMessagesRegion")
     private final Region<String, Object> sseGroupMessagesRegion;
 
+    @Monitored("kafka-consumer")
     @KafkaListener(
             topics = "#{@kafkaListnerHelper.getOrchestrationTopic()}",
             groupId = "#{@kafkaListnerHelper.getOrchestrationGroupId()}",

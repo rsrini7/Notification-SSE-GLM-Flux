@@ -1,8 +1,9 @@
 package com.example.broadcast.admin.service;
 
-import com.example.broadcast.admin.dto.DltMessage;
 import com.example.broadcast.admin.mapper.AdminBroadcastMapper;
+import com.example.broadcast.admin.model.DltMessage;
 import com.example.broadcast.admin.repository.DltRepository;
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
@@ -25,6 +26,7 @@ import java.util.Optional;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@Monitored("service")
 public class DltKafkaConsumerService {
 
     private final ObjectMapper objectMapper;

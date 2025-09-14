@@ -1,5 +1,6 @@
 package com.example.broadcast.user.controller;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.user.dto.MessageReadRequest;
 import com.example.broadcast.user.dto.UserBroadcastResponse;
 import com.example.broadcast.user.dto.VisibilityAckRequest;
@@ -17,6 +18,7 @@ import java.util.List;
 @RequestMapping("/api/user/messages")
 @RequiredArgsConstructor
 @Slf4j
+@Monitored("controller")
 public class UserMessageController {
 
     private final UserMessageService userMessageService;

@@ -1,5 +1,6 @@
 package com.example.broadcast.shared.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.model.BroadcastStatistics;
 import com.example.broadcast.shared.repository.BroadcastStatisticsRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import java.time.OffsetDateTime;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@Monitored("service")
 public class BroadcastStatisticsService {
 
     private final BroadcastStatisticsRepository broadcastStatisticsRepository;

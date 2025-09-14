@@ -1,6 +1,8 @@
 package com.example.broadcast.admin.event;
 
 import com.example.broadcast.admin.service.BroadcastTargetingService;
+import com.example.broadcast.shared.aspect.Monitored;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -15,6 +17,7 @@ public class BroadcastEventListener {
 
     private final BroadcastTargetingService broadcastTargetingService;
 
+    @Monitored("event-listener")
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleBroadcastCreatedEvent(BroadcastCreatedEvent event) {

@@ -1,5 +1,6 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
@@ -41,6 +42,7 @@ public class BroadcastActivationService {
      * scheduled broadcasts. It handles pre-computation for complex broadcasts
      * and activates any broadcast that is due.
      */
+    @Monitored("broadcast-activator-scheduler")
     @Scheduled(fixedRate = 60000)
     @Transactional
     @SchedulerLock(name = "processDueBroadcasts", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")

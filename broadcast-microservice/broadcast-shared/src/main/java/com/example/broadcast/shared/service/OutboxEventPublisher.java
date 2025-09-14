@@ -1,5 +1,6 @@
 package com.example.broadcast.shared.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.model.OutboxEvent;
 import com.example.broadcast.shared.repository.OutboxRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -21,6 +22,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Monitored("service")
 public class OutboxEventPublisher {
 
     private final OutboxRepository outboxRepository;

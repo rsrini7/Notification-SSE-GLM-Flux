@@ -3,11 +3,13 @@ package com.example.broadcast.admin.repository;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 
-import com.example.broadcast.admin.dto.DltMessage;
+import com.example.broadcast.admin.model.DltMessage;
+import com.example.broadcast.shared.aspect.Monitored;
 
 import java.util.List;
 
 @Repository
+@Monitored("repository")
 public interface DltRepository extends CrudRepository<DltMessage, String> {
     
     // Derived query to get all messages sorted by failure time

@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.dto.BroadcastContent;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
 import com.example.broadcast.shared.mapper.SharedEventMapper;
@@ -41,6 +42,7 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
+@Monitored("service")
 public class UserMessageService {
 
     private final UserBroadcastRepository userBroadcastRepository;

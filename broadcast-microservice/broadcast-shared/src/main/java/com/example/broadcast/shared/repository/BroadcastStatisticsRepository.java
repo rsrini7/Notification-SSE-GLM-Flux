@@ -1,5 +1,6 @@
 package com.example.broadcast.shared.repository;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.model.BroadcastStatistics;
 import org.springframework.data.jdbc.repository.query.Modifying;
 import org.springframework.data.jdbc.repository.query.Query;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 @Repository
+@Monitored("repository")
 public interface BroadcastStatisticsRepository extends CrudRepository<BroadcastStatistics, Long> {
 
     // Derived Query

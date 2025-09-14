@@ -1,5 +1,6 @@
 package com.example.broadcast.shared.repository;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.model.UserPreferences;
 import org.springframework.data.jdbc.repository.query.Query;
 import org.springframework.data.repository.CrudRepository;
@@ -9,6 +10,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
+@Monitored("repository")
 public interface UserPreferencesRepository extends CrudRepository<UserPreferences, Long> {
     
     // Derived Queries

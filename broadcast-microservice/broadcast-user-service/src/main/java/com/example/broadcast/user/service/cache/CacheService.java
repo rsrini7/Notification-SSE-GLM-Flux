@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service.cache;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.dto.BroadcastContent;
 import com.example.broadcast.shared.dto.cache.*;
 
@@ -8,6 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+@Monitored("cache")
 public interface CacheService {
 
     boolean registerUserConnection(String userId, String connectionId, String podId, String clusterName);

@@ -1,5 +1,6 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.exception.ResourceNotFoundException;
@@ -37,6 +38,7 @@ import java.util.Collections;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Monitored("service")
 public class BroadcastLifecycleService {
 
     private final BroadcastRepository broadcastRepository;

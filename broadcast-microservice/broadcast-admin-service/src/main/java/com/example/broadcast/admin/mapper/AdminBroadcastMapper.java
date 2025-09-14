@@ -1,6 +1,7 @@
 package com.example.broadcast.admin.mapper;
 
 import com.example.broadcast.admin.dto.*;
+import com.example.broadcast.admin.model.DltMessage;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.util.JsonUtils;

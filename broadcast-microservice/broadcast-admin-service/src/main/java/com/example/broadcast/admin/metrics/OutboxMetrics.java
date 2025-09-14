@@ -1,4 +1,4 @@
-package com.example.broadcast.admin.service;
+package com.example.broadcast.admin.metrics;
 
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;

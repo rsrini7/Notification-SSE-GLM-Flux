@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service.cache;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.config.AppProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ public class GeodeStaleConnectionCleanupService {
      * user connections in Geode. The SchedulerLock ensures only one pod runs this
      * at a time to prevent race conditions.
      */
+    @Monitored("scheduler")
     @Scheduled(fixedRate = 60000) // Run every 60 seconds
     @SchedulerLock(name = "cleanupStaleGeodeConnections", lockAtLeastFor = "PT55S", lockAtMostFor = "PT59S")
     public void cleanupStaleConnections() {

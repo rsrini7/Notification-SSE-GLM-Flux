@@ -2,6 +2,8 @@ package com.example.broadcast.shared.service;
 
 import org.springframework.stereotype.Service;
 
+import com.example.broadcast.shared.aspect.Monitored;
+
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
@@ -9,6 +11,7 @@ import java.util.Map;
 
 @Service
 @Slf4j
+@Monitored("service")
 public class UserService {
     
     // **Simulated user-to-role mapping**

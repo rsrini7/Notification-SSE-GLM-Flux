@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service.cache;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.cache.UserMessageInbox;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class GeodeRegionCleanupService {
     private final Region<String, List<UserMessageInbox>> userMessagesInboxRegion;
     private final AppProperties appProperties;
 
+    @Monitored("scheduler")
     @Scheduled(fixedRateString = "${broadcast.geode.regions.user-messages-inbox.cleanup-job-rate-ms}")
     @SchedulerLock(name = "cleanupUserInboxRegion", lockAtLeastFor = "PT1M", lockAtMostFor = "PT4M")
     public void cleanupUserInboxRegion() {

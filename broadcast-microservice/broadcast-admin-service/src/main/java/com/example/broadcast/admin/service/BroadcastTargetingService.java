@@ -1,5 +1,6 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
@@ -30,6 +31,7 @@ import java.time.ZoneOffset;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Monitored("service")
 public class BroadcastTargetingService {
 
     private final UserService userService;

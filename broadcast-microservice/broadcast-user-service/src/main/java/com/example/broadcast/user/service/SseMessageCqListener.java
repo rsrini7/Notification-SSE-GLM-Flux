@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
@@ -58,6 +59,7 @@ public class SseMessageCqListener extends CqListenerAdapter {
     }
 
     @Override
+    @Monitored("geode-cq-listener")
     public void onEvent(CqEvent cqEvent) {
         String messageKey = (String) cqEvent.getKey();
         CqQuery cq = cqEvent.getCq();

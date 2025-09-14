@@ -3,6 +3,7 @@ package com.example.broadcast.admin.service;
 // Make sure to import your admin DTOs and mapper
 import com.example.broadcast.admin.dto.BroadcastResponse;
 import com.example.broadcast.admin.mapper.AdminBroadcastMapper;
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.exception.ResourceNotFoundException;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.model.BroadcastStatistics;
@@ -22,6 +23,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 @Transactional(readOnly = true)
+@Monitored("service")
 public class BroadcastQueryService {
 
     private final BroadcastRepository broadcastRepository;

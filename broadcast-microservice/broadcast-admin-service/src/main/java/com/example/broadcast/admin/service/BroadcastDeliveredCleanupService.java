@@ -1,5 +1,6 @@
 package com.example.broadcast.admin.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import com.example.broadcast.shared.repository.BroadcastRepository;
 import com.example.broadcast.shared.repository.UserBroadcastRepository;
@@ -28,6 +29,7 @@ public class BroadcastDeliveredCleanupService {
      * This service deletes entries that were delivered but never read,
      * preserving a record only for messages the user explicitly interacted with.
      */
+    @Monitored("scheduler")
     @Scheduled(cron = "0 0 * * * *") // Run at the top of every hour
     @SchedulerLock(name = "cleanupDeliveredMessages", lockAtLeastFor = "PT5M", lockAtMostFor = "PT15M")
     @Transactional

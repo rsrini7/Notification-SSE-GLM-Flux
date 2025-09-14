@@ -1,4 +1,4 @@
-package com.example.broadcast.shared.service;
+package com.example.broadcast.shared.helper;
 
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.util.Constants;

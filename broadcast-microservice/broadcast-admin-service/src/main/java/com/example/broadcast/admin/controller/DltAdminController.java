@@ -1,7 +1,7 @@
 package com.example.broadcast.admin.controller;
 
-import com.example.broadcast.admin.dto.DltMessage;
 import com.example.broadcast.admin.dto.RedriveAllResult;
+import com.example.broadcast.admin.model.DltMessage;
 import com.example.broadcast.admin.service.DltService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.RequiredArgsConstructor;

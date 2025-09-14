@@ -1,5 +1,6 @@
 package com.example.broadcast.user.controller;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.user.service.SseService;
 import com.example.broadcast.user.service.cache.CacheService;
@@ -23,6 +24,7 @@ import java.util.UUID;
 @RequestMapping("/api/user/sse")
 @RequiredArgsConstructor
 @Slf4j
+@Monitored("controller")
 public class SseController {
 
     private final SseService sseService;

@@ -6,6 +6,7 @@ import com.example.broadcast.admin.dto.BroadcastStatsResponse;
 import com.example.broadcast.admin.mapper.AdminBroadcastMapper;
 import com.example.broadcast.admin.service.BroadcastLifecycleService;
 import com.example.broadcast.admin.service.BroadcastQueryService;
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
 import com.example.broadcast.shared.service.UserService;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
@@ -21,13 +22,14 @@ import java.util.List;
 @RequestMapping("/api/admin/broadcasts")
 @RequiredArgsConstructor
 @Slf4j
+@Monitored("controller")
 public class BroadcastAdminController {
 
     private final BroadcastLifecycleService broadcastLifecycleService;
     private final BroadcastQueryService broadcastQueryService;
     private final UserService userService;
     private final AdminBroadcastMapper adminBroadcastMapper;
-
+    
     @PostMapping
     @RateLimiter(name = "createBroadcastLimiter")
     public ResponseEntity<BroadcastResponse> createBroadcast(

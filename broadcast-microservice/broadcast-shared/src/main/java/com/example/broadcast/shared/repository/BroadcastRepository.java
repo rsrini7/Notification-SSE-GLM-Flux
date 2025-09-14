@@ -1,5 +1,6 @@
 package com.example.broadcast.shared.repository;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.model.BroadcastMessage;
 import org.springframework.data.jdbc.repository.query.Modifying;
 import org.springframework.data.jdbc.repository.query.Query;
@@ -11,6 +12,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 @Repository
+@Monitored("repository")
 public interface BroadcastRepository extends CrudRepository<BroadcastMessage, Long> {
 
     // These queries now return the BroadcastMessage entity, not a DTO.

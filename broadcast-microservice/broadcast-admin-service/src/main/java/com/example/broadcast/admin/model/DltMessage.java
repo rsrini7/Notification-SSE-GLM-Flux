@@ -1,4 +1,4 @@
-package com.example.broadcast.admin.dto;
+package com.example.broadcast.admin.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

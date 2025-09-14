@@ -1,5 +1,6 @@
 package com.example.broadcast.user.service;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
 import com.example.broadcast.shared.model.UserBroadcastMessage;
@@ -30,6 +31,7 @@ import java.util.Set;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@Monitored("sse-service")
 public class SseService {
 
     private final BroadcastRepository broadcastRepository;
@@ -41,7 +43,6 @@ public class SseService {
     private final MessageStatusService messageStatusService;
     private final CacheService cacheService;
     private final AppProperties appProperties;
-
 
     public Flux<ServerSentEvent<String>> establishSseConnection(String userId, String connectionId) {
         String podName = appProperties.getPodName();

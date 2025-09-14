@@ -1,5 +1,6 @@
 package com.example.broadcast.shared.repository;
 
+import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.model.OutboxEvent;
 import org.springframework.data.jdbc.repository.query.Query;
 import org.springframework.data.repository.CrudRepository;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Repository
+@Monitored("repository")
 public interface OutboxRepository extends CrudRepository<OutboxEvent, UUID> {
 
     // Note: saveAll(...) and deleteAllById(...) are inherited from CrudRepository
