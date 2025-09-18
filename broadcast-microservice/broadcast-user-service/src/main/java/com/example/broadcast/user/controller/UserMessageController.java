@@ -27,10 +27,7 @@ public class UserMessageController {
     public Mono<ResponseEntity<List<UserBroadcastResponse>>> getUserMessages(@RequestParam String userId) {
         log.info("Retrieving messages for user: {}", userId);
         return userMessageService.getUserMessages(userId)
-                .map(messages -> {
-                    log.info("Retrieved {} messages for user: {}", messages.size(), userId);
-                    return ResponseEntity.ok(messages);
-                });
+                .map(ResponseEntity::ok);
     }
 
     @PostMapping("/read")

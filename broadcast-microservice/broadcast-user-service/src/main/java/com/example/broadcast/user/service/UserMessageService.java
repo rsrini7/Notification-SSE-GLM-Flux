@@ -221,7 +221,7 @@ public class UserMessageService {
             log.info("Creating 'DELIVERED' records for {} missed 'ALL' broadcasts for reconnected user {}",
                 allTypeResponses.size(), userId);
             for (UserBroadcastResponse response : allTypeResponses) {
-                recordDeliveryForFanOutOnRead(userId, response.getBroadcastId());
+                recordDeliveryForFanOutOnRead(userId, response.getBroadcastId(), response.getCorrelationId());
             }
         }
         
@@ -366,7 +366,13 @@ public class UserMessageService {
      */
     @Async
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void recordDeliveryForFanOutOnRead(String userId, Long broadcastId) {
+    public void recordDeliveryForFanOutOnRead(String userId, Long broadcastId, String correlationId) {
+
+        // 1. Set the MDC for the async thread
+        if (correlationId != null) {
+            MDC.put(Constants.CORRELATION_ID, correlationId);
+        }
+
         try {
             // Idempotency check: Don't create a record if one already exists.
             if (userBroadcastRepository.findByUserIdAndBroadcastId(userId, broadcastId).isPresent()) {
@@ -398,6 +404,9 @@ public class UserMessageService {
             log.warn("Caught race condition when creating delivered record for user {} and broadcast {}. Ignoring.", userId, broadcastId);
         } catch (Exception e) {
             log.error("Failed to record 'DELIVERED' status for user {} and broadcast {}", userId, broadcastId, e);
+        } finally {
+            // 2. CRITICAL: Always clear the MDC
+            MDC.remove(Constants.CORRELATION_ID);
         }
     }
 

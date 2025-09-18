@@ -139,7 +139,7 @@ public class SseService {
             : String.valueOf(response.getBroadcastId());
 
         sendSseEvent(userId, SseEventType.MESSAGE, eventId, response);
-        userMessageService.recordDeliveryForFanOutOnRead(userId, broadcast.getId());
+        userMessageService.recordDeliveryForFanOutOnRead(userId, broadcast.getId(), response.getCorrelationId());
     }
     
     private void sendRemoveMessageEvent(String userId, Long broadcastId) {
@@ -202,7 +202,7 @@ public class SseService {
             // For each user who just received the message, call the persistence method.
             for (String userId : localUserIds) {
                 // This method is already async, so it won't block the event loop.
-                userMessageService.recordDeliveryForFanOutOnRead(userId, event.getBroadcastId());
+                userMessageService.recordDeliveryForFanOutOnRead(userId, event.getBroadcastId(), event.getCorrelationId());
             }
 
             log.info("Evicting inbox cache for {} local users due to group-level event.", localUserIds.size());
