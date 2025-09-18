@@ -2,12 +2,14 @@ package com.example.broadcast.shared.config;
 
 import org.h2.tools.Server;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 
 import lombok.RequiredArgsConstructor;
 
 @Configuration
 @RequiredArgsConstructor
+@Profile("!dev-pg")
 public class H2ConsoleConfig {
   
   private Server webServer;
