@@ -6,6 +6,7 @@ import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.context.annotation.ComponentScan;
+import reactor.core.publisher.Hooks; 
 
 
 /**
@@ -24,6 +25,14 @@ import org.springframework.context.annotation.ComponentScan;
 @EnableScheduling
 @ComponentScan("com.example.broadcast")
 public class BroadcastUserApplication {
+
+
+    static {
+        // Manually and explicitly enable Reactor's automatic context propagation.
+        // This ensures the thread-local MDC context is transferred across
+        // different thread pools used by Reactor's schedulers.
+        Hooks.enableAutomaticContextPropagation();
+    }
 
     public static void main(String[] args) {
         SpringApplication.run(BroadcastUserApplication.class, args);

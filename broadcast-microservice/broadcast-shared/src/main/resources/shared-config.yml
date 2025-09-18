@@ -24,6 +24,9 @@ spring:
     console:
       enabled: false
       path: /h2-console
+  reactor:
+    context-propagation:
+      enabled: true
 
   # Kafka Configuration
   kafka:

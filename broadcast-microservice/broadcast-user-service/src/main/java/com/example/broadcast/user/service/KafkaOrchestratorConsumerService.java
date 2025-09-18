@@ -16,6 +16,7 @@ import com.example.broadcast.user.service.cache.CacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.Region;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
@@ -60,32 +61,42 @@ public class KafkaOrchestratorConsumerService {
                                            @Header(KafkaHeaders.OFFSET) long offset,
                                            Acknowledgment acknowledgment) {
 
-        cacheService.getBroadcastContent(event.getBroadcastId()).or(() ->
-            broadcastRepository.findById(event.getBroadcastId())
-                .map(sharedEventMapper::toBroadcastContentDTO)
-                .map(content -> {
-                    cacheService.cacheBroadcastContent(content);
-                    log.info("Proactively cached content for broadcast {}", event.getBroadcastId());
-                    return content;
-                })
-        );
+        // 1. Get the correlation_id from the event payload and set the MDC
+        if (event.getCorrelationId() != null) {
+            MDC.put(Constants.CORRELATION_ID, event.getCorrelationId());
+        }                                            
 
-        if (event.getUserId() != null) {
-            handleUserSpecificEvent(event);
+        try {
+            cacheService.getBroadcastContent(event.getBroadcastId()).or(() ->
+                broadcastRepository.findById(event.getBroadcastId())
+                    .map(sharedEventMapper::toBroadcastContentDTO)
+                    .map(content -> {
+                        cacheService.cacheBroadcastContent(content);
+                        log.info("Proactively cached content for broadcast {}", event.getBroadcastId());
+                        return content;
+                    })
+            );
 
-            if (event.isFireAndForget()) {
-                userBroadcastRepository.findByUserIdAndBroadcastId(event.getUserId(), event.getBroadcastId())
-                    .ifPresent(message -> {
-                        log.info("Marking Fire-and-Forget message as read in DB for user {} and broadcast {}", event.getUserId(), event.getBroadcastId());
-                        userBroadcastRepository.markAsRead(message.getId(), OffsetDateTime.now(ZoneOffset.UTC));
-                    });
-                cacheService.evictUserInbox(event.getUserId());
+            if (event.getUserId() != null) {
+                handleUserSpecificEvent(event);
+
+                if (event.isFireAndForget()) {
+                    userBroadcastRepository.findByUserIdAndBroadcastId(event.getUserId(), event.getBroadcastId())
+                        .ifPresent(message -> {
+                            log.info("Marking Fire-and-Forget message as read in DB for user {} and broadcast {}", event.getUserId(), event.getBroadcastId());
+                            userBroadcastRepository.markAsRead(message.getId(), OffsetDateTime.now(ZoneOffset.UTC));
+                        });
+                    cacheService.evictUserInbox(event.getUserId());
+                }
+            } else {
+                handleGroupLevelEvent(event);
             }
-        } else {
-            handleGroupLevelEvent(event);
-        }
 
-        acknowledgment.acknowledge();
+            acknowledgment.acknowledge();
+         } finally {
+            // 2. CRITICAL: Always clear the MDC to prevent it from leaking to other messages
+            MDC.remove(Constants.CORRELATION_ID);
+        }
     }
 
     private void handleUserSpecificEvent(MessageDeliveryEvent event) {

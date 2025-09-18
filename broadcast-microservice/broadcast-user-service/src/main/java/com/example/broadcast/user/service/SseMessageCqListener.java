@@ -4,6 +4,7 @@ import com.example.broadcast.shared.aspect.Monitored;
 import com.example.broadcast.shared.config.AppProperties;
 import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.dto.MessageDeliveryEvent;
+import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.user.constants.CacheConstants.GeodeRegionNames;
 
 import jakarta.annotation.PostConstruct;
@@ -12,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.client.ClientCache;
 import org.apache.geode.cache.query.*;
 import org.apache.geode.cache.util.CqListenerAdapter;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -61,31 +63,49 @@ public class SseMessageCqListener extends CqListenerAdapter {
     @Override
     @Monitored("geode-cq-listener")
     public void onEvent(CqEvent cqEvent) {
-        String messageKey = (String) cqEvent.getKey();
-        CqQuery cq = cqEvent.getCq();
-
-        if (!cqEvent.getQueryOperation().isCreate() && !cqEvent.getQueryOperation().isUpdate()) {
-            return;
+        
+        // Extract the correlation ID from the event payload
+        String correlationId = null;
+        Object newValue = cqEvent.getNewValue();
+        if (newValue instanceof MessageDeliveryEvent event) {
+            correlationId = event.getCorrelationId();
+        } else if (newValue instanceof GeodeSsePayload payload) {
+            correlationId = payload.getEvent().getCorrelationId();
         }
 
-        Object newValue = cqEvent.getNewValue();
+        // Set the MDC for this thread's execution
+        if (correlationId != null) {
+            MDC.put(Constants.CORRELATION_ID, correlationId);
+        }
 
-        if (cq.getName().equals(this.groupMessagesCq.getName()) && newValue instanceof MessageDeliveryEvent event) {
-            // Event came from the 'sse-group-messages' region
-            log.info("Processing generic 'Group / Selected' broadcast event from CQ: {}", event);
-            sseService.handleBroadcastToAllEvent(event);
-            clientCache.getRegion(GeodeRegionNames.SSE_GROUP_MESSAGES).remove(messageKey);
-            log.debug("Cleaned up 'Group / Selected' message with key: {}", messageKey);
+        try {
+            String messageKey = (String) cqEvent.getKey();
+            CqQuery cq = cqEvent.getCq();
 
-        } else if (cq.getName().equals(this.userMessagesCq.getName()) && newValue instanceof GeodeSsePayload payload) {
-            // Event came from the 'sse-user-messages' region
-            log.info("Processing user-specific event from CQ: {}", payload.getEvent());
-            sseService.handleMessageEvent(payload.getEvent());
-            clientCache.getRegion(GeodeRegionNames.SSE_USER_MESSAGES).remove(messageKey);
-            log.debug("Cleaned up user-specific message with key: {}", messageKey);
-        } else {
-            log.warn("Received unexpected payload type '{}' from CQ '{}'",
-                (newValue != null) ? newValue.getClass().getName() : "null", cq.getName());
+            if (!cqEvent.getQueryOperation().isCreate() && !cqEvent.getQueryOperation().isUpdate()) {
+                return;
+            }
+
+            if (cq.getName().equals(this.groupMessagesCq.getName()) && newValue instanceof MessageDeliveryEvent event) {
+                // Event came from the 'sse-group-messages' region
+                log.info("Processing generic 'Group / Selected' broadcast event from CQ: {}", event);
+                sseService.handleBroadcastToAllEvent(event);
+                clientCache.getRegion(GeodeRegionNames.SSE_GROUP_MESSAGES).remove(messageKey);
+                log.debug("Cleaned up 'Group / Selected' message with key: {}", messageKey);
+
+            } else if (cq.getName().equals(this.userMessagesCq.getName()) && newValue instanceof GeodeSsePayload payload) {
+                // Event came from the 'sse-user-messages' region
+                log.info("Processing user-specific event from CQ: {}", payload.getEvent());
+                sseService.handleMessageEvent(payload.getEvent());
+                clientCache.getRegion(GeodeRegionNames.SSE_USER_MESSAGES).remove(messageKey);
+                log.debug("Cleaned up user-specific message with key: {}", messageKey);
+            } else {
+                log.warn("Received unexpected payload type '{}' from CQ '{}'",
+                    (newValue != null) ? newValue.getClass().getName() : "null", cq.getName());
+            }
+        } finally {
+            // CRITICAL: Always clear the MDC to prevent context leakage
+            MDC.remove(Constants.CORRELATION_ID);
         }
     }
 

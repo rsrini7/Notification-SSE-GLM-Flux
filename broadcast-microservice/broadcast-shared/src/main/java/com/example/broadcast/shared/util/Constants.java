@@ -7,6 +7,8 @@ public final class Constants {
 
     public static final String DLT_SUFFIX = "-dlt";
 
+    public static final String CORRELATION_ID = "correlation_id";
+
     public enum BroadcastStatus {
         PREPARING,
         READY,

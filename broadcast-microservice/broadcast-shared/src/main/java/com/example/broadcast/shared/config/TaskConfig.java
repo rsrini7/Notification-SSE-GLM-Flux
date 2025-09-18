@@ -52,4 +52,28 @@ public class TaskConfig {
         return Schedulers.newParallel("jdbc-io-", parallelism);
     }
 
+
+     /**
+     * Defines the Executor for JDBC/blocking I/O operations as a Spring Bean.
+     * We add a @Qualifier to give it a unique name for injection.
+     */
+    // @Bean
+    // @Qualifier("jdbcTaskExecutor") // <-- 1. Add Qualifier here
+    // public Executor jdbcTaskExecutor() {
+    //     ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    //     executor.setCorePoolSize(10);
+    //     executor.setThreadNamePrefix("jdbc-io-");
+    //     executor.initialize();
+    //     return executor;
+    // }
+
+    /**
+     * Defines the Reactor Scheduler for JDBC operations.
+     * It now uses @Qualifier to request the specific jdbcTaskExecutor bean.
+     */
+    // @Bean
+    // public Scheduler jdbcScheduler(@Qualifier("jdbcTaskExecutor") Executor jdbcTaskExecutor) { // <-- 2. Add Qualifier here
+    //     return Schedulers.fromExecutor(jdbcTaskExecutor);
+    // }
+
 }

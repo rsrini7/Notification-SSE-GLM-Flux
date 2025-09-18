@@ -26,6 +26,7 @@ import io.opentelemetry.context.propagation.TextMapGetter;
 import jakarta.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 
+import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -88,6 +89,9 @@ public class UserMessageService {
     public Mono<List<UserBroadcastResponse>> getUserMessages(String userId) {
         log.info("Assembling inbox for user: {}", userId);
 
+        // 1. Capture the correlation ID from the current (web) thread's MDC.
+        final String correlationId = MDC.get(Constants.CORRELATION_ID);
+
         return cacheService.getUserInbox(userId)
             .filter(inbox -> !inbox.isEmpty())
             .map(cachedInbox -> {
@@ -96,7 +100,7 @@ public class UserMessageService {
             })
             .orElseGet(() -> {
                 log.info("Cache MISS for user {} inbox. Fetching from database.", userId);
-                return Mono.fromCallable(() -> fetchAndAssembleInboxFromDb(userId))
+                return Mono.fromCallable(() -> fetchAndAssembleInboxFromDb(userId, correlationId ))
                            .subscribeOn(jdbcScheduler);
             });
     }
@@ -105,21 +109,31 @@ public class UserMessageService {
      * Orchestrates the process of fetching data from the database, assembling the inbox,
      * and performing follow-up actions like caching and async updates.
      */
-    private List<UserBroadcastResponse> fetchAndAssembleInboxFromDb(String userId) {
-        // Step 1: Encapsulate all database reads.
-        InboxDataFetchResult dbData = fetchInboxDataFromDb(userId);
+    private List<UserBroadcastResponse> fetchAndAssembleInboxFromDb(String userId, String correlationId) {
 
-        // Step 2: Assemble the final list of messages from the database results.
-        List<UserBroadcastResponse> finalInbox = assembleFinalInbox(
-            dbData.targetedMessages(), 
-            dbData.allTypeBroadcasts()
-        );
+        if (correlationId != null) {
+            MDC.put(Constants.CORRELATION_ID, correlationId);
+        }
 
-        // Step 3: Perform all side-effects (caching, async processing) after assembly.
-        performPostFetchActions(userId, finalInbox, dbData.pendingMessagesToProcess());
-        
-        log.info("Assembled and cached {} total messages for user {}", finalInbox.size(), userId);
-        return finalInbox;
+        try{
+            // Step 1: Encapsulate all database reads.
+            InboxDataFetchResult dbData = fetchInboxDataFromDb(userId);
+
+            // Step 2: Assemble the final list of messages from the database results.
+            List<UserBroadcastResponse> finalInbox = assembleFinalInbox(
+                dbData.targetedMessages(), 
+                dbData.allTypeBroadcasts()
+            );
+
+            // Step 3: Perform all side-effects (caching, async processing) after assembly.
+            performPostFetchActions(userId, finalInbox, dbData.pendingMessagesToProcess());
+            
+            log.info("Assembled and cached {} total messages for user {}", finalInbox.size(), userId);
+            return finalInbox;
+         } finally {
+            // 4. CRITICAL: Always clear the MDC to prevent context leakage on the thread.
+            MDC.remove(Constants.CORRELATION_ID);
+        }
     }
 
     /**
