@@ -13,6 +13,8 @@ import com.example.broadcast.shared.dto.GeodeSsePayload;
 import com.example.broadcast.shared.util.Constants;
 import com.example.broadcast.user.service.cache.CacheService;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.context.Context;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.geode.cache.Region;
@@ -25,6 +27,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -178,9 +181,16 @@ public class KafkaOrchestratorConsumerService {
         if (userConnections != null && !userConnections.isEmpty()) {
             UserConnectionInfo connectionInfo = userConnections.values().iterator().next();
             String uniqueClusterPodName = connectionInfo.getClusterName() + ":" + connectionInfo.getPodName();
+
+            // 1. Create a map to hold the serialized trace context.
+            Map<String, String> traceContext = new HashMap<>();
+
+            // 2. Inject the current context (from the Kafka consumer's span) into the map.
+            GlobalOpenTelemetry.getPropagators().getTextMapPropagator()
+                .inject(Context.current(), traceContext, (carrier, key, value) -> carrier.put(key, value));
             
             String messageKey = UUID.randomUUID().toString();
-            GeodeSsePayload payload = new GeodeSsePayload(uniqueClusterPodName, userSpecificEvent);
+            GeodeSsePayload payload = new GeodeSsePayload(uniqueClusterPodName, userSpecificEvent, traceContext);
 
             sseUserMessagesRegion.put(messageKey, payload);
             log.debug("Put user-specific event for user {} into 'sse-user-messages' region, targeting pod {}", userId, uniqueClusterPodName);
